@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Чайный Инсайдер — версия для GitHub Actions
-Запускается по расписанию, отправляет дайджест и завершается
+Ищет новости без ограничения по времени
 """
 
 import os
@@ -54,16 +54,17 @@ def format_search_results(results: list, max_snippet: int = 300) -> list:
         return []
     banned = ['1688.com', 'taobao.com', 'tmall.com', 'jd.com', 'pinduoduo.com', 'alibaba.com', 'aliexpress.com', 'ebay.com', 'amazon.cn']
     filtered = [item for item in results if not any(x in item.get('link', '') for x in banned) and len(item.get('snippet', '')) > 40]
-    return [{"title": item.get('title', '')[:100], "snippet": item.get('snippet', '')[:max_snippet], "link": item.get('link', '')} for item in filtered[:5]]
+    return [{"title": item.get('title', '')[:100], "snippet": item.get('snippet', '')[:max_snippet], "link": item.get('link', '')} for item in filtered[:10]]
 
-async def serper_search(query: str, num_results: int = 5, hl: str = "zh", gl: str = "cn") -> list:
+async def serper_search(query: str, num_results: int = 10, hl: str = "zh", gl: str = "cn") -> list:
     if not SERPER_KEY:
         logger.warning("Serper ключ не настроен")
         return []
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
-            data = {"q": query, "num": num_results, "hl": hl, "gl": gl, "tbs": "qdr:m"}
+            # Убрали tbs — ищем без ограничения по времени
+            data = {"q": query, "num": num_results, "hl": hl, "gl": gl}
             async with session.post("https://google.serper.dev/search", headers=headers, json=data) as resp:
                 if resp.status != 200:
                     logger.error(f"Serper error {resp.status}")
@@ -103,37 +104,37 @@ async def ask_fireworks(messages: list, max_tokens: int = 3000, temperature: flo
 
 async def agent_search_all() -> dict:
     queries = {
-        "white_tea": "福鼎白茶 白毫银针 白牡丹 2025 产量 品质 新闻",
-        "green_tea": "西湖龙井 碧螺春 黄山毛峰 2025 春茶 品质 产量 新闻",
-        "oolong_light": "铁观音 台湾乌龙 冻顶 阿里山 2025 品质 产量 新闻",
-        "oolong_dark": "大红袍 武夷岩茶 肉桂 水仙 2025 品质 产量 新闻",
-        "puer_sheng": "云南普洱 生茶 古树茶 2025 产量 品质 价格 新闻",
-        "puer_shu": "普洱熟茶 渥堆 发酵 2025 产量 品质 新闻",
-        "red_tea": "滇红茶 祁门红茶 正山小种 2025 产量 品质 新闻",
-        "factory_dayi": "勐海茶厂 大益 2025 产量 新品 质量",
-        "factory_xiaguan": "下关茶厂 2025 沱茶 产量 品质",
-        "factory_chen": "陈升号 2025 老班章 产量 品质",
-        "factory_yulin": "雨林古树茶 2025 古树 产量 品质",
-        "factory_dianhong": "滇红集团 凤庆 2025 红茶 产量 品质",
-        "factory_qimen": "祁门红茶 2025 产量 品质",
-        "factory_fuding": "福鼎白茶 品品香 绿雪芽 2025 产量 品质",
-        "factory_longjing": "西湖龙井 狮峰 梅家坞 2025 产量 品质",
-        "climate_yunnan": "云南 2025 气候 干旱 雨水 普洱茶 产量 影响",
-        "climate_fujian": "福建 2025 气候 雨水 铁观音 岩茶 白茶 产量 影响",
-        "climate_zhejiang": "浙江 2025 气候 气温 龙井茶 产量 影响",
-        "climate_taiwan": "台湾 2025 气候 台风 高山茶 产量 影响"
+        "white_tea": "福鼎白茶 白毫银针 白牡丹 产量 品质 新闻",
+        "green_tea": "西湖龙井 碧螺春 黄山毛峰 春茶 品质 产量 新闻",
+        "oolong_light": "铁观音 台湾乌龙 冻顶 阿里山 品质 产量 新闻",
+        "oolong_dark": "大红袍 武夷岩茶 肉桂 水仙 品质 产量 新闻",
+        "puer_sheng": "云南普洱 生茶 古树茶 产量 品质 价格 新闻",
+        "puer_shu": "普洱熟茶 渥堆 发酵 产量 品质 新闻",
+        "red_tea": "滇红茶 祁门红茶 正山小种 产量 品质 新闻",
+        "factory_dayi": "勐海茶厂 大益 产量 新品 质量",
+        "factory_xiaguan": "下关茶厂 沱茶 产量 品质",
+        "factory_chen": "陈升号 老班章 产量 品质",
+        "factory_yulin": "雨林古树茶 古树 产量 品质",
+        "factory_dianhong": "滇红集团 凤庆 红茶 产量 品质",
+        "factory_qimen": "祁门红茶 产量 品质",
+        "factory_fuding": "福鼎白茶 品品香 绿雪芽 产量 品质",
+        "factory_longjing": "西湖龙井 狮峰 梅家坞 产量 品质",
+        "climate_yunnan": "云南 气候 干旱 雨水 普洱茶 产量 影响",
+        "climate_fujian": "福建 气候 雨水 铁观音 岩茶 白茶 产量 影响",
+        "climate_zhejiang": "浙江 气候 气温 龙井茶 产量 影响",
+        "climate_taiwan": "台湾 气候 台风 高山茶 产量 影响"
     }
     
     async def fetch_one(name: str, query: str):
         try:
-            results = await serper_search(query, 5)
-            await asyncio.sleep(0.15)
+            results = await serper_search(query, 10)
+            await asyncio.sleep(0.2)
             return name, format_search_results(results)
         except Exception as e:
             logger.error(f"Ошибка в {name}: {e}")
             return name, []
     
-    semaphore = asyncio.Semaphore(4)
+    semaphore = asyncio.Semaphore(3)
     async def limited_fetch(name: str, query: str):
         async with semaphore:
             return await fetch_one(name, query)
@@ -150,7 +151,7 @@ async def agent_search_all() -> dict:
 async def agent_translate(raw_data: list, title: str) -> str | None:
     if not raw_data:
         return None
-    snippets = [f"{item['title']}: {item['snippet'][:200]}" for item in raw_data[:3] if item.get('snippet') and len(item['snippet']) > 30]
+    snippets = [f"{item['title']}: {item['snippet'][:200]}" for item in raw_data[:5] if item.get('snippet') and len(item['snippet']) > 30]
     if not snippets:
         return None
     text = "\n".join(snippets)
@@ -158,13 +159,13 @@ async def agent_translate(raw_data: list, title: str) -> str | None:
 
 ТЕМА: {title}
 
-{text[:1000]}
+{text[:1500]}
 
 ФОРМАТ:
 - [Фабрика/регион] — [факт]
 - [Качество] — [оценка]
 - [Объёмы] — [данные]"""
-    result = await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=800)
+    result = await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=1000)
     return result if result and result not in ["ОШИБКА", "Пусто", "Таймаут"] else None
 
 async def agent_build_digest(translated_blocks: dict, today: str) -> str | None:
@@ -175,7 +176,7 @@ async def agent_build_digest(translated_blocks: dict, today: str) -> str | None:
 ДАТА: {today}
 
 БЛОКИ:
-{all_text[:4000]}
+{all_text[:5000]}
 
 ФОРМАТ:
 {sep}
@@ -240,7 +241,7 @@ async def agent_build_digest(translated_blocks: dict, today: str) -> str | None:
 [факты из factory_longjing]
 
 {sep}
-КЛИМАТ И УРОЖАЙ 2025
+КЛИМАТ И УРОЖАЙ
 {sep}
 - Юньнань: [факты из climate_yunnan]
 - Фуцзянь: [факты из climate_fujian]
@@ -261,7 +262,7 @@ async def agent_build_digest(translated_blocks: dict, today: str) -> str | None:
 - 2025 — Экология, цифра
 
 Не выдумывай. Если нет данных — пропусти раздел."""
-    return await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=3500)
+    return await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=4000)
 
 async def send_message(bot: Bot, chat_id: int, text: str):
     MAX_LEN = 4000
@@ -282,25 +283,26 @@ async def run_digest():
     today = now_msk.strftime("%d.%m.%Y")
     
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    await bot.send_message(chat_id=target, text=f"🍵 Старт — {now_msk.strftime('%H:%M')} МСК")
+    await bot.send_message(chat_id=target, text=f"🍵 Старт — {now_msk.strftime('%H:%M')} МСК\n🔍 Ищу новости за всё время...")
     
     try:
         logger.info("🔍 Сбор данных...")
         data = await agent_search_all()
         total = sum(len(v) for v in data.values())
         logger.info(f"✅ Найдено {total} источников")
+        await bot.send_message(chat_id=target, text=f"🔍 Найдено {total} источников\n🌐 Перевожу...")
         
         logger.info("🌐 Перевод...")
         keys = list(data.keys())
         translated = {}
-        for i in range(0, len(keys), 3):
-            batch = keys[i:i+3]
+        for i in range(0, len(keys), 2):
+            batch = keys[i:i+2]
             tasks = [agent_translate(data[k], k) for k in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for k, r in zip(batch, results):
                 if isinstance(r, str) and r.strip():
                     translated[k] = r
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
         logger.info(f"✅ Переведено {len(translated)} блоков")
         
         logger.info("📝 Сборка дайджеста...")
@@ -308,10 +310,10 @@ async def run_digest():
         
         if digest and len(digest.strip()) > 100:
             clean_digest = clean_reasoning(digest)
-            clean_digest += "\n\n" + "=" * 25 + "\n#чай #пуэр #улун #белыйчай #зелёныйчай #красныйчай #китай #фабрики #урожай2025"
+            clean_digest += "\n\n" + "=" * 25 + "\n#чай #пуэр #улун #белыйчай #зелёныйчай #красныйчай #китай #фабрики"
             logger.info(f"✅ Готово: {len(clean_digest)} символов")
             await send_message(bot, target, clean_digest)
-            await bot.send_message(chat_id=target, text="🎉 Завершено!")
+            await bot.send_message(chat_id=target, text="🎉 Дайджест готов!")
         else:
             await bot.send_message(chat_id=target, text="❌ Не удалось сформировать дайджест")
             

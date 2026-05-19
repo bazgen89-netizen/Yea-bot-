@@ -1,0 +1,27 @@
+name: Daily Tea Digest
+
+on:
+  schedule:
+    # 12:00 UTC = 15:00 по Москве
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Кнопка для ручного запуска
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          YOUR_TELEGRAM_ID: ${{ secrets.YOUR_TELEGRAM_ID }}
+          FIREWORKS_KEY: ${{ secrets.FIREWORKS_KEY }}
+          SERPER_KEY: ${{ secrets.SERPER_KEY }}
+        run: python bot.py
+

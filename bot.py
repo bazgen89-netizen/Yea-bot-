@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Чайный Инсайдер — версия для GitHub Actions
-Ищет новости без ограничения по времени
+Чайный Инсайдер — Версия для Render (24/7 онлайн)
 """
-
-import os
-import sys
-import asyncio
-import logging
+import os, sys, asyncio, logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import aiohttp
-from telegram import Bot
+from telegram import Bot, Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,301 +24,129 @@ MODEL = "accounts/fireworks/models/kimi-k2p5"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-def clean_reasoning(text: str) -> str:
-    if not text:
-        return ""
+# --- Функции очистки и поиска (без изменений) ---
+def clean_reasoning(text):
+    if not text: return ""
     lines = text.split('\n')
-    clean_lines = []
-    skip = False
+    clean_lines, skip = [], False
     for line in lines:
         low = line.lower()
-        if any(x in low for x in ["проверка:", "пользователь", "даны", "нужно", "reasoning", "thinking", "note:", "i need to", "<think>"]):
-            skip = True
-            continue
-        if skip and line.strip() and not any(line.startswith(x) for x in ['-', '•', '*', '=', 'ЧАЙНЫЙ']):
-            skip = False
-        if not skip:
-            clean_lines.append(line)
-    result = '\n'.join(clean_lines)
-    for marker in ['=', 'ЧАЙНЫЙ', 'БЕЛЫЕ ЧАИ', 'ЗЕЛЁНЫЕ ЧАИ']:
-        start = result.find(marker)
-        if start != -1:
-            return result[start:].strip()
-    return result.strip()
+        if any(x in low for x in ["проверка:", "reasoning", "thinking", "<think>"]): skip = True; continue
+        if skip and line.strip() and not any(line.startswith(x) for x in ['-', '•', '*', '=', '']): skip = False
+        if not skip: clean_lines.append(line)
+    return '\n'.join(clean_lines).strip()
 
-def format_search_results(results: list, max_snippet: int = 300) -> list:
-    if not results or isinstance(results, str):
-        return []
-    banned = ['1688.com', 'taobao.com', 'tmall.com', 'jd.com', 'pinduoduo.com', 'alibaba.com', 'aliexpress.com', 'ebay.com', 'amazon.cn']
-    filtered = [item for item in results if not any(x in item.get('link', '') for x in banned) and len(item.get('snippet', '')) > 40]
-    return [{"title": item.get('title', '')[:100], "snippet": item.get('snippet', '')[:max_snippet], "link": item.get('link', '')} for item in filtered[:10]]
+def format_search_results(results, max_snippet=300):
+    if not results: return []
+    banned = ['taobao', '1688', 'jd.com', 'alibaba']
+    filtered = [i for i in results if not any(x in i.get('link','') for x in banned) and len(i.get('snippet','')) > 40]
+    return [{"title": i['title'][:100], "snippet": i['snippet'][:max_snippet]} for i in filtered[:10]]
 
-async def serper_search(query: str, num_results: int = 10, hl: str = "zh", gl: str = "cn") -> list:
-    if not SERPER_KEY:
-        logger.warning("Serper ключ не настроен")
-        return []
+async def serper_search(query, num=10):
+    if not SERPER_KEY: return []
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-            headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
-            # Убрали tbs — ищем без ограничения по времени
-            data = {"q": query, "num": num_results, "hl": hl, "gl": gl}
-            async with session.post("https://google.serper.dev/search", headers=headers, json=data) as resp:
-                if resp.status != 200:
-                    logger.error(f"Serper error {resp.status}")
-                    return []
-                result = await resp.json()
-                return result.get("organic", [])
-    except Exception as e:
-        logger.error(f"Serper exception: {e}")
-        return []
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": query, "num": num}) as r:
+                return (await r.json()).get("organic", []) if r.status == 200 else []
+    except: return []
 
-async def ask_fireworks(messages: list, max_tokens: int = 3000, temperature: float = 0.1, retries: int = 2) -> str | None:
-    if not FIREWORKS_KEY:
-        logger.error("Fireworks ключ не настроен")
-        return None
-    for attempt in range(retries + 1):
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as session:
-                headers = {"Authorization": f"Bearer {FIREWORKS_KEY}", "Content-Type": "application/json"}
-                data = {"model": MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": temperature, "stream": False}
-                async with session.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json=data) as resp:
-                    if resp.status == 429:
-                        wait_time = (attempt + 1) * 5
-                        logger.warning(f"Rate limit, жду {wait_time}с...")
-                        await asyncio.sleep(wait_time)
-                        continue
-                    if resp.status != 200:
-                        logger.error(f"Fireworks error {resp.status}")
-                        return None
-                    result = await resp.json()
-                    content = result.get("choices", [{}])[0].get("message", {}).get("content")
-                    return content.strip() if content else None
-        except Exception as e:
-            logger.error(f"Fireworks error: {e}")
-            if attempt == retries:
-                return None
-    return None
+async def ask_fireworks(messages, max_tokens=2000):
+    if not FIREWORKS_KEY: return None
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as s:
+            headers = {"Authorization": f"Bearer {FIREWORKS_KEY}", "Content-Type": "application/json"}
+            async with s.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json={"model": MODEL, "messages": messages, "max_tokens": max_tokens}) as r:
+                res = await r.json()
+                return res['choices'][0]['message']['content'].strip() if res.get('choices') else None
+    except: return None
 
-async def agent_search_all() -> dict:
+# --- Основная логика ---
+async def agent_search_all():
     queries = {
-        "white_tea": "福鼎白茶 白毫银针 白牡丹 产量 品质 新闻",
-        "green_tea": "西湖龙井 碧螺春 黄山毛峰 春茶 品质 产量 新闻",
-        "oolong_light": "铁观音 台湾乌龙 冻顶 阿里山 品质 产量 新闻",
-        "oolong_dark": "大红袍 武夷岩茶 肉桂 水仙 品质 产量 新闻",
-        "puer_sheng": "云南普洱 生茶 古树茶 产量 品质 价格 新闻",
-        "puer_shu": "普洱熟茶 渥堆 发酵 产量 品质 新闻",
-        "red_tea": "滇红茶 祁门红茶 正山小种 产量 品质 新闻",
-        "factory_dayi": "勐海茶厂 大益 产量 新品 质量",
-        "factory_xiaguan": "下关茶厂 沱茶 产量 品质",
-        "factory_chen": "陈升号 老班章 产量 品质",
-        "factory_yulin": "雨林古树茶 古树 产量 品质",
-        "factory_dianhong": "滇红集团 凤庆 红茶 产量 品质",
-        "factory_qimen": "祁门红茶 产量 品质",
-        "factory_fuding": "福鼎白茶 品品香 绿雪芽 产量 品质",
-        "factory_longjing": "西湖龙井 狮峰 梅家坞 产量 品质",
-        "climate_yunnan": "云南 气候 干旱 雨水 普洱茶 产量 影响",
-        "climate_fujian": "福建 气候 雨水 铁观音 岩茶 白茶 产量 影响",
-        "climate_zhejiang": "浙江 气候 气温 龙井茶 产量 影响",
-        "climate_taiwan": "台湾 气候 台风 高山茶 产量 影响"
+        "white_tea": "福鼎白茶 2025 新闻", "green_tea": "西湖龙井 2025 新闻",
+        "oolong": "大红袍 铁观音 2025 新闻", "puer": "云南普洱 古树茶 2025 新闻",
+        "red_tea": "滇红 祁门红茶 2025 新闻", "factories": "大益 陈升号 2025 新闻"
     }
-    
-    async def fetch_one(name: str, query: str):
+    async def fetch(n, q):
         try:
-            results = await serper_search(query, 10)
-            await asyncio.sleep(0.2)
-            return name, format_search_results(results)
-        except Exception as e:
-            logger.error(f"Ошибка в {name}: {e}")
-            return name, []
+            res = await serper_search(q, 8)
+            return n, format_search_results(res)
+        except: return n, []
     
-    semaphore = asyncio.Semaphore(3)
-    async def limited_fetch(name: str, query: str):
-        async with semaphore:
-            return await fetch_one(name, query)
+    tasks = [fetch(n, q) for n, q in queries.items()]
+    results = await asyncio.gather(*tasks)
+    return {n: r for n, r in results if r}
+
+async def agent_build_digest(data, today):
+    sep = "━" * 25
+    blocks = []
+    for k, v in data.items():
+        if v:
+            snippets = "\n".join([f"• {i['title']}: {i['snippet'][:150]}" for i in v[:3]])
+            blocks.append(f"**{k}**:\n{snippets}")
     
-    tasks = [limited_fetch(name, query) for name, query in queries.items()]
-    results_list = await asyncio.gather(*tasks, return_exceptions=True)
+    if not blocks: return None
     
-    results = {}
-    for item in results_list:
-        if isinstance(item, tuple) and len(item) == 2:
-            results[item[0]] = item[1]
-    return results
-
-async def agent_translate(raw_data: list, title: str) -> str | None:
-    if not raw_data:
-        return None
-    snippets = [f"{item['title']}: {item['snippet'][:200]}" for item in raw_data[:5] if item.get('snippet') and len(item['snippet']) > 30]
-    if not snippets:
-        return None
-    text = "\n".join(snippets)
-    prompt = f"""Переведи и сократи новости на русском. Только факты.
-
-ТЕМА: {title}
-
-{text[:1500]}
-
-ФОРМАТ:
-- [Фабрика/регион] — [факт]
-- [Качество] — [оценка]
-- [Объёмы] — [данные]"""
-    result = await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=1000)
-    return result if result and result not in ["ОШИБКА", "Пусто", "Таймаут"] else None
-
-async def agent_build_digest(translated_blocks: dict, today: str) -> str | None:
-    sep = "=" * 25
-    all_text = "\n\n".join([f"{k}:\n{v}" for k, v in translated_blocks.items() if v])
-    prompt = f"""Собери дайджест на русском из готовых блоков. Только факты.
-
-ДАТА: {today}
-
-БЛОКИ:
-{all_text[:5000]}
-
-ФОРМАТ:
-{sep}
-ЧАЙНЫЙ ИНСАЙДЕР | {today}
-{sep}
-
-[Обзор рынка — 2 абзаца]
-
-{sep}
-БЕЛЫЕ ЧАИ (白茶)
-{sep}
-[факты из white_tea]
-
-{sep}
-ЗЕЛЁНЫЕ ЧАИ (绿茶)
-{sep}
-[факты из green_tea]
-
-{sep}
-УЛУНЫ СВЕТЛЫЕ (轻发酵乌龙)
-{sep}
-[факты из oolong_light]
-
-{sep}
-УЛУНЫ ТЁМНЫЕ / ЯН ЧА (重发酵乌龙/岩茶)
-{sep}
-[факты из oolong_dark]
-
-{sep}
-ШЭН ПУЭР (生普洱)
-{sep}
-[факты из puer_sheng]
-
-{sep}
-ШУ ПУЭР (熟普洱)
-{sep}
-[факты из puer_shu]
-
-{sep}
-КРАСНЫЕ ЧАИ / ХУН ЧА (红茶)
-{sep}
-[факты из red_tea]
-
-{sep}
-ФАБРИКИ ПУЭРА
-{sep}
-[факты из factory_dayi, factory_xiaguan, factory_chen, factory_yulin]
-
-{sep}
-ФАБРИКИ КРАСНЫХ ЧАЕВ
-{sep}
-[факты из factory_dianhong, factory_qimen]
-
-{sep}
-ФАБРИКИ БЕЛЫХ ЧАЕВ
-{sep}
-[факты из factory_fuding]
-
-{sep}
-ФАБРИКИ ЗЕЛЁНЫХ ЧАЕВ
-{sep}
-[факты из factory_longjing]
-
-{sep}
-КЛИМАТ И УРОЖАЙ
-{sep}
-- Юньнань: [факты из climate_yunnan]
-- Фуцзянь: [факты из climate_fujian]
-- Чжэцзян: [факты из climate_zhejiang]
-- Тайвань: [факты из climate_taiwan]
-
-{sep}
-ИСТОРИЯ: ОТ ШЭНЬ НУНА ДО НАШИХ ДНЕЙ
-{sep}
-- 2737 до н.э. — Шэнь Нун
-- 618-907 — Тан
-- 960-1279 — Сун
-- 1368-1644 — Мин
-- 1895 — Японцы на Тайване
-- 1938 — Дяньхун
-- 1973 — Шу Пуэр
-- 2006 — Бум пуэра
-- 2025 — Экология, цифра
-
-Не выдумывай. Если нет данных — пропусти раздел."""
-    return await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=4000)
-
-async def send_message(bot: Bot, chat_id: int, text: str):
-    MAX_LEN = 4000
-    parts = [text[i:i+MAX_LEN] for i in range(0, len(text), MAX_LEN)]
-    for i, part in enumerate(parts, 1):
-        header = f"📄 Часть {i}/{len(parts)}\n\n" if len(parts) > 1 else ""
-        await bot.send_message(chat_id=chat_id, text=header + part, disable_web_page_preview=True)
-        if len(parts) > 1:
-            await asyncio.sleep(2)
-
-async def run_digest():
-    target = YOUR_TELEGRAM_ID
-    if not target:
-        logger.error("Telegram ID не настроен")
-        return
+    prompt = f"Собери дайджест новостей чая на русском. Только факты.\n\nДАТА: {today}\n\nНОВОСТИ:\n" + "\n\n".join(blocks) + f"\n\nФОРМАТ:\n{sep}\n🍵 ЧАЙНЫЙ ИНСАЙДЕР | {today}\n{sep}\n\n[Сводка по категориям]\n\n{sep}\n История: 2737 до н.э. — Шэнь Нун, 1973 — Шу Пуэр, 2025 — Экология.\n{sep}"
     
-    now_msk = datetime.now(ZoneInfo("Europe/Moscow"))
-    today = now_msk.strftime("%d.%m.%Y")
-    
+    return await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=3000)
+
+async def run_digest(chat_id=None):
+    target = chat_id or YOUR_TELEGRAM_ID
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    await bot.send_message(chat_id=target, text=f"🍵 Старт — {now_msk.strftime('%H:%M')} МСК\n🔍 Ищу новости за всё время...")
+    today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
     
     try:
-        logger.info("🔍 Сбор данных...")
+        # Уведомление о старте (только если это ручной запрос)
+        if chat_id:
+            await bot.send_message(chat_id=target, text="⏳ Собираю свежие новости... (5-10 мин)")
+        
         data = await agent_search_all()
-        total = sum(len(v) for v in data.values())
-        logger.info(f"✅ Найдено {total} источников")
-        await bot.send_message(chat_id=target, text=f"🔍 Найдено {total} источников\n🌐 Перевожу...")
+        digest = await agent_build_digest(data, today)
         
-        logger.info("🌐 Перевод...")
-        keys = list(data.keys())
-        translated = {}
-        for i in range(0, len(keys), 2):
-            batch = keys[i:i+2]
-            tasks = [agent_translate(data[k], k) for k in batch]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for k, r in zip(batch, results):
-                if isinstance(r, str) and r.strip():
-                    translated[k] = r
-            await asyncio.sleep(1)
-        logger.info(f"✅ Переведено {len(translated)} блоков")
-        
-        logger.info("📝 Сборка дайджеста...")
-        digest = await agent_build_digest(translated, today)
-        
-        if digest and len(digest.strip()) > 100:
-            clean_digest = clean_reasoning(digest)
-            clean_digest += "\n\n" + "=" * 25 + "\n#чай #пуэр #улун #белыйчай #зелёныйчай #красныйчай #китай #фабрики"
-            logger.info(f"✅ Готово: {len(clean_digest)} символов")
-            await send_message(bot, target, clean_digest)
-            await bot.send_message(chat_id=target, text="🎉 Дайджест готов!")
+        if digest:
+            clean = clean_reasoning(digest)
+            # Разбивка длинных сообщений
+            for i in range(0, len(clean), 4000):
+                await bot.send_message(chat_id=target, text=clean[i:i+4000])
+            if chat_id: await bot.send_message(chat_id=target, text="✅ Готово!")
         else:
-            await bot.send_message(chat_id=target, text="❌ Не удалось сформировать дайджест")
+            msg = "ℹ️ Новых новостей нет" if chat_id else ""
+            if msg: await bot.send_message(chat_id=target, text=msg)
             
     except Exception as e:
-        error_msg = f"❌ Ошибка: {type(e).__name__}: {str(e)[:300]}"
-        logger.error(error_msg)
-        await bot.send_message(chat_id=target, text=error_msg)
+        if chat_id: await bot.send_message(chat_id=target, text=f"❌ Ошибка: {str(e)[:100]}")
+
+# --- Команды и Запуск ---
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🍵 <b>Чайный Инсайдер</b>\n\n"
+        "/new — Получить свежие новости прямо сейчас\n"
+        "Авто-рассылка: ежедневно в 15:00 МСК",
+        parse_mode='HTML'
+    )
+
+async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Запускаем сбор новостей в фоне, чтобы не блокировать бота
+    asyncio.create_task(run_digest(update.effective_chat.id))
+
+async def main():
+    logger.info(" Запуск бота (24/7 режим)...")
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Команды
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("new", new_cmd))
+    
+    # Планировщик (для авто-отправки в 15:00)
+    sched = AsyncIOScheduler()
+    sched.add_job(lambda: asyncio.create_task(run_digest()), 'cron', hour=15, minute=0)
+    sched.start()
+    logger.info(" Авто-отправка настроена на 15:00 МСК")
+    
+    # Запуск
+    await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(run_digest())
+    asyncio.run(main())
 

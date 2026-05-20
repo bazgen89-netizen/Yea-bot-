@@ -182,9 +182,9 @@ async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Начинаю сбор новостей...")
     asyncio.create_task(run_digest(update.effective_chat.id))
 
-# --- Webhook для Render ---
+# --- Webhook обработчик ---
 
-async def webhook_handler(request):
+async def handle_webhook(request):
     try:
         update = Update.de_json(await request.json(), request.app['bot'])
         await request.app['application'].process_update(update)
@@ -193,32 +193,32 @@ async def webhook_handler(request):
         logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
-async def setup_webhook(app: Application):
-    bot = app.bot
-    webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
-    await bot.set_webhook(webhook_url)
-    logger.info(f"✅ Webhook установлен: {webhook_url}")
-
 async def main():
     logger.info("🚀 Запуск бота (Webhook режим)...")
     
-    # Создаем приложение с post_init
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(setup_webhook).build()
+    # Создаем приложение
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("new", new_cmd))
+    # Добавляем обработчики
+    application.add_handler(CommandHandler("start", start_cmd))
+    application.add_handler(CommandHandler("new", new_cmd))
     
     # Авто-запуск в 15:00 МСК (12:00 UTC)
-    app.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
+    application.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
     logger.info("⏰ Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
     
-    # Запускаем web-сервер для Render
-    web_app = web.Application()
-    web_app['bot'] = app.bot
-    web_app['application'] = app
-    web_app.router.add_post('/', webhook_handler)
+    # Устанавливаем webhook
+    webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
+    await application.bot.set_webhook(webhook_url)
+    logger.info(f"✅ Webhook установлен: {webhook_url}")
     
-    runner = web.AppRunner(web_app)
+    # Запускаем web-сервер для Render
+    app = web.Application()
+    app['bot'] = application.bot
+    app['application'] = application
+    app.router.add_post('/', handle_webhook)
+    
+    runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
     await site.start()

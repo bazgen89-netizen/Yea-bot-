@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from aiohttp import web
 
 import aiohttp
-from telegram import Bot, Update, WebhookInfo
+from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
@@ -186,24 +186,24 @@ async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def webhook_handler(request):
     try:
-        update = Update.de_json(await request.json(), bot)
-        await app.process_update(update)
+        update = Update.de_json(await request.json(), request.app['bot'])
+        await request.app['application'].process_update(update)
         return web.Response(text="OK")
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
-async def post_init(application):
-    bot = application.bot
+async def setup_webhook(app: Application):
+    bot = app.bot
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await bot.set_webhook(webhook_url)
     logger.info(f"✅ Webhook установлен: {webhook_url}")
 
 async def main():
-    global app
     logger.info("🚀 Запуск бота (Webhook режим)...")
     
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Создаем приложение с post_init
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(setup_webhook).build()
     
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("new", new_cmd))
@@ -212,14 +212,18 @@ async def main():
     app.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
     logger.info("⏰ Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
     
-    # Webhook для Render
-    app_runner = web.AppRunner(web.Application())
-    await app_runner.setup()
-    site = web.TCPSite(app_runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
-    await site.start()
-    logger.info(f"🌐 Web server запущен на порту {os.getenv('PORT', 8080)}")
+    # Запускаем web-сервер для Render
+    web_app = web.Application()
+    web_app['bot'] = app.bot
+    web_app['application'] = app
+    web_app.router.add_post('/', webhook_handler)
     
-    await app.initialize(post_init=post_init)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+    await site.start()
+    
+    logger.info(f"🌐 Web server запущен на порту {os.getenv('PORT', 8080)}")
     logger.info("✅ Бот запущен и готов к работе!")
     
     # Держим сервер работающим

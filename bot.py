@@ -46,47 +46,64 @@ def format_search_results(results, max_snippet=300):
         return []
     banned = ['taobao', '1688', 'jd.com', 'alibaba']
     filtered = [i for i in results if not any(x in i.get('link','') for x in banned) and len(i.get('snippet','')) > 40]
-    return [{"title": i['title'][:100], "snippet": i['snippet'][:max_snippet]} for i in filtered[:10]]
+    return [{"title": i['title'][:100], "snippet": i['snippet'][:max_snippet], "link": i.get('link', '')} for i in filtered[:10]]
 
 async def serper_search(query, num=10):
     if not SERPER_KEY: 
+        logger.error("❌ SERPER_KEY не настроен!")
         return []
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
-            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": query, "num": num}) as r:
-                return (await r.json()).get("organic", []) if r.status == 200 else []
+            headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
+            data = {"q": query, "num": num}
+            async with s.post("https://google.serper.dev/search", headers=headers, json=data) as r:
+                if r.status != 200:
+                    logger.error(f"Serper error: {r.status}")
+                    return []
+                result = await r.json()
+                organic = result.get("organic", [])
+                logger.info(f"🔍 Найдено {len(organic)} результатов для: {query[:50]}")
+                return organic
     except Exception as e:
-        logger.error(f"Serper error: {e}")
+        logger.error(f"Serper exception: {e}")
         return []
 
 async def ask_fireworks(messages, max_tokens=2000):
     if not FIREWORKS_KEY: 
+        logger.error("❌ FIREWORKS_KEY не настроен!")
         return None
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as s:
             headers = {"Authorization": f"Bearer {FIREWORKS_KEY}", "Content-Type": "application/json"}
             async with s.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json={"model": MODEL, "messages": messages, "max_tokens": max_tokens}) as r:
+                if r.status != 200:
+                    logger.error(f"Fireworks error: {r.status}")
+                    return None
                 res = await r.json()
                 return res['choices'][0]['message']['content'].strip() if res.get('choices') else None
     except Exception as e:
-        logger.error(f"Fireworks error: {e}")
+        logger.error(f"Fireworks exception: {e}")
         return None
 
 # --- Логика бота ---
 
 async def agent_search_all():
+    # Используем более простые запросы на русском и английском
     queries = {
-        "white_tea": "福鼎白茶 2025 新闻", 
-        "green_tea": "西湖龙井 2025 新闻",
-        "oolong": "大红袍 铁观音 2025 新闻", 
-        "puer": "云南普洱 古树茶 2025 新闻",
-        "red_tea": "滇红 祁门红茶 2025 新闻", 
-        "factories": "大益 陈升号 2025 新闻"
+        "white_tea": "white tea news 2025 2026", 
+        "green_tea": "green tea China news 2025",
+        "oolong": "oolong tea news", 
+        "puer": "pu-erh tea news 2025",
+        "red_tea": "black tea China news", 
+        "factories": "Dayi tea factory news"
     }
+    
     async def fetch(n, q):
         try:
             res = await serper_search(q, 8)
-            return n, format_search_results(res)
+            formatted = format_search_results(res)
+            logger.info(f"✅ {n}: {len(formatted)} новостей")
+            return n, formatted
         except Exception as e:
             logger.error(f"Error fetching {n}: {e}")
             return n, []
@@ -98,14 +115,33 @@ async def agent_search_all():
 async def agent_build_digest(data, today):
     sep = "━" * 25
     blocks = []
+    total_news = 0
+    
     for k, v in data.items():
         if v:
-            snippets = "\n".join([f"• {i['title']}: {i['snippet'][:150]}" for i in v[:3]])
+            total_news += len(v)
+            snippets = "\n".join([f"• {i['title']}" for i in v[:3]])
             blocks.append(f"**{k}**:\n{snippets}")
+    
+    logger.info(f"📊 Всего найдено новостей: {total_news}")
     
     if not blocks: 
         return None
     
+    # Если новостей мало, просто вернём их без AI
+    if total_news < 3:
+        simple_digest = f"{sep}\n🍵 ЧАЙНЫЙ ИНСАЙДЕР | {today}\n{sep}\n\n"
+        for k, v in data.items():
+            if v:
+                simple_digest += f"\n**{k}**:\n"
+                for item in v[:5]:
+                    simple_digest += f"• {item['title']}\n"
+                    if item.get('link'):
+                        simple_digest += f"  {item['link']}\n"
+        simple_digest += f"\n{sep}"
+        return simple_digest
+    
+    # Используем AI для форматирования
     prompt = f"""Собери дайджест новостей чая на русском. Только факты.
 
 ДАТА: {today}
@@ -135,13 +171,21 @@ async def run_digest(chat_id=None):
         if chat_id:
             await bot.send_message(chat_id=target, text="⏳ Собираю свежие новости... (5-10 мин)")
         
-        logger.info("🔍 Сбор данных...")
+        logger.info("🔍 Начало сбора данных...")
         data = await agent_search_all()
-        logger.info(f"✅ Найдено {sum(len(v) for v in data.values())} источников")
+        total = sum(len(v) for v in data.values())
+        logger.info(f"✅ Всего найдено: {total} новостей")
+        
+        if total == 0:
+            msg = "ℹ️ Новостей не найдено. Проверьте API ключи."
+            logger.warning(msg)
+            if chat_id:
+                await bot.send_message(chat_id=target, text=msg)
+            return
         
         digest = await agent_build_digest(data, today)
         
-        if digest:
+        if digest and len(digest.strip()) > 50:
             clean = clean_reasoning(digest)
             logger.info(f"📤 Отправка дайджеста ({len(clean)} символов)")
             
@@ -152,8 +196,9 @@ async def run_digest(chat_id=None):
             if chat_id: 
                 await bot.send_message(chat_id=target, text="✅ Готово!")
         else:
-            msg = "ℹ️ Новых новостей нет" if chat_id else ""
-            if msg: 
+            msg = "ℹ️ Не удалось обработать новости"
+            logger.warning(msg)
+            if chat_id: 
                 await bot.send_message(chat_id=target, text=msg)
             
     except Exception as e:

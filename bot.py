@@ -184,8 +184,8 @@ async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     logger.info("🚀 Запуск бота (24/7 режим)...")
     
-    # ВАЖНО: включаем job_queue()
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue().build()
+    # JobQueue создаётся автоматически
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("new", new_cmd))

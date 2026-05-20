@@ -193,7 +193,25 @@ async def handle_webhook(request):
         logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
-async def main():
+async def on_startup(app):
+    """Инициализация при запуске"""
+    application = app['application']
+    await application.initialize()
+    await application.start()
+    
+    # Устанавливаем webhook
+    webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
+    await application.bot.set_webhook(webhook_url)
+    logger.info(f"✅ Webhook установлен: {webhook_url}")
+    logger.info("✅ Бот запущен и готов к работе!")
+
+async def on_shutdown(app):
+    """Остановка при завершении"""
+    application = app['application']
+    await application.stop()
+    await application.shutdown()
+
+def main():
     logger.info("🚀 Запуск бота (Webhook режим)...")
     
     # Создаем приложение
@@ -207,29 +225,17 @@ async def main():
     application.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
     logger.info("⏰ Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
     
-    # Устанавливаем webhook
-    webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
-    await application.bot.set_webhook(webhook_url)
-    logger.info(f"✅ Webhook установлен: {webhook_url}")
+    # Создаем web-приложение
+    web_app = web.Application()
+    web_app['bot'] = application.bot
+    web_app['application'] = application
+    web_app.router.add_post('/', handle_webhook)
+    web_app.on_startup.append(on_startup)
+    web_app.on_shutdown.append(on_shutdown)
     
-    # Запускаем web-сервер для Render
-    app = web.Application()
-    app['bot'] = application.bot
-    app['application'] = application
-    app.router.add_post('/', handle_webhook)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
-    await site.start()
-    
-    logger.info(f"🌐 Web server запущен на порту {os.getenv('PORT', 8080)}")
-    logger.info("✅ Бот запущен и готов к работе!")
-    
-    # Держим сервер работающим
-    while True:
-        await asyncio.sleep(3600)
+    # Запускаем web-сервер
+    web.run_app(web_app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
 

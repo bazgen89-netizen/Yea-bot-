@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Чайный Инсайдер — Версия для Render (24/7 онлайн)
+Чайный Инсайдер — Версия для Render (с JobQueue)
 """
-import os, sys, asyncio, logging
-from datetime import datetime
+import os, sys, asyncio, logging, datetime
 from zoneinfo import ZoneInfo
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import aiohttp
 from telegram import Bot, Update
@@ -24,7 +22,7 @@ MODEL = "accounts/fireworks/models/kimi-k2p5"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# --- Функции очистки и поиска (без изменений) ---
+# --- Вспомогательные функции ---
 def clean_reasoning(text):
     if not text: return ""
     lines = text.split('\n')
@@ -60,7 +58,7 @@ async def ask_fireworks(messages, max_tokens=2000):
                 return res['choices'][0]['message']['content'].strip() if res.get('choices') else None
     except: return None
 
-# --- Основная логика ---
+# --- Логика бота ---
 async def agent_search_all():
     queries = {
         "white_tea": "福鼎白茶 2025 新闻", "green_tea": "西湖龙井 2025 新闻",
@@ -94,10 +92,9 @@ async def agent_build_digest(data, today):
 async def run_digest(chat_id=None):
     target = chat_id or YOUR_TELEGRAM_ID
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
+    today = datetime.datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
     
     try:
-        # Уведомление о старте (только если это ручной запрос)
         if chat_id:
             await bot.send_message(chat_id=target, text="⏳ Собираю свежие новости... (5-10 мин)")
         
@@ -106,18 +103,21 @@ async def run_digest(chat_id=None):
         
         if digest:
             clean = clean_reasoning(digest)
-            # Разбивка длинных сообщений
             for i in range(0, len(clean), 4000):
                 await bot.send_message(chat_id=target, text=clean[i:i+4000])
             if chat_id: await bot.send_message(chat_id=target, text="✅ Готово!")
         else:
-            msg = "ℹ️ Новых новостей нет" if chat_id else ""
-            if msg: await bot.send_message(chat_id=target, text=msg)
+            if chat_id: await bot.send_message(chat_id=target, text="ℹ️ Новых новостей нет")
             
     except Exception as e:
         if chat_id: await bot.send_message(chat_id=target, text=f"❌ Ошибка: {str(e)[:100]}")
 
-# --- Команды и Запуск ---
+# --- Задачи по расписанию (Встроенный JobQueue) ---
+async def daily_job(context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🕒 Авто-запуск дайджеста (15:00 МСК)")
+    await run_digest() # Отправит на YOUR_TELEGRAM_ID
+
+# --- Команды ---
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🍵 <b>Чайный Инсайдер</b>\n\n"
@@ -127,24 +127,19 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Запускаем сбор новостей в фоне, чтобы не блокировать бота
     asyncio.create_task(run_digest(update.effective_chat.id))
 
 async def main():
-    logger.info(" Запуск бота (24/7 режим)...")
+    logger.info("🚀 Запуск бота (24/7 режим)...")
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # Команды
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("new", new_cmd))
     
-    # Планировщик (для авто-отправки в 15:00)
-    sched = AsyncIOScheduler()
-    sched.add_job(lambda: asyncio.create_task(run_digest()), 'cron', hour=15, minute=0)
-    sched.start()
-    logger.info(" Авто-отправка настроена на 15:00 МСК")
+    # Настройка расписания: 15:00 МСК = 12:00 UTC
+    app.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
+    logger.info(" Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
     
-    # Запуск
     await app.run_polling()
 
 if __name__ == "__main__":

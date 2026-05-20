@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Чайный Инсайдер — Версия для Render
+Чайный Инсайдер — Версия для Render (Webhook)
 """
 import os, sys, asyncio, logging, datetime
 from zoneinfo import ZoneInfo
+from aiohttp import web
 
 import aiohttp
-from telegram import Bot, Update
+from telegram import Bot, Update, WebhookInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
@@ -181,10 +182,27 @@ async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Начинаю сбор новостей...")
     asyncio.create_task(run_digest(update.effective_chat.id))
 
+# --- Webhook для Render ---
+
+async def webhook_handler(request):
+    try:
+        update = Update.de_json(await request.json(), bot)
+        await app.process_update(update)
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return web.Response(text="Error", status=500)
+
+async def post_init(application):
+    bot = application.bot
+    webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
+    await bot.set_webhook(webhook_url)
+    logger.info(f"✅ Webhook установлен: {webhook_url}")
+
 async def main():
-    logger.info("🚀 Запуск бота (24/7 режим)...")
+    global app
+    logger.info("🚀 Запуск бота (Webhook режим)...")
     
-    # JobQueue создаётся автоматически
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start_cmd))
@@ -194,8 +212,19 @@ async def main():
     app.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
     logger.info("⏰ Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
     
-    logger.info("✅ Бот запущен и слушает команды...")
-    await app.run_polling()
+    # Webhook для Render
+    app_runner = web.AppRunner(web.Application())
+    await app_runner.setup()
+    site = web.TCPSite(app_runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+    await site.start()
+    logger.info(f"🌐 Web server запущен на порту {os.getenv('PORT', 8080)}")
+    
+    await app.initialize(post_init=post_init)
+    logger.info("✅ Бот запущен и готов к работе!")
+    
+    # Держим сервер работающим
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())

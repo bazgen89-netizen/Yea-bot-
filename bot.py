@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Чайный Инсайдер — Версия для Render (Webhook)
+Чайный Инсайдер — Версия для Render (Исправленный вывод)
 """
 import os, sys, asyncio, logging, datetime
 from zoneinfo import ZoneInfo
@@ -26,20 +26,42 @@ logger = logging.getLogger(__name__)
 # --- Вспомогательные функции ---
 
 def clean_reasoning(text):
+    """Удаляет мысли AI и оставляет только готовый текст"""
     if not text: 
         return ""
+    
+    # Список фраз, которые выдают "мысли" бота
+    ban_phrases = [
+        "проверяю", "пересмотрю", "форматирование", "нужно ли", 
+        "все корректно", "внутренний монолог", "reasoning", "thinking",
+        "проверка", "анализирую", "думаю", "стоит ли", "убрать", 
+        "добавить", "использовать", "финальный блок", "процесс",
+        "chain of thought", "thought process"
+    ]
+    
     lines = text.split('\n')
-    clean_lines, skip = [], False
+    clean_lines = []
+    
     for line in lines:
-        low = line.lower()
-        if any(x in low for x in ["проверка:", "reasoning", "thinking", "<think>"]): 
-            skip = True
+        lower_line = line.lower().strip()
+        
+        # Если строка содержит фразу из списка мыслей — пропускаем
+        if any(phrase in lower_line for phrase in ban_phrases):
             continue
-        if skip and line.strip() and not any(line.startswith(x) for x in ['-', '•', '*', '=', '']): 
-            skip = False
-        if not skip: 
-            clean_lines.append(line)
-    return '\n'.join(clean_lines).strip()
+            
+        # Если строка пустая — оставляем (для отступов)
+        if not lower_line:
+            clean_lines.append("")
+            continue
+            
+        clean_lines.append(line)
+    
+    result = '\n'.join(clean_lines).strip()
+    
+    # Если текст начинается с мусора, попробуем найти начало по дате или заголовку
+    # Но пока оставим фильтрацию по строкам, это надежнее
+    
+    return result
 
 def format_search_results(results, max_snippet=300):
     if not results: 
@@ -88,7 +110,6 @@ async def ask_fireworks(messages, max_tokens=2000):
 # --- Логика бота ---
 
 async def agent_search_all():
-    # Используем более простые запросы на русском и английском
     queries = {
         "white_tea": "white tea news 2025 2026", 
         "green_tea": "green tea China news 2025",
@@ -142,7 +163,13 @@ async def agent_build_digest(data, today):
         return simple_digest
     
     # Используем AI для форматирования
+    # ДОБАВЛЕНО СТРОГОЕ ЗАПРЕЩЕНИЕ НА МЫСЛИ
     prompt = f"""Собери дайджест новостей чая на русском. Только факты.
+
+СТРОГИЕ ПРАВИЛА:
+1. НЕ пиши свои мысли, процесс проверки или рассуждения.
+2. НЕ пиши "Проверяю...", "Нужно ли...", "Форматирование...".
+3. Выдай ТОЛЬКО готовый текст дайджеста.
 
 ДАТА: {today}
 

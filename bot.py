@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Waystea Tea Expert Bot — Эксперт по китайскому чаю (Gemini + Serper)
-Требует: python-telegram-bot>=20.0, aiohttp, python-dotenv
 """
 import os, sys, asyncio, logging
 from aiohttp import web
@@ -16,7 +15,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 🔑 НАСТРОЙКИ
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 YOUR_TELEGRAM_ID = int(os.getenv("YOUR_TELEGRAM_ID", "0") or "0")
 GEMINI_KEY = os.getenv("GEMINI_KEY", "")
@@ -50,7 +48,7 @@ async def handle_greeting(update: Update, user_text: str) -> bool:
     return False
 
 # ---------------------------------------------------------
-# 🔍 ПОИСК (Китайские источники + кэш)
+# 🔍 ПОИСК
 # ---------------------------------------------------------
 async def search_chinese_tea_sources(query: str) -> str:
     cache_key = query.lower().strip()
@@ -58,15 +56,15 @@ async def search_chinese_tea_sources(query: str) -> str:
         return search_cache[cache_key]
 
     if not SERPER_KEY:
-        return "⚠️ Поиск временно недоступен (нет ключа Serper)."
+        return "⚠️ Поиск временно недоступен."
 
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12)) as session:
             headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
             search_queries = [
-                f"{query} site:chinadaily.com.cn OR site:xinhuanet.com OR site:tea.cn OR site:teavivre.com",
-                f"{query} chinese tea origin processing tradition",
-                f"{query} чай Китай происхождение обработка заваривание"
+                f"{query} site:chinadaily.com.cn OR site:xinhuanet.com OR site:tea.cn",
+                f"{query} chinese tea origin processing",
+                f"{query} чай Китай заваривание"
             ]
             all_context = ""
             seen_urls = set()
@@ -82,18 +80,18 @@ async def search_chinese_tea_sources(query: str) -> str:
                                     seen_urls.add(url)
                                     all_context += f"📌 {item.get('title')}\n🔗 {url}\n📄 {item.get('snippet')}\n\n"
                 except Exception as e:
-                    logger.warning(f"Search failed for '{q}': {e}")
+                    logger.warning(f"Search failed: {e}")
                     continue
     except Exception as e:
-        logger.error(f"Search network error: {e}")
+        logger.error(f"Search error: {e}")
         all_context = ""
 
-    result = all_context if all_context else "Информация из источников не найдена. Отвечу на основе экспертных знаний."
+    result = all_context if all_context else "Информация не найдена. Отвечу на основе знаний."
     search_cache[cache_key] = result
     return result
 
 # ---------------------------------------------------------
-# 🤖 GEMINI API (оптимизировано под скорость и качество)
+# 🤖 GEMINI API
 # ---------------------------------------------------------
 async def ask_gemini_expert(system_prompt: str, user_message: str, context: str) -> str:
     if not GEMINI_KEY:
@@ -101,18 +99,12 @@ async def ask_gemini_expert(system_prompt: str, user_message: str, context: str)
 
     full_prompt = f"""{system_prompt}
 
-КОНТЕКСТ ИЗ ИСТОЧНИКОВ:
+КОНТЕКСТ:
 {context}
 
-ВОПРОС ПОЛЬЗОВАТЕЛЯ:
-{user_message}
+ВОПРОС: {user_message}
 
-Формат ответа:
-• Кратко и по делу (3-5 абзацев)
-• Используй эмодзи 🍃🌡️⏱️📍 для структуры
-• Давай точные цифры (температура, время, граммы)
-• Если информации в контексте нет — честно скажи, но дай полезный ответ из своих знаний
-• Язык: простой русский, без сложной терминологии"""
+Отвечай кратко (3-5 абзацев), используй эмодзи 🍃🌡️️, давай точные цифры. Язык: русский."""
 
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as session:
@@ -123,7 +115,6 @@ async def ask_gemini_expert(system_prompt: str, user_message: str, context: str)
                     "topK": 30,
                     "topP": 0.9,
                     "maxOutputTokens": 900,
-                    "stopSequences": ["\n\n\n"]
                 }
             }
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
@@ -135,50 +126,27 @@ async def ask_gemini_expert(system_prompt: str, user_message: str, context: str)
                         parts = candidates[0]["content"].get("parts", [])
                         if parts:
                             return parts[0].get("text", "").strip()
-                    return "⚠️ Gemini вернул пустой ответ."
                 else:
-                    error = await resp.text()
-                    logger.error(f"Gemini API error {resp.status}: {error}")
-                    raise Exception(f"API {resp.status}")
+                    logger.error(f"Gemini error: {resp.status}")
+                    
+        return "⚠️ Временно не могу связаться с базой знаний.\n\n💡 Базовые советы:\n• Вода: 75-80°C для зелёного, 90-95°C для пуэра\n• Пропорция: 5-7 г на 100-150 мл\n• Храните чай в сухом месте без запахов"
     except Exception as e:
-        logger.error(f"Gemini request failed: {e}")
-        return (
-            "⚠️ Временно не могу связаться с экспертной базой.\n\n"
-            "💡 Базовые советы:\n"
-            "• Вода: 75-80°C для зелёного/белого, 90-95°C для улуна/пуэра\n"
-            "• Пропорция: 5-7 г чая на 100-150 мл воды (гайвань)\n"
-            "• Первый пролив часто сливают для «промывки» листа\n"
-            "• Храните чай вдали от света, влаги и сильных запахов\n\n"
-            "Попробуйте позже или уточните вопрос 🍃"
-        )
+        logger.error(f"Gemini failed: {e}")
+        return "⚠️ Ошибка соединения. Попробуйте позже."
 
 # ---------------------------------------------------------
 # 🧠 ПРОМПТЫ И КЛАССИФИКАЦИЯ
 # ---------------------------------------------------------
 def get_system_prompt(category: str) -> str:
-    base = ("Ты — эксперт по китайскому чаю. Знаешь традиции, регионы, обработку и заваривание. "
-            "Отвечай точно, доступно, с опорой на факты. Всегда указывай регион, если он известен. "
-            "Если используешь источники — кратко ссылайся на них.")
+    base = "Ты эксперт по китайскому чаю. Отвечай точно, доступно, с эмодзи. Указывай регион."
     prompts = {
-        "brewing": base + " Фокус: температура воды, время проливов, пропорции, тип посуды (гайвань/чайник/стекло), когда нужен первый пролив.",
-        "storage": base + " Фокус: влажность, температура, вентиляция, разница хранения шен/шу пуэра, чего избегать, признаки старения.",
-        "selection": base + " Фокус: вкус, эффект, бюджет. Предлагай 2-3 варианта с описанием профиля, регионом и мини-инструкцией по завариванию.",
-        "history": base + " Фокус: точный регион, династия/период, легенды (с пометкой), эволюция технологии, современные особенности.",
-        "general": base + " Отвечай как универсальный эксперт. Если вопрос размыт — задай уточняющий. Будь дружелюбен."
+        "brewing": base + " Фокус: температура, время проливов, пропорции, посуда.",
+        "storage": base + " Фокус: влажность, температура, хранение шен/шу пуэра.",
+        "selection": base + " Фокус: вкус, эффект, бюджет. Предлагай 2-3 варианта.",
+        "history": base + " Фокус: регион, династия, легенды, технология.",
+        "general": base
     }
     return prompts.get(category, prompts["general"])
-
-async def classify_question(user_text: str) -> str:
-    t = user_text.lower()
-    if any(w in t for w in ["как заваривать", "заварка", "температура", "пролив", "гайвань", "чайник", "сколько минут", "вода", "горько", "горчит"]):
-        return "brewing"
-    if any(w in t for w in ["хранить", "хранение", "срок", "влажность", "испортился", "плесень", "запах", "старение"]):
-        return "storage"
-    if any(w in t for w in ["выбрать", "подобрать", "рекомендуй", "совет", "какой лучше", "купить", "посоветуй", "для начина", "подари"]):
-        return "selection"
-    if any(w in t for w in ["история", "происхождение", "откуда", "легенда", "традиция", "кто придумал", "династия", "родина"]):
-        return "history"
-    return "general"
 
 # ---------------------------------------------------------
 # 📩 ОБРАБОТКА СООБЩЕНИЙ
@@ -188,44 +156,52 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     if await handle_greeting(update, user_text):
         return
 
-    async with update.message.chat.action("typing"):
-        # Параллельный запуск для экономии времени
-        category, search_context = await asyncio.gather(
-            classify_question(user_text),
-            search_chinese_tea_sources(user_text)
-        )
-        system_prompt = get_system_prompt(category)
-        answer = await ask_gemini_expert(system_prompt, user_text, search_context)
+    await process_query(update.message, user_text, "general")
 
-    footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ сформирован на основе китайских источников и экспертных знаний 🇨🇳🍃"
-    full_answer = (answer + footer).strip()
-
-    # Отправка частями, если длинное
-    for i in range(0, len(full_answer), 4000):
-        await update.message.reply_text(full_answer[i:i+4000])
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    prompts = {
-        "brewing": "Как правильно заваривать китайский чай?",
-        "selection": "Помоги выбрать чай под мой вкус",
-        "storage": "Как правильно хранить чай дома?",
-        "history": "Расскажи историю китайского чая и его происхождение"
-    }
-    user_text = prompts.get(query.data, "Расскажи о чае")
-
-    async with query.message.chat.action("typing"):
-        category = query.data
+async def process_query(message, user_text: str, category: str):
+    """Универсальная обработка запроса"""
+    async with message.chat.action("typing"):
+        if category == "general":
+            category = await classify_question(user_text)
+        
         search_context = await search_chinese_tea_sources(user_text)
         system_prompt = get_system_prompt(category)
         answer = await ask_gemini_expert(system_prompt, user_text, search_context)
 
-    footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ сформирован на основе китайских источников и экспертных знаний 🇨🇳🍃"
+    footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ на основе китайских источников 🇨🇳🍃"
     full_answer = (answer + footer).strip()
+
     for i in range(0, len(full_answer), 4000):
-        await query.message.reply_text(full_answer[i:i+4000])
+        await message.reply_text(full_answer[i:i+4000])
+
+# ---------------------------------------------------------
+# 🔘 ОБРАБОТКА КНОПОК (ИСПРАВЛЕНО!)
+# ---------------------------------------------------------
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий на inline-кнопки"""
+    query = update.callback_query
+    if query is None:
+        return
+    
+    # Обязательно подтверждаем callback!
+    await query.answer()
+    
+    category = query.data
+    logger.info(f"Button pressed: {category}")
+    
+    # Тексты для кнопок
+    prompts = {
+        "brewing": "Как правильно заваривать китайский чай?",
+        "selection": "Помоги выбрать чай под мой вкус",
+        "storage": "Как правильно хранить чай дома?",
+        "history": "Расскажи историю китайского чая"
+    }
+    
+    user_text = prompts.get(category, "Расскажи о чае")
+    
+    # Отправляем сообщение с индикатором
+    if query.message:
+        await process_query(query.message, user_text, category)
 
 # ---------------------------------------------------------
 # 📜 КОМАНДЫ
@@ -239,32 +215,34 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text(
         "🍵 <b>Waystea Tea Expert</b>\n\n"
-        "Я — ваш персональный эксперт по <b>китайскому чаю</b>.\n\n"
-        "<b>Что я умею:</b>\n"
-        "• 📚 Рассказать о любом чае (пуэр, улун, красный, зелёный, белый)\n"
-        "• 🫖 Научить заваривать по китайской традиции\n"
-        "• 💾 Подсказать, как правильно хранить чай\n"
-        "• 🎯 Помочь выбрать чай под ваш вкус\n"
-        "• 🏔️ Поделиться историей и происхождением\n\n"
+        "Я — эксперт по китайскому чаю.\n\n"
         "Выберите тему или напишите вопрос!",
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML'
     )
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📖 <b>Примеры вопросов:</b>\n\n"
-        "🔸 <i>Как заваривать шен пуэр в гайвани?</i>\n"
-        "🔸 <i>Чем отличается шу от шен пуэра?</i>\n"
-        "🔸 <i>Как хранить пуэр дома в квартире?</i>\n"
-        "🔸 <i>Какой улун самый ароматный и цветочный?</i>\n"
-        "🔸 <i>Что такое Да Хун Пао и где его выращивают?</i>\n"
-        "🔸 <i>Рекомендуй чай для утра / для вечера</i>\n"
-        "🔸 <i>Почему чай горчит? Как исправить?</i>\n\n"
-        "Спрашивайте что угодно о китайском чае! 🇨🇳🍵", parse_mode='HTML'
+        "📖 Примеры:\n"
+        "• Как заваривать шен пуэр?\n"
+        "• Чем отличается шу от шен?\n"
+        "• Как хранить пуэр?\n"
+        "• Какой улун самый ароматный?", parse_mode='HTML'
     )
 
+async def classify_question(user_text: str) -> str:
+    t = user_text.lower()
+    if any(w in t for w in ["заваривать", "температура", "пролив", "гайвань", "вода"]):
+        return "brewing"
+    if any(w in t for w in ["хранить", "хранение", "влажность"]):
+        return "storage"
+    if any(w in t for w in ["выбрать", "подобрать", "рекомендуй", "совет"]):
+        return "selection"
+    if any(w in t for w in ["история", "происхождение", "легенда"]):
+        return "history"
+    return "general"
+
 # ---------------------------------------------------------
-# 🌐 WEBHOOK & APP LIFECYCLE
+# 🌐 WEBHOOK
 # ---------------------------------------------------------
 async def handle_webhook(request):
     try:
@@ -281,7 +259,7 @@ async def on_startup(app):
     await application.start()
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await application.bot.set_webhook(webhook_url)
-    logger.info("✅ Waystea Expert Bot запущен! (Gemini + китайские источники)")
+    logger.info("✅ Bot запущен!")
 
 async def on_shutdown(app):
     application = app['application']
@@ -289,14 +267,15 @@ async def on_shutdown(app):
     await application.shutdown()
 
 def main():
-    logger.info("🚀 Запуск Waystea Tea Expert Bot (Gemini Edition)...")
+    logger.info("🚀 Запуск бота...")
     
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_cmd))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message))
-    application.add_handler(CallbackQueryHandler(button_callback))
+    # ИСПРАВЛЕНО: добавлен pattern для надёжности
+    application.add_handler(CallbackQueryHandler(button_callback, pattern=r'^(brewing|selection|storage|history)$'))
     
     web_app = web.Application()
     web_app['bot'] = application.bot

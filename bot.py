@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Waystea Tea Expert Bot — С отладкой
+Waystea Tea Expert Bot — Исправленная версия
 """
 import os, sys, asyncio, logging, traceback
 from aiohttp import web
@@ -25,16 +25,12 @@ SERPER_KEY = os.getenv("SERPER_KEY", "")
 MODEL = "gemini-1.5-flash"
 
 # ==========================================
-# 🔥 УСИЛЕННОЕ ЛОГИРОВАНИЕ
+# 🔥 ИСПРАВЛЕННОЕ ЛОГИРОВАНИЕ
 # ==========================================
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    stream=sys.stdout,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot_debug.log')
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 
@@ -51,7 +47,6 @@ async def search_chinese_tea_sources(query: str) -> str:
     logger.info(f"🔍 Search: {query[:50]}")
     cache_key = query.lower().strip()
     if cache_key in search_cache:
-        logger.info("✅ From cache")
         return search_cache[cache_key]
 
     if not SERPER_KEY:
@@ -70,7 +65,6 @@ async def search_chinese_tea_sources(query: str) -> str:
             for q in queries:
                 try:
                     async with session.post("https://google.serper.dev/search", headers=headers, json={"q": q, "num": 3, "hl": "ru"}) as resp:
-                        logger.debug(f"Search status: {resp.status}")
                         if resp.status == 200:
                             res = await resp.json()
                             for item in res.get("organic", [])[:2]:
@@ -87,7 +81,6 @@ async def search_chinese_tea_sources(query: str) -> str:
 
     result = context if context else "Информация не найдена. Отвечу на основе знаний."
     search_cache[cache_key] = result
-    logger.info(f"✅ Search done: {len(result)} chars")
     return result
 
 # ==========================================
@@ -119,20 +112,15 @@ async def ask_gemini_expert(system_prompt: str, user_msg: str, context: str) -> 
                 }
             }
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
-            logger.debug(f"Gemini URL: {url[:80]}...")
             
             async with session.post(url, json=payload) as resp:
-                logger.debug(f"Gemini status: {resp.status}")
                 if resp.status == 200:
                     res = await resp.json()
-                    logger.debug(f"Gemini response: {res}")
                     candidates = res.get("candidates", [])
                     if candidates and "content" in candidates[0]:
                         parts = candidates[0]["content"].get("parts", [])
                         if parts:
-                            answer = parts[0].get("text", "").strip()
-                            logger.info(f"✅ Got answer: {len(answer)} chars")
-                            return answer
+                            return parts[0].get("text", "").strip()
                 else:
                     err = await resp.text()
                     logger.error(f"Gemini error {resp.status}: {err}")
@@ -165,59 +153,44 @@ def classify_question(text: str) -> str:
     return "general"
 
 # ==========================================
-# 📩 ОБРАБОТЧИК СООБЩЕНИЙ (С ОТЛАДКОЙ)
+# 📩 ОБРАБОТЧИК СООБЩЕНИЙ
 # ==========================================
 async def process_query(message, user_text: str, category: str):
     try:
         logger.info(f"🔄 Processing: '{user_text[:30]}...' cat={category}")
-        logger.info(f"💬 Chat ID: {message.chat.id}")
         
-        # Показываем "печатает"
         await message.chat.send_action("typing")
-        logger.debug("✍️ Sent typing action")
         
         if category == "general":
             category = classify_question(user_text)
-            logger.debug(f"📊 Classified as: {category}")
         
-        # Поиск + AI
         context = await search_chinese_tea_sources(user_text)
         prompt = get_system_prompt(category)
         answer = await ask_gemini_expert(prompt, user_text, context)
 
-        footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ на основе китайских источников 🇨🇳"
+        footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ на основе китайских источников 🇨🍃"
         full = (answer + footer).strip()
         
-        logger.info(f"📤 Sending answer ({len(full)} chars)")
         for i in range(0, len(full), 4000):
             await message.reply_text(full[i:i+4000])
         logger.info("✅ Answer sent")
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR in process_query: {e}\n{traceback.format_exc()}")
+        logger.error(f"❌ ERROR in process_query: {e}\n{traceback.format_exc()}")
         try:
-            await message.reply_text(f"⚠️ Произошла ошибка:\n{str(e)}\n\nПопробуйте позже или напишите /start")
+            await message.reply_text(f"⚠️ Ошибка: {str(e)}")
         except:
             pass
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        logger.info(f"📨 Message received from {update.effective_user.id}")
-        logger.debug(f"Update: {update}")
-        
-        if not update.message:
-            logger.warning("⚠️ No message in update")
-            return
-        if not update.message.text:
-            logger.warning("⚠️ No text in message")
+        if not update.message or not update.message.text:
             return
             
         text = update.message.text.strip()
-        logger.info(f"💬 Text: '{text}'")
+        logger.info(f"💬 Message: '{text}'")
         
-        # Приветствие
         if any(g in text.lower() for g in GREETINGS):
-            logger.info("👋 Greeting detected")
             keyboard = [
                 [InlineKeyboardButton("🫖 Как заваривать?", callback_data="brewing")],
                 [InlineKeyboardButton("🎯 Подобрать чай", callback_data="selection")],
@@ -228,21 +201,17 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "🍵 Здравствуйте! Я — эксперт по китайскому чаю.\n\nВыберите тему или напишите вопрос:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            logger.info("✅ Greeting sent")
             return
         
-        # Обычный запрос
         await process_query(update.message, text, "general")
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL in handle_user_message: {e}\n{traceback.format_exc()}")
+        logger.error(f"❌ ERROR in handle_user_message: {e}\n{traceback.format_exc()}")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        logger.info("🔘 Button callback triggered")
         query = update.callback_query
         if not query:
-            logger.error("❌ No callback_query")
             return
         
         logger.info(f"🔘 Button: {query.data}")
@@ -259,8 +228,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_text = prompts.get(category, "О чае")
         if query.message:
             await process_query(query.message, user_text, category)
-        else:
-            logger.error("❌ No message in callback")
             
     except Exception as e:
         logger.error(f"❌ Button error: {e}\n{traceback.format_exc()}")
@@ -289,13 +256,11 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 async def handle_webhook(request):
     try:
-        logger.debug("📥 Webhook received")
         update = Update.de_json(await request.json(), request.app['bot'])
-        logger.debug(f"Update parsed: {update.update_id if update else 'None'}")
         await request.app['application'].process_update(update)
         return web.Response(text="OK")
     except Exception as e:
-        logger.error(f"❌ Webhook error: {e}\n{traceback.format_exc()}")
+        logger.error(f"❌ Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
@@ -305,13 +270,6 @@ async def on_startup(app):
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await app_instance.bot.set_webhook(webhook_url)
     logger.info(f"✅ Bot started! Webhook: {webhook_url}")
-    
-    # Тест соединения
-    try:
-        me = await app_instance.bot.get_me()
-        logger.info(f"🤖 Bot username: @{me.username}")
-    except Exception as e:
-        logger.error(f"❌ Can't get bot info: {e}")
 
 async def on_shutdown(app):
     await app['application'].stop()
@@ -339,7 +297,6 @@ def main():
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     
-    logger.info("🌐 Starting web server...")
     web.run_app(web_app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
 
 if __name__ == "__main__":

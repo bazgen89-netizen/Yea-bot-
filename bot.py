@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Чайный Инсайдер — Версия для Render (Исправленный вывод)
+Waystea Tea Expert Bot — Исправленная версия
 """
 import os, sys, asyncio, logging, datetime
 from zoneinfo import ZoneInfo
@@ -9,7 +9,7 @@ from aiohttp import web
 
 import aiohttp
 from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,246 +23,245 @@ MODEL = "accounts/fireworks/models/kimi-k2p5"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# --- Вспомогательные функции ---
+# --- Поиск информации ---
 
-def clean_reasoning(text):
-    """Удаляет мысли AI и оставляет только готовый текст"""
-    if not text: 
-        return ""
+async def search_waystea(query):
+    """Ищет информацию на waystea.ru и в чайных источниках"""
+    if not SERPER_KEY:
+        return "Ошибка: нет ключа Serper."
     
-    # Список фраз, которые выдают "мысли" бота
-    ban_phrases = [
-        "проверяю", "пересмотрю", "форматирование", "нужно ли", 
-        "все корректно", "внутренний монолог", "reasoning", "thinking",
-        "проверка", "анализирую", "думаю", "стоит ли", "убрать", 
-        "добавить", "использовать", "финальный блок", "процесс",
-        "chain of thought", "thought process"
-    ]
-    
-    lines = text.split('\n')
-    clean_lines = []
-    
-    for line in lines:
-        lower_line = line.lower().strip()
-        
-        # Если строка содержит фразу из списка мыслей — пропускаем
-        if any(phrase in lower_line for phrase in ban_phrases):
-            continue
-            
-        # Если строка пустая — оставляем (для отступов)
-        if not lower_line:
-            clean_lines.append("")
-            continue
-            
-        clean_lines.append(line)
-    
-    result = '\n'.join(clean_lines).strip()
-    
-    # Если текст начинается с мусора, попробуем найти начало по дате или заголовку
-    # Но пока оставим фильтрацию по строкам, это надежнее
-    
-    return result
-
-def format_search_results(results, max_snippet=300):
-    if not results: 
-        return []
-    banned = ['taobao', '1688', 'jd.com', 'alibaba']
-    filtered = [i for i in results if not any(x in i.get('link','') for x in banned) and len(i.get('snippet','')) > 40]
-    return [{"title": i['title'][:100], "snippet": i['snippet'][:max_snippet], "link": i.get('link', '')} for i in filtered[:10]]
-
-async def serper_search(query, num=10):
-    if not SERPER_KEY: 
-        logger.error("❌ SERPER_KEY не настроен!")
-        return []
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
-            data = {"q": query, "num": num}
-            async with s.post("https://google.serper.dev/search", headers=headers, json=data) as r:
-                if r.status != 200:
-                    logger.error(f"Serper error: {r.status}")
-                    return []
-                result = await r.json()
-                organic = result.get("organic", [])
-                logger.info(f"🔍 Найдено {len(organic)} результатов для: {query[:50]}")
-                return organic
+            
+            search_queries = [
+                f"site:waystea.ru {query}",
+                f"{query} tea china pu-erh oolong",
+            ]
+            
+            all_context = ""
+            
+            for q in search_queries:
+                data = {"q": q, "num": 5, "hl": "ru"}
+                try:
+                    async with session.post("https://google.serper.dev/search", headers=headers, json=data) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            organic = result.get("organic", [])
+                            
+                            for item in organic[:3]:
+                                all_context += f"Источник: {item.get('title')}\nURL: {item.get('link')}\nИнформация: {item.get('snippet')}\n\n"
+                except Exception as e:
+                    logger.error(f"Search error for {q}: {e}")
+                    continue
+            
+            return all_context if all_context else "Информация не найдена"
+            
     except Exception as e:
-        logger.error(f"Serper exception: {e}")
-        return []
+        logger.error(f"Search exception: {e}")
+        return f"Ошибка поиска: {e}"
 
-async def ask_fireworks(messages, max_tokens=2000):
-    if not FIREWORKS_KEY: 
-        logger.error("❌ FIREWORKS_KEY не настроен!")
-        return None
+async def ask_fireworks_expert(system_prompt, user_message, context=""):
+    """Спрашивает AI с экспертной инструкцией"""
+    if not FIREWORKS_KEY:
+        return "Ошибка: нет ключа Fireworks."
+    
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as s:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
             headers = {"Authorization": f"Bearer {FIREWORKS_KEY}", "Content-Type": "application/json"}
-            async with s.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json={"model": MODEL, "messages": messages, "max_tokens": max_tokens}) as r:
-                if r.status != 200:
-                    logger.error(f"Fireworks error: {r.status}")
-                    return None
-                res = await r.json()
-                return res['choices'][0]['message']['content'].strip() if res.get('choices') else None
+            
+            full_user_message = f"""
+КОНТЕКСТ ИЗ ИСТОЧНИКОВ:
+{context}
+
+ВОПРОС ПОЛЬЗОВАТЕЛЯ:
+{user_message}
+
+Отвечай на основе предоставленного контекста. Если информации недостаточно — скажи об этом честно."""
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": full_user_message}
+            ]
+            
+            data = {
+                "model": MODEL,
+                "messages": messages,
+                "max_tokens": 1500,
+                "temperature": 0.4
+            }
+            
+            async with session.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json=data) as resp:
+                if resp.status == 200:
+                    res = await resp.json()
+                    return res['choices'][0]['message']['content'].strip()
+                else:
+                    error_text = await resp.text()
+                    return f"Ошибка AI: статус {resp.status}. {error_text}"
+                    
     except Exception as e:
-        logger.error(f"Fireworks exception: {e}")
-        return None
+        logger.error(f"AI exception: {e}")
+        return f"Ошибка AI: {e}"
 
-# --- Логика бота ---
-
-async def agent_search_all():
-    queries = {
-        "white_tea": "white tea news 2025 2026", 
-        "green_tea": "green tea China news 2025",
-        "oolong": "oolong tea news", 
-        "puer": "pu-erh tea news 2025",
-        "red_tea": "black tea China news", 
-        "factories": "Dayi tea factory news"
-    }
+def get_system_prompt(category):
+    """Возвращает системный промпт в зависимости от категории вопроса"""
     
-    async def fetch(n, q):
-        try:
-            res = await serper_search(q, 8)
-            formatted = format_search_results(res)
-            logger.info(f"✅ {n}: {len(formatted)} новостей")
-            return n, formatted
-        except Exception as e:
-            logger.error(f"Error fetching {n}: {e}")
-            return n, []
-    
-    tasks = [fetch(n, q) for n, q in queries.items()]
-    results = await asyncio.gather(*tasks)
-    return {n: r for n, r in results if r}
+    base_prompt = """Ты — эксперт по чаю с многолетним опытом работы в компании Waystea.
+Твоя специализация: китайский чай (пуэр, улун, красный, зеленый, белый чай).
+Ты отвечаешь ПРАВДИВО, профессионально, но доступно.
+Всегда ссылайся на источники, если они есть."""
 
-async def agent_build_digest(data, today):
-    sep = "━" * 25
-    blocks = []
-    total_news = 0
+    if category == "brewing":
+        return base_prompt + """
+Фокус на заваривании:
+- Указывай температуру воды (°C)
+- Время пролива (секунды/минуты)
+- Количество чая на объем воды
+- Тип посуды (гайвань, исинский чайник и т.д.)
+- Особенности для конкретного чая"""
     
-    for k, v in data.items():
-        if v:
-            total_news += len(v)
-            snippets = "\n".join([f"• {i['title']}" for i in v[:3]])
-            blocks.append(f"**{k}**:\n{snippets}")
+    elif category == "storage":
+        return base_prompt + """
+Фокус на хранении чая:
+- Условия (влажность, температура, свет)
+- Срок хранения
+- Как правильно хранить разные виды чая
+- Признаки правильного/неправильного хранения"""
     
-    logger.info(f"📊 Всего найдено новостей: {total_news}")
+    elif category == "selection":
+        return base_prompt + """
+Фокус на подборе чая:
+- Спрашивай предпочтения (вкус, эффект, бюджет)
+- Предлагай варианты с описанием
+- Указывай особенности вкуса и аромата
+- Давай рекомендации по завариванию"""
     
-    if not blocks: 
-        return None
+    elif category == "history":
+        return base_prompt + """
+Фокус на истории и происхождении:
+- Регион производства
+- История создания чая
+- Традиции и особенности
+- Легенды и факты"""
     
-    # Если новостей мало, просто вернём их без AI
-    if total_news < 3:
-        simple_digest = f"{sep}\n🍵 ЧАЙНЫЙ ИНСАЙДЕР | {today}\n{sep}\n\n"
-        for k, v in data.items():
-            if v:
-                simple_digest += f"\n**{k}**:\n"
-                for item in v[:5]:
-                    simple_digest += f"• {item['title']}\n"
-                    if item.get('link'):
-                        simple_digest += f"  {item['link']}\n"
-        simple_digest += f"\n{sep}"
-        return simple_digest
+    else:
+        return base_prompt + """
+Отвечай как универсальный эксперт:
+- Давай точную информацию
+- Если не знаешь — признайся
+- Предлагай уточнить вопрос
+- Будь полезен и дружелюбен"""
+
+async def classify_question(user_text):
+    """Определяет тип вопроса для выбора правильного промпта"""
+    text_lower = user_text.lower()
     
-    # Используем AI для форматирования
-    # ДОБАВЛЕНО СТРОГОЕ ЗАПРЕЩЕНИЕ НА МЫСЛИ
-    prompt = f"""Собери дайджест новостей чая на русском. Только факты.
+    if any(word in text_lower for word in ["как заваривать", "заварка", "температура", "пролив", "гайвань", "чайник"]):
+        return "brewing"
+    elif any(word in text_lower for word in ["хранить", "хранение", "срок", "влажность", "испортился"]):
+        return "storage"
+    elif any(word in text_lower for word in ["выбрать", "подобрать", "рекомендуй", "совет", "какой лучше", "купить"]):
+        return "selection"
+    elif any(word in text_lower for word in ["история", "происхождение", "откуда", "легенда", "традиция"]):
+        return "history"
+    else:
+        return "general"
 
-СТРОГИЕ ПРАВИЛА:
-1. НЕ пиши свои мысли, процесс проверки или рассуждения.
-2. НЕ пиши "Проверяю...", "Нужно ли...", "Форматирование...".
-3. Выдай ТОЛЬКО готовый текст дайджеста.
+# --- ОБРАБОТКА СООБЩЕНИЙ ---
 
-ДАТА: {today}
-
-НОВОСТИ:
-{"\n\n".join(blocks)}
-
-ФОРМАТ:
-{sep}
-🍵 ЧАЙНЫЙ ИНСАЙДЕР | {today}
-{sep}
-
-[Сводка по категориям]
-
-{sep}
-История: 2737 до н.э. — Шэнь Нун, 1973 — Шу Пуэр, 2025 — Экология.
-{sep}"""
-    
-    return await ask_fireworks([{"role": "user", "content": prompt}], max_tokens=3000)
-
-async def run_digest(chat_id=None):
-    target = chat_id or YOUR_TELEGRAM_ID
-    bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    today = datetime.datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
-    
+async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает ЛЮБЫЕ текстовые сообщения от пользователей"""
     try:
-        if chat_id:
-            await bot.send_message(chat_id=target, text="⏳ Собираю свежие новости... (5-10 мин)")
+        user_text = update.message.text
+        chat_id = update.effective_chat.id
+        user_name = update.effective_user.first_name
         
-        logger.info("🔍 Начало сбора данных...")
-        data = await agent_search_all()
-        total = sum(len(v) for v in data.values())
-        logger.info(f"✅ Всего найдено: {total} новостей")
+        logger.info(f"📨 Получено сообщение от {user_name} (ID: {chat_id}): {user_text[:50]}")
         
-        if total == 0:
-            msg = "ℹ️ Новостей не найдено. Проверьте API ключи."
-            logger.warning(msg)
-            if chat_id:
-                await bot.send_message(chat_id=target, text=msg)
-            return
+        # Показываем что работаем
+        thinking_msg = await update.message.reply_text("🔍 Ищу информацию...")
         
-        digest = await agent_build_digest(data, today)
+        # Классифицируем вопрос
+        category = await classify_question(user_text)
+        logger.info(f"📂 Категория: {category}")
         
-        if digest and len(digest.strip()) > 50:
-            clean = clean_reasoning(digest)
-            logger.info(f"📤 Отправка дайджеста ({len(clean)} символов)")
+        # Ищем информацию
+        search_context = await search_waystea(user_text)
+        logger.info(f"📚 Найдено контекста: {len(search_context)} символов")
+        
+        # Получаем промпт
+        system_prompt = get_system_prompt(category)
+        
+        # Запрашиваем ответ у AI
+        logger.info("🤔 Запрашиваю ответ у AI...")
+        answer = await ask_fireworks_expert(system_prompt, user_text, search_context)
+        logger.info(f"✅ Получен ответ: {len(answer)} символов")
+        
+        # Удаляем сообщение "думаю"
+        await thinking_msg.delete()
+        
+        # Добавляем подпись
+        footer = "\n\n━━━━━━━━━━━━\nℹ️ Информация предоставлена на основе Waystea и проверенных источников"
+        full_answer = answer + footer
+        
+        # Отправляем ответ (разбиваем если длинный)
+        for i in range(0, len(full_answer), 4000):
+            await update.message.reply_text(full_answer[i:i+4000])
+            await asyncio.sleep(0.5)
             
-            for i in range(0, len(clean), 4000):
-                await bot.send_message(chat_id=target, text=clean[i:i+4000])
-                await asyncio.sleep(1)
-                
-            if chat_id: 
-                await bot.send_message(chat_id=target, text="✅ Готово!")
-        else:
-            msg = "ℹ️ Не удалось обработать новости"
-            logger.warning(msg)
-            if chat_id: 
-                await bot.send_message(chat_id=target, text=msg)
-            
+        logger.info(f"✅ Ответ отправлен пользователю {user_name}")
+        
     except Exception as e:
-        error_msg = f"❌ Ошибка: {str(e)[:200]}"
-        logger.error(error_msg)
-        if chat_id: 
-            await bot.send_message(chat_id=target, text=error_msg)
-
-# --- Задачи по расписанию ---
-
-async def daily_job(context: ContextTypes.DEFAULT_TYPE):
-    logger.info("🕒 Авто-запуск дайджеста (15:00 МСК)")
-    await run_digest()
+        logger.error(f"❌ Ошибка в handle_user_message: {e}")
+        try:
+            await update.message.reply_text(f"❌ Произошла ошибка: {str(e)[:100]}")
+        except:
+            pass
 
 # --- Команды ---
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"👋 Команда /start от {update.effective_user.first_name}")
     await update.message.reply_text(
-        "🍵 <b>Чайный Инсайдер</b>\n\n"
-        "/new — Получить свежие новости прямо сейчас\n"
-        "Авто-рассылка: ежедневно в 15:00 МСК",
+        "🍵 <b>Waystea Tea Expert</b>\n\n"
+        "Я — ваш персональный эксперт по чаю на основе знаний Waystea.\n\n"
+        "<b>Что я умею:</b>\n"
+        "• 📚 Рассказать о любом чае (пуэр, улун, красный, зеленый)\n"
+        "• 🫖 Научить правильно заваривать\n"
+        "• 💾 Подсказать как хранить чай\n"
+        "• 🎯 Помочь выбрать чай под ваш вкус\n"
+        "• 🏔️ Поделиться историей и происхождением\n\n"
+        "<b>Просто напишите:</b>\n"
+        "«Как заваривать шу пуэр?»\n"
+        "«Посоветуй улун для начинающих»\n"
+        "«История Да Хун Пао»\n\n"
+        "Готов ответить на ваши вопросы!",
         parse_mode='HTML'
     )
 
-async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⏳ Начинаю сбор новостей...")
-    asyncio.create_task(run_digest(update.effective_chat.id))
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📖 <b>Примеры вопросов:</b>\n\n"
+        "🔸 <i>Как заваривать шен пуэр?</i>\n"
+        "🔸 <i>Чем отличается шу от шен?</i>\n"
+        "🔸 <i>Как хранить пуэр дома?</i>\n"
+        "🔸 <i>Какой улун самый ароматный?</i>\n"
+        "🔸 <i>Что такое Да Хун Пао?</i>\n"
+        "🔸 <i>Рекомендуй чай для утра</i>\n\n"
+        "Спрашивайте что угодно о чае!"
+    )
 
-# --- Webhook обработчик ---
+# --- Webhook ---
 
 async def handle_webhook(request):
     try:
         update = Update.de_json(await request.json(), request.app['bot'])
+        if update and update.effective_chat:
+            logger.info(f"📨 Webhook: получено обновление от {update.effective_chat.id}")
         await request.app['application'].process_update(update)
         return web.Response(text="OK")
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"❌ Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
@@ -271,11 +270,11 @@ async def on_startup(app):
     await application.initialize()
     await application.start()
     
-    # Устанавливаем webhook
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await application.bot.set_webhook(webhook_url)
     logger.info(f"✅ Webhook установлен: {webhook_url}")
-    logger.info("✅ Бот запущен и готов к работе!")
+    logger.info("✅ Waystea Expert Bot запущен и готов к работе!")
+    logger.info("📱 Теперь бот отвечает на сообщения пользователей!")
 
 async def on_shutdown(app):
     """Остановка при завершении"""
@@ -284,20 +283,20 @@ async def on_shutdown(app):
     await application.shutdown()
 
 def main():
-    logger.info("🚀 Запуск бота (Webhook режим)...")
+    logger.info("🚀 Запуск Waystea Tea Expert Bot...")
     
-    # Создаем приложение
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Applicati
+    on.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # Добавляем обработчики
+    # Команды
     application.add_handler(CommandHandler("start", start_cmd))
-    application.add_handler(CommandHandler("new", new_cmd))
+    application.add_handler(CommandHandler("help", help_cmd))
     
-    # Авто-запуск в 15:00 МСК (12:00 UTC)
-    application.job_queue.run_daily(daily_job, time=datetime.time(hour=12, minute=0))
-    logger.info("⏰ Авто-отправка настроена на 12:00 UTC (15:00 МСК)")
+    # ГЛАВНОЕ: Обработчик ВСЕХ текстовых сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message))
+    logger.info("✅ Добавлен обработчик текстовых сообщений")
     
-    # Создаем web-приложение
+    # Web-сервер
     web_app = web.Application()
     web_app['bot'] = application.bot
     web_app['application'] = application
@@ -305,7 +304,7 @@ def main():
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     
-    # Запускаем web-сервер
+    logger.info("✅ Запуск web-сервера...")
     web.run_app(web_app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
 
 if __name__ == "__main__":

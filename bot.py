@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Waystea Tea Expert Bot — Исправленная версия
+Waystea Tea Expert Bot — Эксперт на основе waystea.ru
 """
 import os, sys, asyncio, logging, datetime
 from zoneinfo import ZoneInfo
@@ -23,7 +23,7 @@ MODEL = "accounts/fireworks/models/kimi-k2p5"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# --- Поиск информации ---
+# --- Специализированный поиск (только waystea.ru и чай) ---
 
 async def search_waystea(query):
     """Ищет информацию на waystea.ru и в чайных источниках"""
@@ -34,9 +34,10 @@ async def search_waystea(query):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
             
+            # Приоритет: waystea.ru, затем другие авторитетные источники
             search_queries = [
-                f"site:waystea.ru {query}",
-                f"{query} tea china pu-erh oolong",
+                f"site:waystea.ru {query}",  # Сначала ищем на waystea
+                f"{query} tea china pu-erh oolong",  # Затем общий поиск по чаю
             ]
             
             all_context = ""
@@ -51,14 +52,13 @@ async def search_waystea(query):
                             
                             for item in organic[:3]:
                                 all_context += f"Источник: {item.get('title')}\nURL: {item.get('link')}\nИнформация: {item.get('snippet')}\n\n"
-                except Exception as e:
-                    logger.error(f"Search error for {q}: {e}")
+                except:
                     continue
             
             return all_context if all_context else "Информация не найдена"
             
     except Exception as e:
-        logger.error(f"Search exception: {e}")
+        logger.error(f"Search error: {e}")
         return f"Ошибка поиска: {e}"
 
 async def ask_fireworks_expert(system_prompt, user_message, context=""):
@@ -88,7 +88,7 @@ async def ask_fireworks_expert(system_prompt, user_message, context=""):
                 "model": MODEL,
                 "messages": messages,
                 "max_tokens": 1500,
-                "temperature": 0.4
+                "temperature": 0.4  # Немного креативности, но в рамках фактов
             }
             
             async with session.post("https://api.fireworks.ai/inference/v1/chat/completions", headers=headers, json=data) as resp:
@@ -96,12 +96,13 @@ async def ask_fireworks_expert(system_prompt, user_message, context=""):
                     res = await resp.json()
                     return res['choices'][0]['message']['content'].strip()
                 else:
-                    error_text = await resp.text()
-                    return f"Ошибка AI: статус {resp.status}. {error_text}"
+                    return f"Ошибка AI: статус {resp.status}"
                     
     except Exception as e:
-        logger.error(f"AI exception: {e}")
+        logger.error(f"AI error: {e}")
         return f"Ошибка AI: {e}"
+
+# --- Экспертные инструкции для разных типов вопросов ---
 
 def get_system_prompt(category):
     """Возвращает системный промпт в зависимости от категории вопроса"""
@@ -152,6 +153,8 @@ def get_system_prompt(category):
 - Предлагай уточнить вопрос
 - Будь полезен и дружелюбен"""
 
+# --- Классификация вопроса ---
+
 async def classify_question(user_text):
     """Определяет тип вопроса для выбора правильного промпта"""
     text_lower = user_text.lower()
@@ -167,61 +170,42 @@ async def classify_question(user_text):
     else:
         return "general"
 
-# --- ОБРАБОТКА СООБЩЕНИЙ ---
+# --- Обработка сообщений пользователей ---
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает ЛЮБЫЕ текстовые сообщения от пользователей"""
-    try:
-        user_text = update.message.text
-        chat_id = update.effective_chat.id
-        user_name = update.effective_user.first_name
-        
-        logger.info(f"📨 Получено сообщение от {user_name} (ID: {chat_id}): {user_text[:50]}")
-        
-        # Показываем что работаем
-        thinking_msg = await update.message.reply_text("🔍 Ищу информацию...")
-        
-        # Классифицируем вопрос
-        category = await classify_question(user_text)
-        logger.info(f"📂 Категория: {category}")
-        
-        # Ищем информацию
-        search_context = await search_waystea(user_text)
-        logger.info(f"📚 Найдено контекста: {len(search_context)} символов")
-        
-        # Получаем промпт
-        system_prompt = get_system_prompt(category)
-        
-        # Запрашиваем ответ у AI
-        logger.info("🤔 Запрашиваю ответ у AI...")
-        answer = await ask_fireworks_expert(system_prompt, user_text, search_context)
-        logger.info(f"✅ Получен ответ: {len(answer)} символов")
-        
-        # Удаляем сообщение "думаю"
-        await thinking_msg.delete()
-        
-        # Добавляем подпись
-        footer = "\n\n━━━━━━━━━━━━\nℹ️ Информация предоставлена на основе Waystea и проверенных источников"
-        full_answer = answer + footer
-        
-        # Отправляем ответ (разбиваем если длинный)
-        for i in range(0, len(full_answer), 4000):
-            await update.message.reply_text(full_answer[i:i+4000])
-            await asyncio.sleep(0.5)
-            
-        logger.info(f"✅ Ответ отправлен пользователю {user_name}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка в handle_user_message: {e}")
-        try:
-            await update.message.reply_text(f"❌ Произошла ошибка: {str(e)[:100]}")
-        except:
-            pass
+    user_text = update.message.text
+    chat_id = update.effective_chat.id
+    
+    # Показываем процесс
+    thinking_msg = await update.message.reply_text("🔍 Изучаю информацию из базы Waystea...")
+    
+    # 1. Классифицируем вопрос
+    category = await classify_question(user_text)
+    logger.info(f"Категория вопроса: {category}")
+    
+    # 2. Ищем информацию (приоритет waystea.ru)
+    search_context = await search_waystea(user_text)
+    
+    # 3. Получаем системный промпт для категории
+    system_prompt = get_system_prompt(category)
+    
+    # 4. Запрашиваем ответ у AI
+    answer = await ask_fireworks_expert(system_prompt, user_text, search_context)
+    
+    # 5. Отправляем ответ
+    await thinking_msg.delete()
+    
+    # Добавляем подпись источника
+    footer = "\n\n━━━━━━━━━━━━\nℹ️ Информация предоставлена на основе Waystea и проверенных источников"
+    full_answer = answer + footer
+    
+    # Разбиваем на части если длинное
+    for i in range(0, len(full_answer), 4000):
+        await update.message.reply_text(full_answer[i:i+4000])
 
 # --- Команды ---
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"👋 Команда /start от {update.effective_user.first_name}")
     await update.message.reply_text(
         "🍵 <b>Waystea Tea Expert</b>\n\n"
         "Я — ваш персональный эксперт по чаю на основе знаний Waystea.\n\n"
@@ -256,28 +240,22 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_webhook(request):
     try:
         update = Update.de_json(await request.json(), request.app['bot'])
-        if update and update.effective_chat:
-            logger.info(f"📨 Webhook: получено обновление от {update.effective_chat.id}")
         await request.app['application'].process_update(update)
         return web.Response(text="OK")
     except Exception as e:
-        logger.error(f"❌ Webhook error: {e}")
+        logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
-    """Инициализация при запуске"""
     application = app['application']
     await application.initialize()
     await application.start()
     
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await application.bot.set_webhook(webhook_url)
-    logger.info(f"✅ Webhook установлен: {webhook_url}")
-    logger.info("✅ Waystea Expert Bot запущен и готов к работе!")
-    logger.info("📱 Теперь бот отвечает на сообщения пользователей!")
+    logger.info(f"✅ Waystea Expert Bot запущен!")
 
 async def on_shutdown(app):
-    """Остановка при завершении"""
     application = app['application']
     await application.stop()
     await application.shutdown()
@@ -285,18 +263,12 @@ async def on_shutdown(app):
 def main():
     logger.info("🚀 Запуск Waystea Tea Expert Bot...")
     
-    application = Applicati
-    on.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # Команды
     application.add_handler(CommandHandler("start", start_cmd))
     application.add_handler(CommandHandler("help", help_cmd))
-    
-    # ГЛАВНОЕ: Обработчик ВСЕХ текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message))
-    logger.info("✅ Добавлен обработчик текстовых сообщений")
     
-    # Web-сервер
     web_app = web.Application()
     web_app['bot'] = application.bot
     web_app['application'] = application
@@ -304,7 +276,6 @@ def main():
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     
-    logger.info("✅ Запуск web-сервера...")
     web.run_app(web_app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
 
 if __name__ == "__main__":

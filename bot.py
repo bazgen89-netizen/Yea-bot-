@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Waystea Tea Expert Bot — Эксперт по китайскому чаю (Gemini + Serper)
+Waystea Tea Expert Bot — Исправленная версия с логированием
 """
-import os, sys, asyncio, logging
+import os, sys, asyncio, logging, traceback
 from aiohttp import web
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,50 +21,37 @@ GEMINI_KEY = os.getenv("GEMINI_KEY", "")
 SERPER_KEY = os.getenv("SERPER_KEY", "")
 MODEL = "gemini-1.5-flash"
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stdout)
+# Увеличиваем уровень логирования
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s', 
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
 
 search_cache = {}
 GREETINGS = ["привет", "здравствуй", "хай", "добрый день", "доброе утро", "добрый вечер", "приветствую", "хелло", "hello", "hi", "йо", "здарова", "прив"]
 
 # ---------------------------------------------------------
-# 🟢 ПРИВЕТСТВИЕ
-# ---------------------------------------------------------
-async def handle_greeting(update: Update, user_text: str) -> bool:
-    text_lower = user_text.strip().lower()
-    if any(greet in text_lower for greet in GREETINGS):
-        keyboard = [
-            [InlineKeyboardButton("🫖 Как заваривать?", callback_data="brewing")],
-            [InlineKeyboardButton("🎯 Подобрать чай", callback_data="selection")],
-            [InlineKeyboardButton("💾 Хранение чая", callback_data="storage")],
-            [InlineKeyboardButton("🏔️ История и легенды", callback_data="history")],
-        ]
-        await update.message.reply_text(
-            "🍵 Здравствуйте! Я — эксперт по китайскому чаю.\n\n"
-            "Выберите тему или просто напишите свой вопрос:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return True
-    return False
-
-# ---------------------------------------------------------
 # 🔍 ПОИСК
 # ---------------------------------------------------------
 async def search_chinese_tea_sources(query: str) -> str:
+    logger.info(f"🔍 Поиск по запросу: {query[:50]}")
     cache_key = query.lower().strip()
     if cache_key in search_cache:
+        logger.info("✅ Возвращаем из кэша")
         return search_cache[cache_key]
 
     if not SERPER_KEY:
+        logger.warning("⚠️ Нет ключа Serper")
         return "⚠️ Поиск временно недоступен."
 
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12)) as session:
             headers = {"X-API-KEY": SERPER_KEY, "Content-Type": "application/json"}
             search_queries = [
-                f"{query} site:chinadaily.com.cn OR site:xinhuanet.com OR site:tea.cn",
-                f"{query} chinese tea origin processing",
-                f"{query} чай Китай заваривание"
+                f"{query} site:chinadaily.com.cn OR site:tea.cn",
+                f"{query} chinese tea brewing"
             ]
             all_context = ""
             seen_urls = set()
@@ -72,6 +59,7 @@ async def search_chinese_tea_sources(query: str) -> str:
                 data = {"q": q, "num": 3, "hl": "ru"}
                 try:
                     async with session.post("https://google.serper.dev/search", headers=headers, json=data) as resp:
+                        logger.debug(f"Search status: {resp.status}")
                         if resp.status == 200:
                             result = await resp.json()
                             for item in result.get("organic", [])[:2]:
@@ -80,7 +68,7 @@ async def search_chinese_tea_sources(query: str) -> str:
                                     seen_urls.add(url)
                                     all_context += f"📌 {item.get('title')}\n🔗 {url}\n📄 {item.get('snippet')}\n\n"
                 except Exception as e:
-                    logger.warning(f"Search failed: {e}")
+                    logger.warning(f"Search query failed: {e}")
                     continue
     except Exception as e:
         logger.error(f"Search error: {e}")
@@ -88,12 +76,14 @@ async def search_chinese_tea_sources(query: str) -> str:
 
     result = all_context if all_context else "Информация не найдена. Отвечу на основе знаний."
     search_cache[cache_key] = result
+    logger.info(f"✅ Найдено контекста: {len(result)} символов")
     return result
 
 # ---------------------------------------------------------
 # 🤖 GEMINI API
 # ---------------------------------------------------------
 async def ask_gemini_expert(system_prompt: str, user_message: str, context: str) -> str:
+    logger.info("🤖 Запрос к Gemini...")
     if not GEMINI_KEY:
         return "⚠️ Ошибка: не настроен ключ Gemini."
 
@@ -104,7 +94,7 @@ async def ask_gemini_expert(system_prompt: str, user_message: str, context: str)
 
 ВОПРОС: {user_message}
 
-Отвечай кратко (3-5 абзацев), используй эмодзи 🍃🌡️️, давай точные цифры. Язык: русский."""
+Отвечай кратко (3-5 абзацев), используй эмодзи 🍃🌡️⏱️, давай точные цифры. Язык: русский."""
 
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as session:
@@ -118,20 +108,27 @@ async def ask_gemini_expert(system_prompt: str, user_message: str, context: str)
                 }
             }
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
+            logger.debug(f"Gemini URL: {url[:80]}...")
+            
             async with session.post(url, json=payload) as resp:
+                logger.debug(f"Gemini response status: {resp.status}")
                 if resp.status == 200:
                     res = await resp.json()
+                    logger.debug(f"Gemini response: {res}")
                     candidates = res.get("candidates", [])
                     if candidates and "content" in candidates[0]:
                         parts = candidates[0]["content"].get("parts", [])
                         if parts:
-                            return parts[0].get("text", "").strip()
+                            answer = parts[0].get("text", "").strip()
+                            logger.info(f"✅ Получен ответ: {len(answer)} символов")
+                            return answer
                 else:
-                    logger.error(f"Gemini error: {resp.status}")
+                    error_text = await resp.text()
+                    logger.error(f"Gemini error {resp.status}: {error_text}")
                     
-        return "⚠️ Временно не могу связаться с базой знаний.\n\n💡 Базовые советы:\n• Вода: 75-80°C для зелёного, 90-95°C для пуэра\n• Пропорция: 5-7 г на 100-150 мл\n• Храните чай в сухом месте без запахов"
+        return "⚠️ Временно не могу связаться с базой знаний.\n\n💡 Базовые советы:\n• Вода: 75-80°C для зелёного, 90-95°C для пуэра\n• Пропорция: 5-7 г на 100-150 мл"
     except Exception as e:
-        logger.error(f"Gemini failed: {e}")
+        logger.error(f"Gemini failed: {e}\n{traceback.format_exc()}")
         return "⚠️ Ошибка соединения. Попробуйте позже."
 
 # ---------------------------------------------------------
@@ -148,65 +145,129 @@ def get_system_prompt(category: str) -> str:
     }
     return prompts.get(category, prompts["general"])
 
+async def classify_question(user_text: str) -> str:
+    t = user_text.lower()
+    if any(w in t for w in ["заваривать", "температура", "пролив", "гайвань", "вода"]):
+        return "brewing"
+    if any(w in t for w in ["хранить", "хранение", "влажность"]):
+        return "storage"
+    if any(w in t for w in ["выбрать", "подобрать", "рекомендуй", "совет"]):
+        return "selection"
+    if any(w in t for w in ["история", "происхождение", "легенда"]):
+        return "history"
+    return "general"
+
 # ---------------------------------------------------------
 # 📩 ОБРАБОТКА СООБЩЕНИЙ
 # ---------------------------------------------------------
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text.strip()
-    if await handle_greeting(update, user_text):
-        return
-
-    await process_query(update.message, user_text, "general")
+    try:
+        logger.info(f" Получено сообщение от {update.effective_user.id}: {update.message.text[:50]}")
+        
+        if not update.message or not update.message.text:
+            logger.warning("⚠️ Пустое сообщение")
+            return
+            
+        user_text = update.message.text.strip()
+        
+        # Проверка на приветствие
+        text_lower = user_text.lower()
+        if any(greet in text_lower for greet in GREETINGS):
+            logger.info("👋 Распознано приветствие")
+            keyboard = [
+                [InlineKeyboardButton("🫖 Как заваривать?", callback_data="brewing")],
+                [InlineKeyboardButton("🎯 Подобрать чай", callback_data="selection")],
+                [InlineKeyboardButton("💾 Хранение чая", callback_data="storage")],
+                [InlineKeyboardButton("🏔️ История и легенды", callback_data="history")],
+            ]
+            await update.message.reply_text(
+                "🍵 Здравствуйте! Я — эксперт по китайскому чаю.\n\n"
+                "Выберите тему или просто напишите свой вопрос:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        logger.info("💬 Обрабатываем обычный запрос...")
+        await process_query(update.message, user_text, "general")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in handle_user_message: {e}\n{traceback.format_exc()}")
+        try:
+            await update.message.reply_text("⚠️ Произошла ошибка. Попробуйте позже.")
+        except:
+            pass
 
 async def process_query(message, user_text: str, category: str):
     """Универсальная обработка запроса"""
-    async with message.chat.action("typing"):
+    try:
+        logger.info(f"🔄 Process query: {user_text[:30]}... category={category}")
+        
+        # Отправляем статус "печатает"
+        await message.chat.send_action("typing")
+        logger.debug("📤 Отправлен статус 'печатает'")
+        
         if category == "general":
             category = await classify_question(user_text)
+            logger.debug(f"Классифицировано как: {category}")
         
         search_context = await search_chinese_tea_sources(user_text)
         system_prompt = get_system_prompt(category)
         answer = await ask_gemini_expert(system_prompt, user_text, search_context)
 
-    footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ на основе китайских источников 🇨🇳🍃"
-    full_answer = (answer + footer).strip()
+        footer = "\n\n━━━━━━━━━━━━\nℹ️ Ответ на основе китайских источников 🇨🍃"
+        full_answer = (answer + footer).strip()
 
-    for i in range(0, len(full_answer), 4000):
-        await message.reply_text(full_answer[i:i+4000])
+        logger.info(f"📤 Отправляем ответ ({len(full_answer)} символов)")
+        # Отправляем частями если нужно
+        for i in range(0, len(full_answer), 4000):
+            await message.reply_text(full_answer[i:i+4000])
+        logger.info("✅ Ответ отправлен")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in process_query: {e}\n{traceback.format_exc()}")
+        try:
+            await message.reply_text("⚠️ Произошла ошибка при обработке. Попробуйте позже.")
+        except:
+            pass
 
 # ---------------------------------------------------------
-# 🔘 ОБРАБОТКА КНОПОК (ИСПРАВЛЕНО!)
+# 🔘 ОБРАБОТКА КНОПОК
 # ---------------------------------------------------------
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на inline-кнопки"""
-    query = update.callback_query
-    if query is None:
-        return
-    
-    # Обязательно подтверждаем callback!
-    await query.answer()
-    
-    category = query.data
-    logger.info(f"Button pressed: {category}")
-    
-    # Тексты для кнопок
-    prompts = {
-        "brewing": "Как правильно заваривать китайский чай?",
-        "selection": "Помоги выбрать чай под мой вкус",
-        "storage": "Как правильно хранить чай дома?",
-        "history": "Расскажи историю китайского чая"
-    }
-    
-    user_text = prompts.get(category, "Расскажи о чае")
-    
-    # Отправляем сообщение с индикатором
-    if query.message:
-        await process_query(query.message, user_text, category)
+    try:
+        logger.info("🔘 Button callback triggered")
+        query = update.callback_query
+        if query is None:
+            logger.error("❌ callback_query is None")
+            return
+        
+        logger.info(f"🔘 Button pressed: {query.data}")
+        await query.answer()
+        
+        category = query.data
+        prompts = {
+            "brewing": "Как правильно заваривать китайский чай?",
+            "selection": "Помоги выбрать чай под мой вкус",
+            "storage": "Как правильно хранить чай дома?",
+            "history": "Расскажи историю китайского чая"
+        }
+        
+        user_text = prompts.get(category, "Расскажи о чае")
+        
+        if query.message:
+            await process_query(query.message, user_text, category)
+        else:
+            logger.error("❌ query.message is None")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in button_callback: {e}\n{traceback.format_exc()}")
 
 # ---------------------------------------------------------
 # 📜 КОМАНДЫ
 # ---------------------------------------------------------
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"🚀 Start command from {update.effective_user.id}")
     keyboard = [
         [InlineKeyboardButton("🫖 Заваривание", callback_data="brewing")],
         [InlineKeyboardButton("🎯 Подбор чая", callback_data="selection")],
@@ -225,21 +286,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 Примеры:\n"
         "• Как заваривать шен пуэр?\n"
         "• Чем отличается шу от шен?\n"
-        "• Как хранить пуэр?\n"
-        "• Какой улун самый ароматный?", parse_mode='HTML'
+        "• Как хранить пуэр?", parse_mode='HTML'
     )
-
-async def classify_question(user_text: str) -> str:
-    t = user_text.lower()
-    if any(w in t for w in ["заваривать", "температура", "пролив", "гайвань", "вода"]):
-        return "brewing"
-    if any(w in t for w in ["хранить", "хранение", "влажность"]):
-        return "storage"
-    if any(w in t for w in ["выбрать", "подобрать", "рекомендуй", "совет"]):
-        return "selection"
-    if any(w in t for w in ["история", "происхождение", "легенда"]):
-        return "history"
-    return "general"
 
 # ---------------------------------------------------------
 # 🌐 WEBHOOK
@@ -250,7 +298,7 @@ async def handle_webhook(request):
         await request.app['application'].process_update(update)
         return web.Response(text="OK")
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"Webhook error: {e}\n{traceback.format_exc()}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
@@ -259,7 +307,7 @@ async def on_startup(app):
     await application.start()
     webhook_url = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
     await application.bot.set_webhook(webhook_url)
-    logger.info("✅ Bot запущен!")
+    logger.info(f"✅ Bot запущен! Webhook: {webhook_url}")
 
 async def on_shutdown(app):
     application = app['application']
@@ -268,13 +316,15 @@ async def on_shutdown(app):
 
 def main():
     logger.info("🚀 Запуск бота...")
+    logger.info(f"Token: {TELEGRAM_BOT_TOKEN[:10]}...")
+    logger.info(f"Gemini Key: {'✅' if GEMINI_KEY else '❌'}")
+    logger.info(f"Serper Key: {'✅' if SERPER_KEY else '❌'}")
     
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_cmd))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message))
-    # ИСПРАВЛЕНО: добавлен pattern для надёжности
     application.add_handler(CallbackQueryHandler(button_callback, pattern=r'^(brewing|selection|storage|history)$'))
     
     web_app = web.Application()

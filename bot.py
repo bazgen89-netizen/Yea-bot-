@@ -1,32 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🍵 Waystea Tea Expert Bot — Расширенная версия (Регионы, Поставки, Цены)
+🍵 Tea Expert Bot — HuggingFace (БЕЗ Gemini)
 """
 import os, asyncio, logging
-from aiohttp import web
+from aiohttp import web, ClientSession
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# ==========================================
-# 🔑 НАСТРОЙКИ
-# ==========================================
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ВАШ_ТОКЕН_БОТА")
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
-GEMINI_KEY = "AIzaSyDLg9eh-1SACLo3eHB-m0qEcFdLxYx6F0w"
-GEMINI_MODEL = "gemini-1.5-flash"
-SERPER_KEY = os.getenv("SERPER_KEY", "")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-# ==========================================
-#  КОНСТАНТЫ
-# ==========================================
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN", "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")
+SERPER_KEY = os.getenv("SERPER_KEY", "")
+WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
+PORT = int(os.getenv("PORT", 8080))
+
+HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
+
 REGIONS = {
     "yunnan": "Юньнань (Пуэр, Красный чай)",
     "fujian": "Фуцзянь (Улуны, Белый чай)",
@@ -36,206 +29,133 @@ REGIONS = {
     "hunan": "Хунань (Чёрный чай, Анхуа)"
 }
 
-MODES = {
-    "brew": "🫖 Как заваривать?",
-    "news": "📰 Новости по регионам",
-    "ship": "🚢 Поставки в Россию",
-    "price": "💰 Поиск минимальной цены",
-    "back": "🔙 Главное меню"
-}
+async def ask_hf(prompt: str) -> str:
+    if not HF_TOKEN or HF_TOKEN.startswith("hf_x"):
+        return "⚠️ HF_TOKEN не настроен"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "inputs": f"<s>[INST] Ты эксперт по китайскому чаю. Отвечай кратко на русском с эмодзи 🍃. {prompt} [/INST]",
+        "parameters": {"max_new_tokens": 800, "temperature": 0.3, "return_full_text": False}
+    }
+    try:
+        async with ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
+            async with session.post(f"https://api-inference.huggingface.co/models/{HF_MODEL}", headers=headers, json=payload) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    return result[0].get('generated_text', '').strip() if result else "Нет ответа"
+                elif resp.status == 503:
+                    return "⏳ Модель загружается. Попробуйте через 30 сек."
+                else:
+                    return f"⚠️ HF Error: {resp.status}"
+    except Exception as e:
+        return f"⚠️ Ошибка: {str(e)[:100]}"
 
-# ==========================================
-# 🔍 ПОИСК (Оптимизирован под задачи)
-# ==========================================
-async def search_general(query: str) -> str:
+async def search(q: str) -> str:
     if not SERPER_KEY: return ""
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
-            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": f"{query} tea china", "num": 3, "hl": "ru"}) as r:
+        async with ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": q, "num": 3, "hl": "ru"}) as r:
                 if r.status == 200:
                     return "\n".join([f"• {i.get('title')}: {i.get('snippet')}" for i in (await r.json()).get("organic", [])[:3]])
     except: pass
     return ""
 
-async def search_region_news(region_code: str) -> str:
-    if not SERPER_KEY: return ""
-    region_name = REGIONS.get(region_code, region_code)
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
-            q = f"чай {region_name} новости 2025 2026 урожай сбор site:tea.ru OR site:interfax.ru OR site:ria.ru"
-            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": q, "num": 3, "hl": "ru"}) as r:
-                if r.status == 200:
-                    return "\n".join([f"📌 {i.get('title')}\n🔗 {i.get('link')}\n💬 {i.get('snippet')}" for i in (await r.json()).get("organic", [])[:3]])
-    except: pass
-    return f"🔍 По региону {region_name} свежие новости не найдены в открытых источниках."
-
-async def search_shipments() -> str:
-    if not SERPER_KEY: return ""
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
-            q = "поставки чая в Россию 2025 2026 импорт таможенная статистика крупнейшие поставщики"
-            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": q, "num": 4, "hl": "ru"}) as r:
-                if r.status == 200:
-                    return "\n".join([f"📦 {i.get('title')}\n🏢 {i.get('snippet')}" for i in (await r.json()).get("organic", [])[:4]])
-    except: pass
-    return "📊 Данные по поставкам временно недоступны. Попробуйте позже."
-
-async def search_price(tea_name: str) -> str:
-    if not SERPER_KEY: return ""
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12)) as s:
-            q = f"купить {tea_name} цена минимальная Россия site:ozon.ru OR site:wildberries.ru OR site:avito.ru OR site:tea.ru"
-            async with s.post("https://google.serper.dev/search", headers={"X-API-KEY": SERPER_KEY}, json={"q": q, "num": 3, "hl": "ru"}) as r:
-                if r.status == 200:
-                    return "\n".join([f"💸 {i.get('title')}\n💰 {i.get('snippet')}" for i in (await r.json()).get("organic", [])[:3]])
-    except: pass
-    return f"💡 Цены на {tea_name} в открытых источниках не найдены. Проверьте маркетплейсы напрямую."
-
-# ==========================================
-#  GEMINI API
-# ==========================================
-async def ask_gemini(prompt: str) -> str:
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as s:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000}}
-            async with s.post(url, json=payload) as r:
-                if r.status == 200:
-                    data = await r.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                return f"⚠️ Ошибка Gemini: {r.status}"
-    except Exception as e:
-        return f"⚠️ Ошибка AI: {str(e)[:100]}"
-
-# ==========================================
-# 📱 ЛОГИКА БОТА
-# ==========================================
-async def send_message(update: Update, text: str, kb=None):
-    await update.message.reply_text(text, reply_markup=kb, parse_mode='HTML')
-
-async def show_main_menu(update: Update):
+async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(MODES["brew"], callback_data="brew"),
-         InlineKeyboardButton(MODES["news"], callback_data="news")],
-        [InlineKeyboardButton(MODES["ship"], callback_data="ship"),
-         InlineKeyboardButton(MODES["price"], callback_data="price")]
+        [InlineKeyboardButton("🫖 Заваривание", callback_data="brew"), InlineKeyboardButton("📰 Регионы", callback_data="news")],
+        [InlineKeyboardButton("🚢 Поставки РФ", callback_data="ship"), InlineKeyboardButton("💰 Цены", callback_data="price")]
     ])
-    await send_message(update, "🍵 <b>Waystea Tea Expert</b>\n\nВыберите раздел:", kb)
+    await update.message.reply_text("🍵 <b>Tea Expert Bot</b>\nВыберите раздел:", reply_markup=kb, parse_mode='HTML')
 
-async def show_regions(update: Update):
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(name, callback_data=f"reg_{code}")] for code, name in REGIONS.items()])
-    await send_message(update, "🌍 Выберите регион для новостей:", kb)
-
-async def handle_brew(update: Update):
-    await update.message.chat.send_action("typing")
-    ctx = await search_general("как правильно заваривать китайский чай гайвань пропорции температура")
-    prompt = f"Ты эксперт по чаю. Дай чёткую инструкцию по завариванию. Контекст: {ctx}"
-    await update.message.reply_text(await ask_gemini(prompt) + "\n\n📖 Источник: поиск по китайским гайдам")
-
-async def handle_shipments(update: Update):
-    await update.message.chat.send_action("typing")
-    data = await search_shipments()
-    prompt = f"Ты аналитик рынка чая. Структурируй данные о поставках в РФ. Выдели ключевых поставщиков и объёмы. Данные: {data}"
-    await update.message.reply_text(await ask_gemini(prompt) + "\n\n Данные из открытых источников и таможенных сводок")
-
-async def handle_price_request(update: Update, tea_name: str):
-    await update.message.chat.send_action("typing")
-    data = await search_price(tea_name)
-    prompt = f"Ты ценовой аналитик. Найди минимальную цену на {tea_name} в России. Укажи магазин, цену за грамм/упаковку и ссылку. Данные: {data}"
-    await update.message.reply_text(await ask_gemini(prompt) + "\n\n💡 Цены актуальны на момент поиска. Проверяйте наличие на маркетплейсах.")
-
-# ==========================================
-# 🔄 ХЕНДЛЕРЫ
-# ==========================================
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     text = update.message.text.strip()
-    mode = context.user_data.get("mode")
-
-    # Если ждём название чая для цены
-    if mode == "price_wait":
-        context.user_data.pop("mode", None)
-        await handle_price_request(update, text)
+    if text.lower() in ["привет", "/start", "меню"]:
+        ctx.user_data.clear()
+        return await menu(update, ctx)
+    
+    if ctx.user_data.get("mode") == "price":
+        ctx.user_data.pop("mode", None)
+        async with update.message.chat.action("typing"):
+            data = await search(f"купить {text} цена Россия ozon wildberries")
+            ans = await ask_hf(f"Найди минимальную цену на {text} в России. Данные: {data}")
+            await update.message.reply_text(f"{ans}\n\n💡 Проверяйте актуальность на маркетплейсах")
         return
 
-    # Приветствие или /start
-    if text.lower() in ["привет", "старт", "/start", "меню"]:
-        context.user_data.clear()
-        await show_main_menu(update)
-        return
+    async with update.message.chat.action("typing"):
+        ctx_data = await search(f"{text} tea china")
+        ans = await ask_hf(f"Ответь на вопрос о чае. Контекст: {ctx_data}\nВопрос: {text}")
+        await update.message.reply_text(f"{ans}\n\n🇨 Источники: поиск")
 
-    # Обычный вопрос
-    await update.message.chat.send_action("typing")
-    ctx = await search_general(text)
-    prompt = f"Ты эксперт по китайскому чаю. Ответь кратко и по делу. Контекст: {ctx}\nВопрос: {text}"
-    await update.message.reply_text(await ask_gemini(prompt) + "\n\n🇨🇳 Источники: Китайские чайные порталы")
+async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    d, m = q.data, q.message
+    
+    if d == "brew":
+        await m.reply_text("⏳ Ищу гайды по завариванию...")
+        async with m.chat.action("typing"):
+            data = await search("как заваривать китайский чай гайвань температура время")
+            ans = await ask_hf(f"Дай инструкцию по завариванию чая в гайвани: температура, время, пропорции. Данные: {data}")
+            await m.reply_text(f"{ans}\n\n📖 Источники: китайские гайды")
+    elif d == "news":
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(name, callback_data=f"reg_{code}")] for code, name in REGIONS.items()])
+        await m.reply_text("🌍 Выберите регион:", reply_markup=kb)
+    elif d.startswith("reg_"):
+        region = d.split("_")[1]
+        region_name = REGIONS.get(region, region)
+        await m.reply_text(f"⏳ Ищу новости: {region_name}...")
+        async with m.chat.action("typing"):
+            news = await search(f"чай {region_name} новости 2025 2026")
+            ans = await ask_hf(f"Сделай сводку новостей о чае из региона {region_name}. Данные: {news}")
+            await m.reply_text(f"{ans}\n\n📰 Источник: региональные новости")
+    elif d in ["ship", "stats"]:
+        await m.reply_text("⏳ Загружаю статистику...")
+        async with m.chat.action("typing"):
+            data = await search("поставки чая в Россию 2025 импорт ФТС статистика тонны крупнейшие поставщики")
+            ans = await ask_hf(f"Расскажи о поставках чая в Россию: объёмы в тоннах, крупнейшие импортёры, страны-поставщики. Данные: {data}")
+            await m.reply_text(f"{ans}\n\n🏛️ Источник: ФТС / открытые данные")
+    elif d == "price":
+        ctx.user_data["mode"] = "price"
+        await m.reply_text("💰 Напишите название чая (например: <i>Шу Пуэр Мэнхай 2015</i>):", parse_mode='HTML')
 
-async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    msg = query.message
+async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.clear()
+    await menu(update, ctx)
 
-    if data == "brew":
-        await msg.reply_text("⏳ Ищу лучшие практики заваривания...")
-        await handle_brew(type('U', (), {'message': msg})())
-    elif data == "news":
-        await show_regions(type('U', (), {'message': msg})())
-    elif data.startswith("reg_"):
-        region = data.split("_")[1]
-        await msg.reply_text(f"⏳ Ищу новости по региону {REGIONS[region]}...")
-        news = await search_region_news(region)
-        prompt = f"Сделай краткую сводку новостей о чае в этом регионе. Данные: {news}"
-        await msg.reply_text(await ask_gemini(prompt) + "\n\n📰 Источник: региональные чайные новости")
-    elif data == "ship":
-        await msg.reply_text(" Загружаю данные по поставкам...")
-        await handle_shipments(type('U', (), {'message': msg})())
-    elif data == "price":
-        context.user_data["mode"] = "price_wait"
-        await msg.reply_text("💰 Напишите название чая (например: *Шу Пуэр Мэнхай 2015*), и я найду минимальную цену в России:")
-    elif data == "back":
-        context.user_data.clear()
-        await show_main_menu(type('U', (), {'message': msg})())
-
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await show_main_menu(update)
-
-# ==========================================
-# 🚀 ЗАПУСК
-# ==========================================
 async def handle_webhook(request):
     try:
         upd = Update.de_json(await request.json(), request.app['bot'])
         await request.app['app'].process_update(upd)
         return web.Response(text="OK")
     except Exception as e:
+        logger.error(f"Webhook err: {e}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
     await app['app'].initialize()
     await app['app'].start()
-    await app['app'].bot.set_webhook(os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com"))
-    logger.info(f"✅ Bot started! @{app['app'].bot.username}")
+    await app['app'].bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"✅ Bot running! @{app['app'].bot.username}")
 
 async def on_shutdown(app):
     await app['app'].stop()
     await app['app'].shutdown()
 
 def main():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_cmd))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
-    application.add_handler(CallbackQueryHandler(on_callback))
+    logger.info("🚀 Starting bot...")
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
+    app.add_handler(CallbackQueryHandler(on_cb))
     
     web_app = web.Application()
-    web_app['bot'] = application.bot
-    web_app['app'] = application
+    web_app['bot'], web_app['app'] = app.bot, app
     web_app.router.add_post('/', handle_webhook)
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     
-    web.run_app(web_app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+    web.run_app(web_app, host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
     main()

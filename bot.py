@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🍵 Tea Expert Bot — Groq версия
+🍵 Tea Expert Bot — Groq 70b версия
 """
 import os, asyncio, logging, time
 from aiohttp import web, ClientSession
@@ -23,6 +23,8 @@ PORT = int(os.getenv("PORT", 8080))
 
 if not TELEGRAM_BOT_TOKEN:
    raise RuntimeError("❌ TELEGRAM_BOT_TOKEN не задан!")
+
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 REGIONS = {
    "yunnan": "Юньнань (Пуэр)",
@@ -58,14 +60,16 @@ async def ask_ai(prompt: str) -> str:
        "Content-Type": "application/json"
    }
    payload = {
-"model": "llama-3.3-70b-versatile",
+       "model": GROQ_MODEL,
        "messages": [
            {
                "role": "system",
                "content": (
                    "Ты эксперт по китайскому чаю с 20-летним опытом. "
-                   "Отвечай коротко, конкретно и по делу на русском языке. "
-                   "Используй факты о сортах, регионах, ценах, заваривании."
+                   "Знаешь всё о сортах, регионах Китая, технологии производства, "
+                   "правильном заваривании, ценах и поставках в Россию. "
+                   "Отвечай точно, конкретно и по делу на русском языке. "
+                   "Давай реальные факты, цифры и практические советы."
                )
            },
            {
@@ -73,12 +77,12 @@ async def ask_ai(prompt: str) -> str:
                "content": prompt
            }
        ],
-       "max_tokens": 400,
+       "max_tokens": 600,
        "temperature": 0.3
    }
 
    try:
-       async with ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+       async with ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
            async with session.post(
                "https://api.groq.com/openai/v1/chat/completions",
                headers=headers,
@@ -87,7 +91,7 @@ async def ask_ai(prompt: str) -> str:
                if resp.status == 200:
                    data = await resp.json()
                    text = data["choices"][0]["message"]["content"].strip()
-                   return text[:600] if text else "⚠️ Пустой ответ от AI."
+                   return text[:700] if text else "⚠️ Пустой ответ от AI."
                elif resp.status == 429:
                    logger.warning("Groq rate limit")
                    return "⚠️ Слишком много запросов. Подождите минуту."
@@ -158,8 +162,9 @@ async def fast_reply(update: Update, text: str):
 
    if search_data:
        answer = await ask_ai(
-           f"Вопрос о чае: {text}\n\nДанные из поиска:\n{search_data}\n\n"
-           f"Дай краткий полезный ответ на русском."
+           f"Вопрос о чае: {text}\n\n"
+           f"Данные из поиска:\n{search_data}\n\n"
+           f"Дай точный и полезный ответ на русском."
        )
    else:
        answer = await ask_ai(f"Вопрос о чае: {text}")
@@ -192,7 +197,8 @@ async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
    lines = ["🔧 <b>Диагностика:</b>\n"]
    lines.append(f"🔑 GROQ_API_KEY: {'✅ задан' if GROQ_API_KEY else '❌ не задан'}")
-   lines.append(f"🔑 SERPER_KEY: {'✅ задан' if SERPER_KEY else '⚠️ не задан'}\n")
+   lines.append(f"🔑 SERPER_KEY: {'✅ задан' if SERPER_KEY else '⚠️ не задан'}")
+   lines.append(f"🤖 Модель: {GROQ_MODEL}\n")
 
    lines.append("🤖 <b>Groq AI:</b>")
    if GROQ_API_KEY:
@@ -205,13 +211,13 @@ async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                        "Content-Type": "application/json"
                    },
                    json={
-                       "model": "llama-3.1-8b-instant",
+                       "model": GROQ_MODEL,
                        "messages": [{"role": "user", "content": "Скажи: ОК"}],
                        "max_tokens": 5
                    }
                ) as r:
                    if r.status == 200:
-                       lines.append("  ✅ llama-3.1-8b работает!")
+                       lines.append(f"  ✅ {GROQ_MODEL} работает!")
                    elif r.status == 401:
                        lines.append("  ❌ Неверный токен!")
                    elif r.status == 429:
@@ -269,7 +275,7 @@ async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
        answer = await ask_ai(
            f"Найди информацию о цене на чай '{text}' в России. "
            f"Данные из поиска:\n{search_data}\n\n"
-           f"Дай краткий ответ с примерными ценами."
+           f"Дай конкретный ответ с примерными ценами в рублях."
        )
        await safe_edit(
            msg,
@@ -293,8 +299,8 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
        )
        answer = await ask_ai(
            f"Дай подробную инструкцию по завариванию китайского чая: "
-           f"температура воды, время настаивания, количество чая, посуда. "
-           f"Данные: {data}"
+           f"температура воды, время настаивания, количество чая на объём, "
+           f"какую посуду использовать. Данные: {data}"
        )
        await safe_edit(msg, f"{answer}\n\n📖 Китайские техники заваривания")
 
@@ -314,19 +320,20 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
        )
        answer = await ask_ai(
            f"Расскажи о чайном регионе {region_name}: "
-           f"какие сорта производят, особенности климата и вкуса. "
-           f"Данные: {data}"
+           f"какие сорта там производят, особенности климата, "
+           f"вкус и аромат чаёв. Данные: {data}"
        )
        await safe_edit(msg, f"{answer}\n\n📰 Регион: {region_name}")
 
    elif d in ["ship", "stats"]:
        msg = await m.reply_text("⏳ Загружаю статистику...")
        data = await search_fast(
-           "импорт чая Россия 2024 2025 статистика тонны"
+           "импорт чая Россия 2024 2025 статистика тонны страны"
        )
        answer = await ask_ai(
            f"Расскажи о поставках чая в Россию: "
-           f"откуда везут, объёмы, тренды. Данные: {data}"
+           f"откуда везут, объёмы в тоннах, основные поставщики, тренды. "
+           f"Данные: {data}"
        )
        await safe_edit(msg, f"{answer}\n\n🏛️ Данные по импорту РФ")
 
@@ -353,7 +360,7 @@ async def on_startup(app):
    await ptb.bot.set_webhook(full_url)
    logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
    logger.info(f"🔗 Webhook: {full_url}")
-   logger.info("🤖 AI: Groq llama-3.1-8b-instant")
+   logger.info(f"🤖 AI: Groq {GROQ_MODEL}")
 
 
 async def on_shutdown(app):
@@ -363,7 +370,7 @@ async def on_shutdown(app):
 
 
 def main():
-   logger.info("🚀 Запуск Tea Expert Bot (Groq)...")
+   logger.info("🚀 Запуск Tea Expert Bot (Groq 70b)...")
 
    ptb = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
    ptb.add_handler(CommandHandler("start", start_cmd))

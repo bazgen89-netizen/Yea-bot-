@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🍵 Tea Expert Bot — Оптимизированная версия (Быстрый ответ)
+🍵 Tea Expert Bot — Надёжная версия (с резервом)
 """
-import os, asyncio, logging, time
-from aiohttp import web, ClientSession
+import os, asyncio, logging, time, random
+from aiohttp import web, ClientSession, TCPConnector
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -18,12 +18,13 @@ SERPER_KEY = os.getenv("SERPER_KEY", "")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
 PORT = int(os.getenv("PORT", 8080))
 
-# 🚀 Быстрая модель (Gemma 2B отвечает быстрее Mistral 7B)
-HF_MODEL = "google/gemma-2-2b-it"
-
-# 🧠 Кэш для поиска (ускоряет повторные запросы)
-search_cache = {}
-CACHE_TTL = 300  # 5 минут
+# 🔄 Несколько моделей на выбор (если одна не работает)
+HF_MODELS = [
+    "mistralai/Mistral-7B-Instruct-v0.2",  # Стабильная
+    "microsoft/Phi-3-mini-4k-instruct",     # Быстрая
+    "google/gemma-2b-it"                     # Резервная
+]
+CURRENT_MODEL_IDX = 0
 
 REGIONS = {
     "yunnan": "Юньнань (Пуэр)",
@@ -34,84 +35,97 @@ REGIONS = {
     "hunan": "Хунань (Чёрный чай)"
 }
 
-async def ask_hf_fast(prompt: str) -> str:
-    """Быстрый запрос к HF с оптимизированными параметрами"""
+search_cache = {}
+
+async def ask_hf_robust(prompt: str) -> str:
+    """Запрос к HF с повторными попытками и сменой модели"""
+    global CURRENT_MODEL_IDX
+    
     if not HF_TOKEN or HF_TOKEN.startswith("hf_x"):
-        return "⚠️ AI отключён"
+        return "⚠️ AI отключён. Настройте HF_TOKEN."
     
-    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
-    # Короткий промпт = быстрый ответ
-    payload = {
-        "inputs": f"<bos><start_of_turn>user\nТы эксперт по чаю. Отвечай кратко (2-3 предложения) на русском с эмодзи 🍃.\n\n{prompt}<end_of_turn>\n<start_of_turn>model\n",
-        "parameters": {
-            "max_new_tokens": 300,  # Меньше токенов = быстрее
-            "temperature": 0.2,     # Ниже = стабильнее
-            "top_p": 0.9,
-            "return_full_text": False,
-            "do_sample": True
+    # Пробуем 2-3 модели если первая не работает
+    for attempt in range(3):
+        model = HF_MODELS[(CURRENT_MODEL_IDX + attempt) % len(HF_MODELS)]
+        
+        headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
+        # Упрощённый промпт для скорости
+        payload = {
+            "inputs": f"<s>[INST] Ты эксперт по чаю. Отвечай коротко на русском. {prompt} [/INST]",
+            "parameters": {"max_new_tokens": 400, "temperature": 0.3, "return_full_text": False}
         }
-    }
+        
+        try:
+            # Создаём сессию с правильными настройками DNS
+            connector = TCPConnector(ttl_dns_cache=300, limit=10)
+            async with ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=35)) as session:
+                url = f"https://api-inference.huggingface.co/models/{model}"
+                async with session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        if result and len(result) > 0:
+                            CURRENT_MODEL_IDX = (CURRENT_MODEL_IDX + attempt) % len(HF_MODELS)
+                            return result[0].get('generated_text', '').strip()[:500]
+                    elif resp.status == 503:
+                        await asyncio.sleep(2)  # Ждём пока модель загрузится
+                        continue
+                    elif resp.status == 429:
+                        await asyncio.sleep(3)  # Rate limit
+                        continue
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout for model {model}")
+            continue
+        except Exception as e:
+            logger.warning(f"Model {model} failed: {e}")
+            continue
     
-    try:
-        async with ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-            url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-            async with session.post(url, headers=headers, json=payload) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    if result and len(result) > 0:
-                        return result[0].get('generated_text', '').strip()
-                elif resp.status == 503:
-                    return " Модель просыпается... Повторите через 30 сек."
-                else:
-                    return f"⚠️ Ошибка: {resp.status}"
-    except Exception as e:
-        return f"⚠️ Ошибка: {str(e)[:80]}"
+    # Если все модели не сработали — отвечаем без AI
+    return "⚠️ AI временно недоступен. Попробуйте через минуту или задайте другой вопрос."
 
 async def search_fast(q: str) -> str:
-    """Поиск с кэшированием"""
+    """Поиск с кэшем"""
     if not SERPER_KEY: return ""
     
     cache_key = q.lower().strip()
     if cache_key in search_cache:
         cached_time, cached_data = search_cache[cache_key]
-        if time.time() - cached_time < CACHE_TTL:
+        if time.time() - cached_time < 300:
             return cached_data
     
     try:
         async with ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
             async with s.post("https://google.serper.dev/search", 
                             headers={"X-API-KEY": SERPER_KEY}, 
-                            json={"q": q, "num": 2, "hl": "ru"}) as r:  # num=2 быстрее
+                            json={"q": q, "num": 2, "hl": "ru"}) as r:
                 if r.status == 200:
                     data = await r.json()
-                    result = "\n".join([f"• {i.get('title')}" for i in data.get("organic", [])[:2]])
+                    result = "\n".join([f"• {i.get('title', '')}" for i in data.get("organic", [])[:2]])
                     search_cache[cache_key] = (time.time(), result)
                     return result
     except: pass
     return ""
 
-async def fast_reply(update: Update, text: str, callback=None):
+async def fast_reply(update: Update, text: str):
     """Быстрый ответ с индикатором"""
-    msg = await update.message.reply_text("⏳ Ищу информацию...")
+    msg = await update.message.reply_text("⏳ Ищу...")
     
-    start_time = time.time()
+    start = time.time()
+    search_data = await search_fast(text)
     
-    # Параллельный поиск и генерация
-    search_task = asyncio.create_task(search_fast(text))
+    # Если поиск дал результат — используем AI
+    if search_data:
+        answer = await ask_hf_robust(f"Вопрос: {text}\nКонтекст: {search_data}")
+    else:
+        # Если поиска нет — отвечаем сами
+        answer = await ask_hf_robust(f"Ответь на вопрос о чае: {text}")
     
-    # Ждём поиск, потом генерируем ответ
-    search_result = await search_task
+    elapsed = time.time() - start
+    footer = f"\n\n⚡ {elapsed:.1f}сек | Источники: поиск"
     
-    # Если прошло больше 10 секунд, обновляем сообщение
-    if time.time() - start_time > 10:
-        await msg.edit_text("⏳ Генерирую ответ...")
-    
-    answer = await ask_hf_fast(f"Вопрос: {text}\nКонтекст: {search_result}")
-    
-    elapsed = time.time() - start_time
-    footer = f"\n\n⚡ Ответ за {elapsed:.1f}сек | Источники: поиск"
-    
-    await msg.edit_text(f"{answer}{footer}")
+    try:
+        await msg.edit_text(f"{answer}{footer}")
+    except:
+        await update.message.reply_text(f"{answer}\n\n⚡ {elapsed:.1f}сек")
 
 async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
@@ -130,7 +144,10 @@ async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     if ctx.user_data.get("mode") == "price":
         ctx.user_data.pop("mode", None)
-        await fast_reply(update, f"Минимальная цена на {text} в России. Ищи на Ozon, WB, Avito.")
+        msg = await update.message.reply_text("💰 Ищу цены...")
+        search_data = await search_fast(f"купить {text} цена Россия ozon wildberries avito")
+        answer = await ask_hf_robust(f"Найди минимальную цену на {text} в России. Данные: {search_data}")
+        await msg.edit_text(f"{answer}\n\n💡 Проверяйте на маркетплейсах")
         return
 
     await fast_reply(update, text)
@@ -141,28 +158,28 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     d, m = q.data, q.message
     
     if d == "brew":
-        msg = await m.reply_text("⏳ Ищу гайды...")
-        search_data = await search_fast("как заваривать китайский чай гайвань температура время пропорции")
-        answer = await ask_hf_fast(f"Инструкция по завариванию чая в гайвани: температура воды, время пролива, граммы чая на 100мл. Данные: {search_data}")
-        await msg.edit_text(f"{answer}\n\n Китайские гайды")
+        msg = await m.reply_text("⏳ Готовлю инструкцию...")
+        data = await search_fast("как заваривать китайский чай гайвань температура время")
+        answer = await ask_hf_robust(f"Инструкция по завариванию: температура, время, пропорции. Данные: {data}")
+        await msg.edit_text(f"{answer}\n\n📖 Китайские гайды")
         
     elif d == "news":
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(name, callback_data=f"reg_{code}")] for code, name in REGIONS.items()])
-        await m.reply_text(" Выберите регион:", reply_markup=kb)
+        await m.reply_text("🌍 Выберите регион:", reply_markup=kb)
         
     elif d.startswith("reg_"):
         region = d.split("_")[1]
         region_name = REGIONS.get(region, region)
         msg = await m.reply_text(f"⏳ Новости: {region_name}...")
-        search_data = await search_fast(f"чай {region_name} новости урожай 2025")
-        answer = await ask_hf_fast(f"Краткие новости о чае из региона {region_name}. Данные: {search_data}")
+        data = await search_fast(f"чай {region_name} новости урожай 2025 2026")
+        answer = await ask_hf_robust(f"Новости чая из {region_name}. Данные: {data}")
         await msg.edit_text(f"{answer}\n\n📰 Региональные источники")
         
     elif d in ["ship", "stats"]:
-        msg = await m.reply_text(" Статистика...")
-        search_data = await search_fast("поставки чая в Россию 2025 импорт ФТС тонны")
-        answer = await ask_hf_fast(f"Статистика импорта чая в Россию: объёмы, поставщики. Данные: {search_data}")
-        await msg.edit_text(f"{answer}\n\n️ ФТС / Открытые данные")
+        msg = await m.reply_text("⏳ Статистика...")
+        data = await search_fast("поставки чая в Россию 2025 импорт ФТС тонны")
+        answer = await ask_hf_robust(f"Статистика импорта чая в РФ. Данные: {data}")
+        await msg.edit_text(f"{answer}\n\n🏛️ ФТС / Открытые данные")
         
     elif d == "price":
         ctx.user_data["mode"] = "price"
@@ -178,6 +195,7 @@ async def handle_webhook(request):
         await request.app['app'].process_update(upd)
         return web.Response(text="OK")
     except Exception as e:
+        logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
 async def on_startup(app):
@@ -185,13 +203,14 @@ async def on_startup(app):
     await app['app'].start()
     await app['app'].bot.set_webhook(WEBHOOK_URL)
     logger.info(f"✅ Bot running! @{app['app'].bot.username}")
+    logger.info(f"🤖 Using HF models: {[m.split('/')[1] for m in HF_MODELS]}")
 
 async def on_shutdown(app):
     await app['app'].stop()
     await app['app'].shutdown()
 
 def main():
-    logger.info("🚀 Starting fast bot...")
+    logger.info("🚀 Starting robust bot...")
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))

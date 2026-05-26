@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🍵 Tea Expert Bot — Исправленная версия
+🍵 Tea Expert Bot — Финальная версия
 """
 import os, asyncio, logging, time
 from aiohttp import web, ClientSession, TCPConnector
@@ -15,14 +15,12 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-# ✅ ИСПРАВЛЕНИЕ #7: убран хардкод токена — только из env
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 SERPER_KEY = os.getenv("SERPER_KEY", "")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com")
 PORT = int(os.getenv("PORT", 8080))
 
-# ✅ ИСПРАВЛЕНИЕ #8: проверка обязательных переменных при старте
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("❌ TELEGRAM_BOT_TOKEN не задан!")
 
@@ -31,8 +29,6 @@ HF_MODELS = [
     "microsoft/Phi-3-mini-4k-instruct",
     "google/gemma-2b-it"
 ]
-
-# ✅ ИСПРАВЛЕНИЕ #2: индекс теперь хранит последнюю РАБОЧУЮ модель
 current_model_idx = 0
 
 REGIONS = {
@@ -44,20 +40,16 @@ REGIONS = {
     "hunan": "Хунань (Чёрный чай)"
 }
 
-# ✅ ИСПРАВЛЕНИЕ #6: кэш с ограничением размера
 CACHE_MAX_SIZE = 200
 search_cache: dict = {}
 
 
 def _clean_cache():
-    """Удаляем старые записи если кэш переполнен"""
     if len(search_cache) > CACHE_MAX_SIZE:
         now = time.time()
-        # Удаляем записи старше 5 минут
         expired = [k for k, (t, _) in search_cache.items() if now - t > 300]
         for k in expired:
             del search_cache[k]
-        # Если всё ещё много — удаляем самые старые
         if len(search_cache) > CACHE_MAX_SIZE:
             oldest = sorted(search_cache.items(), key=lambda x: x[1][0])
             for k, _ in oldest[:50]:
@@ -65,11 +57,10 @@ def _clean_cache():
 
 
 async def ask_hf_robust(prompt: str) -> str:
-    """Запрос к HF с повторными попытками и сменой модели"""
     global current_model_idx
 
     if not HF_TOKEN:
-        return "⚠️ AI отключён. Настройте HF_TOKEN в переменных окружения."
+        return "⚠️ AI отключён. Задайте HF_TOKEN в переменных окружения."
 
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -84,8 +75,6 @@ async def ask_hf_robust(prompt: str) -> str:
         }
     }
 
-    # ✅ ИСПРАВЛЕНИЕ #1: коннектор создаётся один раз, закрывается через async with
-    # ✅ ИСПРАВЛЕНИЕ #2: перебираем модели начиная с последней рабочей
     for attempt in range(len(HF_MODELS)):
         model_idx = (current_model_idx + attempt) % len(HF_MODELS)
         model = HF_MODELS[model_idx]
@@ -95,29 +84,54 @@ async def ask_hf_robust(prompt: str) -> str:
             connector = TCPConnector(ttl_dns_cache=300, limit=10)
             async with ClientSession(
                 connector=connector,
-                connector_owner=True,  # сессия закрывает коннектор
-                timeout=aiohttp.ClientTimeout(total=35)
+                connector_owner=True,
+                timeout=aiohttp.ClientTimeout(total=45)
             ) as session:
                 async with session.post(url, headers=headers, json=payload) as resp:
                     if resp.status == 200:
                         result = await resp.json()
-                        # ✅ ИСПРАВЛЕНИЕ #5: проверяем что текст не пустой
                         if result and isinstance(result, list) and len(result) > 0:
                             text = result[0].get('generated_text', '').strip()
                             if text:
-                                current_model_idx = model_idx  # запоминаем рабочую модель
+                                current_model_idx = model_idx
                                 return text[:500]
                         logger.warning(f"Пустой ответ от {model}")
                         continue
 
                     elif resp.status == 503:
-                        logger.info(f"Модель {model} загружается, ждём...")
-                        await asyncio.sleep(3)
+                        # Модель спит — читаем время ожидания из ответа
+                        try:
+                            body = await resp.json()
+                            wait_time = min(float(body.get("estimated_time", 20)), 30)
+                        except Exception:
+                            wait_time = 20
+                        logger.info(f"Модель {model} спит, ждём {wait_time:.0f}с...")
+                        await asyncio.sleep(wait_time)
+                        # Повторяем запрос к той же модели
+                        try:
+                            async with ClientSession(
+                                timeout=aiohttp.ClientTimeout(total=45)
+                            ) as s2:
+                                async with s2.post(url, headers=headers, json=payload) as r2:
+                                    if r2.status == 200:
+                                        result = await r2.json()
+                                        if result and isinstance(result, list):
+                                            text = result[0].get('generated_text', '').strip()
+                                            if text:
+                                                current_model_idx = model_idx
+                                                return text[:500]
+                        except Exception:
+                            pass
                         continue
 
                     elif resp.status == 429:
                         logger.warning(f"Rate limit на {model}, пробуем следующую")
+                        await asyncio.sleep(2)
                         continue
+
+                    elif resp.status == 401:
+                        logger.error("❌ HF_TOKEN невалидный!")
+                        return "⚠ Неверный HF токен. Проверьте переменную HF_TOKEN."
 
                     else:
                         logger.warning(f"Статус {resp.status} от {model}")
@@ -134,7 +148,6 @@ async def ask_hf_robust(prompt: str) -> str:
 
 
 async def search_fast(q: str) -> str:
-    """Поиск с кэшем"""
     if not SERPER_KEY:
         return ""
 
@@ -157,7 +170,7 @@ async def search_fast(q: str) -> str:
                         f"• {i.get('title', '')}"
                         for i in data.get("organic", [])[:2]
                     ])
-                    _clean_cache()  # ✅ ИСПРАВЛЕНИЕ #6: чистим перед записью
+                    _clean_cache()
                     search_cache[cache_key] = (time.time(), result)
                     return result
     except Exception as e:
@@ -167,12 +180,10 @@ async def search_fast(q: str) -> str:
 
 
 async def safe_edit(msg, text: str, update: Update = None):
-    """✅ ИСПРАВЛЕНИЕ #4: безопасное редактирование сообщения"""
     try:
         await msg.edit_text(text)
     except Exception as e:
         logger.warning(f"edit_text не удался: {e}")
-        # Если не удалось отредактировать — отправляем новым сообщением
         if update:
             try:
                 await update.message.reply_text(text)
@@ -181,7 +192,6 @@ async def safe_edit(msg, text: str, update: Update = None):
 
 
 async def fast_reply(update: Update, text: str):
-    """Быстрый ответ с индикатором"""
     msg = await update.message.reply_text("⏳ Ищу...")
     start = time.time()
 
@@ -217,6 +227,57 @@ async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    lines = ["🔧 <b>Диагностика:</b>\n"]
+
+    lines.append(f"🔑 HF_TOKEN: {'✅ задан' if HF_TOKEN else '❌ не задан'}")
+    lines.append(f"🔑 SERPER_KEY: {'✅ задан' if SERPER_KEY else '⚠️ не задан'}\n")
+
+    lines.append("🤖 <b>Модели HF:</b>")
+    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "inputs": "<s>[INST] Скажи: ОК [/INST]",
+        "parameters": {"max_new_tokens": 10, "return_full_text": False}
+    }
+
+    for model in HF_MODELS:
+        url = f"https://api-inference.huggingface.co/models/{model}"
+        try:
+            async with ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+                async with s.post(url, headers=headers, json=payload) as r:
+                    if r.status == 200:
+                        lines.append(f"  ✅ {model.split('/')[1]}")
+                    elif r.status == 503:
+                        lines.append(f"  ⏳ {model.split('/')[1]} (спит, норм)")
+                    elif r.status == 401:
+                        lines.append(f"  🔐 {model.split('/')[1]} (неверный токен!)")
+                    elif r.status == 429:
+                        lines.append(f"  🚫 {model.split('/')[1]} (rate limit)")
+                    else:
+                        lines.append(f"  ❌ {model.split('/')[1]} (статус {r.status})")
+        except asyncio.TimeoutError:
+            lines.append(f"  ⏱ {model.split('/')[1]} (таймаут)")
+        except Exception as e:
+            lines.append(f"  💥 {model.split('/')[1]} ({str(e)[:40]})")
+
+    lines.append("\n🔍 <b>Поиск Serper:</b>")
+    if SERPER_KEY:
+        try:
+            async with ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as s:
+                async with s.post(
+                    "https://google.serper.dev/search",
+                    headers={"X-API-KEY": SERPER_KEY},
+                    json={"q": "чай", "num": 1}
+                ) as r:
+                    lines.append(f"  {'✅ работает' if r.status == 200 else f'❌ статус {r.status}'}")
+        except Exception as e:
+            lines.append(f"  ❌ {str(e)[:50]}")
+    else:
+        lines.append("  ⚠️ ключ не задан")
+
+    await update.message.reply_text("\n".join(lines), parse_mode='HTML')
+
+
 async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -250,7 +311,7 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         msg = await m.reply_text("⏳ Готовлю инструкцию...")
         data = await search_fast("как заваривать китайский чай гайвань температура время")
         answer = await ask_hf_robust(
-            f"Инструкция по завариванию: температура, время, пропорции. Данные: {data}"
+            f"Инструкция по завариванию чая: температура, время, пропорции. Данные: {data}"
         )
         await safe_edit(msg, f"{answer}\n\n📖 Китайские гайды")
 
@@ -303,8 +364,6 @@ async def on_startup(app):
     ptb = app['ptb_app']
     await ptb.initialize()
     await ptb.start()
-
-    # ✅ ИСПРАВЛЕНИЕ #3: webhook указывает на конкретный путь /webhook
     webhook_path = "/webhook"
     full_url = f"{WEBHOOK_URL.rstrip('/')}{webhook_path}"
     await ptb.bot.set_webhook(full_url)
@@ -324,14 +383,13 @@ def main():
 
     ptb = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     ptb.add_handler(CommandHandler("start", start_cmd))
+    ptb.add_handler(CommandHandler("debug", debug_cmd))
     ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
     ptb.add_handler(CallbackQueryHandler(on_cb))
 
     web_app = web.Application()
     web_app['bot'] = ptb.bot
-    web_app['ptb_app'] = ptb  # ✅ Переименовано: 'app' конфликтовало с aiohttp app
-
-    # ✅ ИСПРАВЛЕНИЕ #3: маршрут совпадает с webhook URL
+    web_app['ptb_app'] = ptb
     web_app.router.add_post('/webhook', handle_webhook)
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)

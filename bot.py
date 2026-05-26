@@ -58,7 +58,7 @@ async def ask_ai(prompt: str) -> str:
        "Content-Type": "application/json"
    }
    payload = {
-       "model": "llama-3.1-8b-instant",
+"model": "llama-3.3-70b-versatile",
        "messages": [
            {
                "role": "system",

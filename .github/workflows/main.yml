@@ -1,9 +1,10 @@
 name: Daily Tea Digest
 
+# Автозапуск по расписанию отключён: скрипта рассылки дайджеста пока нет,
+# а запуск `python bot.py` на CI поднимал webhook-сервер, который висел впустую
+# и перехватывал webhook продакшн-бота. Расписание вернём, когда появится
+# отдельный скрипт рассылки (см. ARCHITECTURE.md, «Известные проблемы»).
 on:
-  schedule:
-    # 12:00 UTC = 15:00 по Москве
-    - cron: '0 12 * * *'
   workflow_dispatch: # Кнопка для ручного запуска
 
 jobs:
@@ -24,4 +25,3 @@ jobs:
           FIREWORKS_KEY: ${{ secrets.FIREWORKS_KEY }}
           SERPER_KEY: ${{ secrets.SERPER_KEY }}
         run: python bot.py
-

@@ -27,7 +27,9 @@ The goal is to create an intelligent operational partner for WAYSTEA.
 
 Status:
 
-Architecture and MVP scope agreed. Ready to start implementation.
+Implementation in progress. MVP priority steps 1-6 (Telegram connection,
+identification, stores, shift control, daily tasks, reminders) are scaffolded
+in `waystea_one/`. Not yet run against a real Telegram token.
 
 Created documents:
 
@@ -312,14 +314,41 @@ multiple workers.
 
 ---
 
+## Decision 10
+
+Date: 2026-07-13
+
+Decision:
+
+Added priority steps 5-6 from 08_MVP_REQUIREMENTS.md §14 to the scaffold:
+Task Engine (daily checklist created from `TaskTemplate` rows when a shift
+is confirmed; completion via inline button or a "готово"-style reply;
+photo/comment proof for tasks that require it) and the Reminder Engine
+(APScheduler polling job — 30-minute and 60-minute reminders, then one
+owner escalation if both are ignored, per 02_OPERATION_SYSTEM.md §10).
+
+Reason:
+
+Natural continuation once shift control worked — tasks only became useful
+once they could actually be sent, closed, and chased up.
+
+Impact:
+
+New models `TaskTemplate`/`Task`; new `app/services/tasks.py`,
+`app/services/reminders.py`, `app/handlers/tasks.py`; `scripts/seed_task_templates.py`
+seeds the default daily checklist. Task completion is collapsed to
+CREATED → WAITING_PROOF → COMPLETED for MVP (see the `TaskStatus` docstring
+in `app/models.py` for why Received/In Progress aren't separate states yet).
+
+---
+
 # Current Next Steps
 
 1. Wire up a real Telegram bot token and run the MVP scaffold end-to-end
-   against the three seeded stores.
+   against the three seeded stores and default task checklist.
 
 2. Implement the remaining modules in the order defined in
-   08_MVP_REQUIREMENTS.md §14: daily tasks, reminders, purchasing, reports,
-   memory, sales/revenue.
+   08_MVP_REQUIREMENTS.md §14: purchasing, reports, memory, sales/revenue.
 
 ---
 

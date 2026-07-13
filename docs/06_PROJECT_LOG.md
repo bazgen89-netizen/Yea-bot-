@@ -417,11 +417,45 @@ dummy values so `pytest` still needs no real secrets.
 
 ---
 
+## Decision 13
+
+Date: 2026-07-13
+
+Decision:
+
+Deploying the MVP to Render as a free-tier **Web Service** rather than a
+Background Worker, which Render only offers on paid plans. Since the bot
+talks to Telegram via polling (Decision 9) and has no inbound HTTP endpoint
+of its own, added a one-route health server (`app/health.py`) that answers
+on `$PORT` purely so Render's free Web Service tier accepts the deployment.
+It runs alongside the polling loop and reminder/report scheduler in the
+same process.
+
+Reason:
+
+Avoid a paid hosting tier for the MVP; this is a hosting-platform
+accommodation, not a product requirement, so it's kept out of `docs/`
+proper and documented only in `waystea_one/README.md`.
+
+Impact:
+
+New `app/health.py`; `app/main.py` now also starts the health server;
+new `PORT` setting in `app/config.py` (defaults to 8080, Render sets it
+automatically). Trade-off accepted: a free Web Service on Render sleeps
+after ~15 minutes without HTTP traffic and cold-starts on the next
+request — the bot can have gaps in responsiveness unless something pings
+the health URL periodically. Fine for testing the MVP; worth revisiting
+(a small paid instance, or another host) once this is real daily-use
+infrastructure for the business.
+
+---
+
 # Current Next Steps
 
-1. Wire up a real Telegram bot token and an Anthropic API key, and run the
-   MVP scaffold end-to-end against the three seeded stores, default task
-   checklist, and starter knowledge base.
+1. Finish deploying to Render (Postgres + Web Service created this
+   session) and confirm the bot responds in Telegram end-to-end: shift
+   start, task checklist/completion, reminders, purchase requests, revenue
+   report, and a knowledge-base question.
 
 2. Replace the placeholder knowledge-base entries with real WAYSTEA
    instructions, and consider replacing the keyword heuristics in

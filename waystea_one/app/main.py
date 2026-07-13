@@ -7,6 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.bot import bot, dispatcher
 from app.config import settings
 from app.db import get_session, init_models
+from app.health import run_health_server
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
 from app.services.upsell import send_upsell_nudges
@@ -43,6 +44,7 @@ async def main() -> None:
     )
     scheduler.start()
 
+    await run_health_server(settings.port)
     await dispatcher.start_polling(bot)
 
 

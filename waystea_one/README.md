@@ -72,6 +72,13 @@ the 10 MVP steps.
 - **Store matching is deterministic, not LLM-based**, for MVP reliability —
   see the docstring in `shift_detector.py` for when to graduate to the AI
   Processing Layer instead.
+- **`app/health.py` is a hosting accommodation, not a product feature.**
+  Render's free tier only exists for Web Services, which must answer HTTP
+  on `$PORT` — so `app/main.py` also starts a one-route health server
+  alongside the Telegram polling loop. A free Web Service on Render sleeps
+  after ~15 minutes with no HTTP traffic and cold-starts on the next
+  request; ping the health URL periodically (e.g. a free UptimeRobot
+  monitor) if you need the bot to stay responsive without gaps.
 
 ## Running locally
 

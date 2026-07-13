@@ -17,6 +17,10 @@ class Settings:
     # Optional: the knowledge-base Q&A feature degrades to a fallback message
     # (see app/services/ai.py) rather than crashing when this isn't set.
     anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
+    # Only used by app/health.py — Render (and similar free-tier hosts) expect
+    # a Web Service to answer on $PORT even though the bot itself is a
+    # polling client, not an HTTP server.
+    port: int = int(os.environ.get("PORT", "8080"))
 
 
 settings = Settings()

@@ -13,6 +13,9 @@ Flow:
 - Purchase requests ("закончился ...") and end-of-shift revenue reports
   (fixed three-line format, docs/09_KPI_AND_REVENUE_MODULE.md §3.1) and
   upsell mentions are handled here too, for the same single-handler reason.
+- Anything left over that looks like a question is answered from the
+  company knowledge base via the AI Processing Layer (app/services/ai.py),
+  as the final fallback in the chain.
 """
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -22,6 +25,7 @@ from aiogram.types import Message
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
 from app.models import Employee, ProofType
+from app.services.ai import answer_employee_question
 from app.services.identity import (
     create_employee,
     get_employee,
@@ -29,11 +33,13 @@ from app.services.identity import (
     list_store_options,
     record_shift_start,
 )
+from app.services.knowledge import get_knowledge_base_text
 from app.services.purchasing import (
     create_purchase_request,
     extract_product,
     is_purchase_request_message,
 )
+from app.services.question_detector import looks_like_question
 from app.services.revenue import (
     looks_like_revenue_message,
     parse_revenue_message,
@@ -169,6 +175,22 @@ async def _try_handle_purchase_reply(message: Message, employee: Employee) -> bo
     return True
 
 
+async def _try_handle_question_reply(message: Message, employee: Employee) -> bool:
+    """Last resort in the chain: if it looks like a question, answer it from
+    the company knowledge base (docs/03_AI_BRAIN.md §7, §13 — never invent).
+    """
+    text = message.text or ""
+    if not looks_like_question(text):
+        return False
+
+    async with get_session() as session:
+        knowledge_base = await get_knowledge_base_text(session)
+
+    answer = await answer_employee_question(text, knowledge_base)
+    await message.reply(answer)
+    return True
+
+
 @router.message(Onboarding.awaiting_name)
 async def receive_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
@@ -228,21 +250,30 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             )
             return
 
-        if not is_shift_start_message(message.text or ""):
-            if await _try_handle_task_reply(message, employee):
-                return
-            if await _try_handle_revenue_reply(message, employee):
-                return
-            await _try_handle_purchase_reply(message, employee)
+        is_shift_start = is_shift_start_message(message.text or "")
+        store = None
+        if is_shift_start:
+            stores = await list_store_options(session)
+            store = match_store(message.text or "", stores)
+
+    # Session closed above before any slower/network-bound step (task reply,
+    # purchase/revenue lookups, and especially the AI Processing Layer call
+    # for questions) so we're not holding a DB connection open during those.
+    if not is_shift_start:
+        if await _try_handle_task_reply(message, employee):
             return
-
-        stores = await list_store_options(session)
-        store = match_store(message.text or "", stores)
-
-        if store is None:
-            await state.set_state(ShiftClarification.awaiting_store)
-            await message.reply("В каком магазине вы сегодня работаете?")
+        if await _try_handle_revenue_reply(message, employee):
             return
+        if await _try_handle_purchase_reply(message, employee):
+            return
+        await _try_handle_question_reply(message, employee)
+        return
 
+    if store is None:
+        await state.set_state(ShiftClarification.awaiting_store)
+        await message.reply("В каком магазине вы сегодня работаете?")
+        return
+
+    async with get_session() as session:
         await record_shift_start(session, employee.id, store.id)
-        await _confirm_shift(message, employee, store.id, store.name)
+    await _confirm_shift(message, employee, store.id, store.name)

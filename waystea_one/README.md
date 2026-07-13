@@ -3,9 +3,10 @@
 Implementation of the WAYSTEA ONE digital employee described in `../docs/`.
 This slice covers all 10 MVP priority steps from `../docs/08_MVP_REQUIREMENTS.md`
 §14: Telegram connection, identification, stores, shift control, daily
-tasks + verification, reminders, purchasing, daily report, and the
-revenue/upsell module. The one piece still missing is deeper memory/knowledge
-Q&A (step 9 in the doc) — see "What's not here yet" below.
+tasks + verification, reminders, purchasing, daily report, the
+revenue/upsell module, and (step 9) company knowledge-base Q&A via the AI
+Processing Layer — see "What's not here yet" for what's still missing beyond
+the 10 MVP steps.
 
 ## What's here
 
@@ -38,15 +39,25 @@ Q&A (step 9 in the doc) — see "What's not here yet" below.
 - `app/handlers/owner.py` — `/report` command for the owner to pull the
   daily report on demand (it's also sent automatically every day, see
   `DAILY_REPORT_HOUR` below).
+- `app/services/ai.py` — the AI Processing Layer. The only place that calls
+  an LLM (Claude, via `ANTHROPIC_API_KEY`); everything else in this scaffold
+  is deliberately keyword-based. Answers employee questions using
+  `app/services/knowledge.py` (the `KnowledgeEntry` table — Company Memory,
+  docs/03_AI_BRAIN.md §6.5) as context, and refuses to invent an answer if
+  the knowledge base doesn't cover it (docs/03_AI_BRAIN.md §13) or if the
+  API key isn't configured — see `FALLBACK_*` in that module.
+- `scripts/seed_knowledge_base.py` seeds two placeholder entries; replace/
+  expand with real WAYSTEA instructions.
 
 ## What's not here yet
 
-- Deeper Memory/Knowledge Engine (docs/03_AI_BRAIN.md §5-7) — answering
-  free-form employee questions from a company knowledge base needs the AI
-  Processing Layer wired to a real LLM, which this scaffold doesn't do yet
-  (all detection here is keyword-based on purpose, for MVP reliability).
 - Learning/Reflection Engine (docs/03_AI_BRAIN.md §8-10) — proactive pattern
-  detection across days, not just within a shift.
+  detection across days ("this task is late every Monday"), not just
+  within a single shift.
+- Real retrieval for the knowledge base — right now the whole
+  `KnowledgeEntry` table is passed as LLM context every time, which is fine
+  at MVP scale (a handful of entries) but would need pgvector or similar
+  once the knowledge base grows large.
 
 ## Design choices worth knowing about
 
@@ -65,11 +76,16 @@ Q&A (step 9 in the doc) — see "What's not here yet" below.
 ## Running locally
 
 ```bash
-cp .env.example .env      # fill in BOT_TOKEN and OWNER_TELEGRAM_ID
+cp .env.example .env      # fill in BOT_TOKEN, OWNER_TELEGRAM_ID, and (optionally) ANTHROPIC_API_KEY
 docker compose up --build
 docker compose exec bot python -m scripts.seed_stores
 docker compose exec bot python -m scripts.seed_task_templates
+docker compose exec bot python -m scripts.seed_knowledge_base
 ```
+
+Without `ANTHROPIC_API_KEY` set, employee questions still get a polite
+"I don't have that configured yet" reply instead of an error — see
+`app/services/ai.py`.
 
 The owner can also request the report on demand with `/report` (only
 responds to `OWNER_TELEGRAM_ID`).
@@ -81,5 +97,9 @@ pip install -r requirements.txt
 pytest
 ```
 
-Tests cover the pure-function logic (`store_matcher`, `shift_detector`,
-`tasks.is_completion_phrase`) and need no database or Telegram token.
+`tests/conftest.py` sets dummy env vars so the whole suite (including
+modules that import `app.config`) collects without real secrets. Tests
+otherwise cover pure-function logic (`store_matcher`, `shift_detector`,
+`tasks.is_completion_phrase`, `purchasing`, `revenue`, `upsell`,
+`question_detector`) and the AI layer's no-key/no-knowledge-base fallback
+paths — none of it needs a live database, Telegram token, or Anthropic key.

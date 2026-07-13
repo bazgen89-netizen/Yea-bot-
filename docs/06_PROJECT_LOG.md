@@ -27,12 +27,11 @@ The goal is to create an intelligent operational partner for WAYSTEA.
 
 Status:
 
-Implementation in progress. MVP priority steps 1-8 and 10 (Telegram
-connection, identification, stores, shift control, daily tasks, reminders,
-purchasing, daily report, revenue/upsell module) are scaffolded in
-`waystea_one/`. Not yet run against a real Telegram token. Step 9 (deeper
-memory/knowledge-base Q&A) is the one piece still not built — it needs a
-real LLM wired into the AI Processing Layer, which this scaffold doesn't
+Implementation in progress. All 10 MVP priority steps are scaffolded in
+`waystea_one/`, including step 9 (company knowledge-base Q&A via a real
+Claude API call). Not yet run against a real Telegram token or a real
+Anthropic API key. The remaining open item is the deeper Learning/
+Reflection Engine (docs/03_AI_BRAIN.md §8-10), which this scaffold doesn't
 have yet.
 
 Created documents:
@@ -382,16 +381,56 @@ handler.
 
 ---
 
+## Decision 12
+
+Date: 2026-07-13
+
+Decision:
+
+Wired the AI Processing Layer (docs/04_TECH_SPEC.md §3.1) to the Claude API
+for step 9 (company knowledge-base Q&A, docs/03_AI_BRAIN.md §7). A new
+`KnowledgeEntry` table holds Company Memory; the whole table is passed as
+LLM context on each question (fine at MVP scale, a handful of entries).
+Detection of "this looks like a question" stays keyword/punctuation-based
+(question words, trailing "?") — only the actual answer generation calls
+the LLM. If `ANTHROPIC_API_KEY` isn't set, or the knowledge base is empty,
+or the API call fails, the bot returns a plain-language fallback instead of
+crashing or inventing an answer (docs/03_AI_BRAIN.md §13).
+
+Reason:
+
+This was the one MVP step that couldn't be done with a keyword heuristic
+without just being a worse version of the other detectors — it genuinely
+needs an LLM to answer open-ended employee questions.
+
+Impact:
+
+New model `KnowledgeEntry`; new `app/services/ai.py`, `knowledge.py`,
+`question_detector.py`; `scripts/seed_knowledge_base.py` seeds two
+placeholder entries (customer complaints, Da Hong Pao brewing) that the
+owner should replace with real WAYSTEA instructions. Question-answering is
+the last step in `app/handlers/shift.py`'s dispatch chain (task reply →
+revenue → purchase/upsell → question), so nothing else swallows it first.
+Added `tests/conftest.py` since the AI layer's tests import `app.config`,
+which previously required real env vars just to collect — it now sets
+dummy values so `pytest` still needs no real secrets.
+
+---
+
 # Current Next Steps
 
-1. Wire up a real Telegram bot token and an LLM API key, and run the MVP
-   scaffold end-to-end against the three seeded stores and default task
-   checklist.
+1. Wire up a real Telegram bot token and an Anthropic API key, and run the
+   MVP scaffold end-to-end against the three seeded stores, default task
+   checklist, and starter knowledge base.
 
-2. Wire the AI Processing Layer to a real LLM and use it for step 9
-   (company knowledge base Q&A), and consider replacing the keyword
-   heuristics in purchasing/upsell detection with proper entity extraction
-   once that's in place.
+2. Replace the placeholder knowledge-base entries with real WAYSTEA
+   instructions, and consider replacing the keyword heuristics in
+   purchasing/upsell detection with proper LLM-based entity extraction now
+   that the AI Processing Layer exists.
+
+3. Build the Learning/Reflection Engine (docs/03_AI_BRAIN.md §8-10) for
+   cross-day pattern detection — the one piece of docs/03_AI_BRAIN.md not
+   yet covered.
 
 ---
 

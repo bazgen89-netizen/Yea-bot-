@@ -151,6 +151,19 @@ class UpsellEvent(Base):
     store: Mapped["Store"] = relationship()
 
 
+class KnowledgeEntry(Base):
+    """Company Memory (docs/03_AI_BRAIN.md §6.5): standards, instructions,
+    tea knowledge. Small enough for MVP scale to pass in full as LLM
+    context rather than needing real retrieval/embeddings.
+    """
+
+    __tablename__ = "knowledge_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(String(2000))
+
+
 class TaskTemplate(Base):
     """A recurring daily task. `store_id` NULL means it applies to every store."""
 

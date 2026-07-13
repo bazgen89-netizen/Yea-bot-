@@ -144,8 +144,9 @@ stack and no connection to the operational model described in these documents.
 
 Impact:
 
-Development starts from a clean module structure. The fate of `bot.py` (archive
-vs remove) is still to be decided with the owner.
+Development starts from a clean module structure. Resolved: the owner chose to
+archive rather than delete it — moved to `archive/old_tea_qa_bot/` with a short
+README explaining why it's kept and that it's not part of the WAYSTEA ONE build.
 
 ---
 
@@ -286,11 +287,9 @@ Project ready to move from documentation phase into implementation.
 
 # Current Next Steps
 
-1. Scaffold the WAYSTEA ONE project structure (separate from `bot.py`).
+1. Scaffold the WAYSTEA ONE project structure (separate from `archive/old_tea_qa_bot/`).
 
 2. Implement modules in the order defined in 08_MVP_REQUIREMENTS.md §14.
-
-3. Decide the fate of the existing `bot.py` (archive or remove).
 
 ---
 

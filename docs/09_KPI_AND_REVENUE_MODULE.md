@@ -54,6 +54,20 @@ required fields before the shift can be marked closed:
 - Cash portion
 - Non-cash (card/transfer) portion
 
+**Confirmed input format** (owner decision): the employee reports three
+lines, in this fixed order —
+
+```
+Общая выручка: <сумма>
+Наличка: <сумма>
+Безнал: <сумма>
+```
+
+The AI parses these three labeled lines rather than free-form text. If a
+line is missing or the numbers don't add up (cash + non-cash ≠ total), the
+AI asks for clarification instead of guessing or silently accepting
+inconsistent figures (03_AI_BRAIN.md §13).
+
 Stored as `ShiftRevenue` (employee_id, store_id, date, total, cash, non_cash).
 
 ## 3.2 Upsell events
@@ -129,8 +143,7 @@ owner decides what to do with it.
 
 # 7. Open Items
 
-- Exact list of "acceptable" employee response variants for revenue entry
-  (e.g., is "нал 5000 без 3000" enough, or does the AI need a fixed format?)
-  to be refined during Sales/Revenue Module implementation.
+- ~~Exact revenue entry format~~ — resolved, see §3.1 (fixed three-line
+  format: общая выручка / наличка / безнал).
 - Whether the owner wants a weekly digest in addition to the daily report,
   specifically for the revenue trend line.

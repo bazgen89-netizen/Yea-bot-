@@ -75,6 +75,11 @@ TEMPLATES = [
         ),
     },
     {
+        "title": "Проверить наличие воды для чая",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
         "title": "Проверить кассу/POS",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,

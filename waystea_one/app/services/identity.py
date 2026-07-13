@@ -54,3 +54,15 @@ async def record_shift_start(
     await session.commit()
     await session.refresh(shift_log)
     return shift_log
+
+
+async def get_todays_shift(
+    session: AsyncSession, employee_id: int, date: datetime.date | None = None
+) -> ShiftLog | None:
+    date = date or datetime.date.today()
+    result = await session.execute(
+        select(ShiftLog).where(
+            ShiftLog.employee_id == employee_id, ShiftLog.date == date
+        )
+    )
+    return result.scalar_one_or_none()

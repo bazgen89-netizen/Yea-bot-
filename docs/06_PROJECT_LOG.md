@@ -27,9 +27,13 @@ The goal is to create an intelligent operational partner for WAYSTEA.
 
 Status:
 
-Implementation in progress. MVP priority steps 1-6 (Telegram connection,
-identification, stores, shift control, daily tasks, reminders) are scaffolded
-in `waystea_one/`. Not yet run against a real Telegram token.
+Implementation in progress. MVP priority steps 1-8 and 10 (Telegram
+connection, identification, stores, shift control, daily tasks, reminders,
+purchasing, daily report, revenue/upsell module) are scaffolded in
+`waystea_one/`. Not yet run against a real Telegram token. Step 9 (deeper
+memory/knowledge-base Q&A) is the one piece still not built — it needs a
+real LLM wired into the AI Processing Layer, which this scaffold doesn't
+have yet.
 
 Created documents:
 
@@ -342,13 +346,52 @@ in `app/models.py` for why Received/In Progress aren't separate states yet).
 
 ---
 
+## Decision 11
+
+Date: 2026-07-13
+
+Decision:
+
+Added priority steps 7, 8 and 10 from 08_MVP_REQUIREMENTS.md §14 to the
+scaffold: Purchasing (keyword-detects "закончился/нет/нужны ..." and creates
+a `PurchaseRequest`), the daily owner report (built from shifts/tasks/
+purchases/revenue/escalated tasks, sent automatically every day and
+available on demand via `/report`), and the Sales/Revenue module from
+09_KPI_AND_REVENUE_MODULE.md (fixed three-line revenue parser, upsell
+keyword detection, and a one-per-shift proactive upsell nudge). Step 9
+(deeper Memory/Knowledge Engine — free-form Q&A from the company knowledge
+base) is deliberately skipped for now.
+
+Reason:
+
+These three steps were all reachable with the same keyword-heuristic
+approach already used for shift/task detection, so they could be built
+without first wiring a real LLM. Step 9 genuinely needs that LLM connection
+(docs/04_TECH_SPEC.md §3.1, AI Processing Layer) to be worth building —
+doing it with keywords would just be a worse version of the Task/Purchasing
+detectors, not a knowledge base.
+
+Impact:
+
+New models `PurchaseRequest`, `ShiftRevenue`, `UpsellEvent`; new
+`app/services/purchasing.py`, `revenue.py`, `upsell.py`, `reports.py`; new
+`app/handlers/owner.py` for `/report`. All new text-message detection lives
+in the same `app/handlers/shift.py` dispatch chain as before (task reply →
+revenue → purchase/upsell), since aiogram routes one text message to one
+handler.
+
+---
+
 # Current Next Steps
 
-1. Wire up a real Telegram bot token and run the MVP scaffold end-to-end
-   against the three seeded stores and default task checklist.
+1. Wire up a real Telegram bot token and an LLM API key, and run the MVP
+   scaffold end-to-end against the three seeded stores and default task
+   checklist.
 
-2. Implement the remaining modules in the order defined in
-   08_MVP_REQUIREMENTS.md §14: purchasing, reports, memory, sales/revenue.
+2. Wire the AI Processing Layer to a real LLM and use it for step 9
+   (company knowledge base Q&A), and consider replacing the keyword
+   heuristics in purchasing/upsell detection with proper entity extraction
+   once that's in place.
 
 ---
 

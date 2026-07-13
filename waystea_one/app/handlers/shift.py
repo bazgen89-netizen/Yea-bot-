@@ -10,8 +10,9 @@ Flow:
   app/handlers/tasks.py). "Готово"-style replies and comment proof for open
   tasks are handled here too, since aiogram dispatches a given text message
   to a single handler — see `_try_handle_task_reply`.
-- Purchasing/Reporting/Sales modules are not built yet (see
-  docs/08_MVP_REQUIREMENTS.md §14 for order).
+- Purchase requests ("закончился ...") and end-of-shift revenue reports
+  (fixed three-line format, docs/09_KPI_AND_REVENUE_MODULE.md §3.1) and
+  upsell mentions are handled here too, for the same single-handler reason.
 """
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -24,8 +25,19 @@ from app.models import Employee, ProofType
 from app.services.identity import (
     create_employee,
     get_employee,
+    get_todays_shift,
     list_store_options,
     record_shift_start,
+)
+from app.services.purchasing import (
+    create_purchase_request,
+    extract_product,
+    is_purchase_request_message,
+)
+from app.services.revenue import (
+    looks_like_revenue_message,
+    parse_revenue_message,
+    record_shift_revenue,
 )
 from app.services.shift_detector import is_shift_start_message
 from app.services.store_matcher import match_store
@@ -37,6 +49,7 @@ from app.services.tasks import (
     list_open_tasks,
     start_completion,
 )
+from app.services.upsell import detect_upsell_type, record_upsell_event
 
 router = Router(name="shift")
 
@@ -94,6 +107,65 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
         await message.reply(PROOF_PROMPTS[proof_needed])
     else:
         await message.reply("Готово, отмечено ✅")
+    return True
+
+
+async def _try_handle_revenue_reply(message: Message, employee: Employee) -> bool:
+    """docs/09_KPI_AND_REVENUE_MODULE.md §3.1: fixed three-line revenue report."""
+    text = message.text or ""
+    if not looks_like_revenue_message(text):
+        return False
+
+    async with get_session() as session:
+        shift = await get_todays_shift(session, employee.id)
+        if shift is None:
+            await message.reply(
+                "Сначала отметьте начало смены (напишите, что вы на месте)."
+            )
+            return True
+
+        report = parse_revenue_message(text)
+        if report is None:
+            await message.reply(
+                "Не разобрал сумму. Пришлите, пожалуйста, в таком виде:\n"
+                "Общая выручка: <сумма>\nНаличка: <сумма>\nБезнал: <сумма>"
+            )
+            return True
+
+        await record_shift_revenue(session, employee.id, shift.store_id, report)
+
+    await message.reply("Спасибо, выручка записана 👍")
+    return True
+
+
+async def _try_handle_purchase_reply(message: Message, employee: Employee) -> bool:
+    text = message.text or ""
+
+    upsell_type = detect_upsell_type(text)
+    async with get_session() as session:
+        shift = await get_todays_shift(session, employee.id)
+        if upsell_type is not None and shift is not None:
+            await record_upsell_event(session, employee.id, shift.store_id, upsell_type, text)
+            # Not acknowledged separately — an upsell mention usually rides
+            # along with other conversation, no need for an extra reply.
+
+        if not is_purchase_request_message(text):
+            return False
+
+        if shift is None:
+            await message.reply(
+                "Сначала отметьте начало смены (напишите, что вы на месте)."
+            )
+            return True
+
+        product = extract_product(text)
+        if not product:
+            await message.reply("Что именно закончилось? Уточните название товара.")
+            return True
+
+        await create_purchase_request(session, employee.id, shift.store_id, product)
+
+    await message.reply("Добавил в список закупки 👍")
     return True
 
 
@@ -157,7 +229,11 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
 
         if not is_shift_start_message(message.text or ""):
-            await _try_handle_task_reply(message, employee)
+            if await _try_handle_task_reply(message, employee):
+                return
+            if await _try_handle_revenue_reply(message, employee):
+                return
+            await _try_handle_purchase_reply(message, employee)
             return
 
         stores = await list_store_options(session)

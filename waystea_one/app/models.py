@@ -33,6 +33,19 @@ class TaskStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
+class PurchaseStatus(str, enum.Enum):
+    WAITING_PURCHASE = "waiting_purchase"
+    PURCHASED = "purchased"
+
+
+class UpsellType(str, enum.Enum):
+    """docs/09_KPI_AND_REVENUE_MODULE.md §3.2."""
+
+    EXTRA_TEA = "extra_tea"
+    PAIRING = "pairing"
+    TASTING_TO_PURCHASE = "tasting_to_purchase"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -67,6 +80,70 @@ class ShiftLog(Base):
     store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
     date: Mapped[datetime.date] = mapped_column(Date)
     confirmed_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    upsell_nudge_sent_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    store: Mapped["Store"] = relationship()
+
+
+class PurchaseRequest(Base):
+    """Feature 5 (docs/08_MVP_REQUIREMENTS.md §9): Purchase List."""
+
+    __tablename__ = "purchase_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
+    product: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(
+        String(20), default=PurchaseStatus.WAITING_PURCHASE.value
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    store: Mapped["Store"] = relationship()
+
+
+class ShiftRevenue(Base):
+    """docs/09_KPI_AND_REVENUE_MODULE.md §3.1 — self-reported, no POS."""
+
+    __tablename__ = "shift_revenues"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "date", name="uq_employee_revenue_per_day"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
+    date: Mapped[datetime.date] = mapped_column(Date)
+    total: Mapped[int] = mapped_column()
+    cash: Mapped[int] = mapped_column()
+    non_cash: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    store: Mapped["Store"] = relationship()
+
+
+class UpsellEvent(Base):
+    """docs/09_KPI_AND_REVENUE_MODULE.md §3.2."""
+
+    __tablename__ = "upsell_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
+    upsell_type: Mapped[str] = mapped_column(String(30))
+    note: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 

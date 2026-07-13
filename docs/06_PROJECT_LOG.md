@@ -285,11 +285,41 @@ Project ready to move from documentation phase into implementation.
 
 ---
 
+## Decision 9
+
+Date: 2026-07-13
+
+Decision:
+
+MVP scaffold (`waystea_one/`) built covering priority steps 1-4 from
+08_MVP_REQUIREMENTS.md §14: Telegram connection, employee identification,
+store management, shift control. Telegram integration uses long polling, not
+webhook — 04_TECH_SPEC.md had left this open; polling needs no public HTTPS
+endpoint and is simplest to run/test for MVP. Webhook remains an option for
+a later, higher-scale deployment.
+
+Reason:
+
+Get a runnable, testable slice first; defer infra (webhook + reverse proxy)
+until it's actually needed.
+
+Impact:
+
+`waystea_one/app/main.py` calls `start_polling`. FSM state (onboarding /
+store-clarification dialogs) uses aiogram's in-memory storage for now —
+fine for a single process, would need Redis-backed storage before running
+multiple workers.
+
+---
+
 # Current Next Steps
 
-1. Scaffold the WAYSTEA ONE project structure (separate from `archive/old_tea_qa_bot/`).
+1. Wire up a real Telegram bot token and run the MVP scaffold end-to-end
+   against the three seeded stores.
 
-2. Implement modules in the order defined in 08_MVP_REQUIREMENTS.md §14.
+2. Implement the remaining modules in the order defined in
+   08_MVP_REQUIREMENTS.md §14: daily tasks, reminders, purchasing, reports,
+   memory, sales/revenue.
 
 ---
 

@@ -79,15 +79,94 @@ TEMPLATES = [
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
     },
+    # Расходники
+    {
+        "title": "Проверить наличие молока, сиропов и сока",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить остаток одноразовой посуды",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить наличие упаковки для отпуска чая",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить наличие салфеток и бумажных полотенец",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    # Касса и учёт
     {
         "title": "Проверить кассу/POS",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
     },
     {
+        "title": "Проверить наличие мелких купюр и монет для сдачи",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить чековую ленту в кассе",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить, что банки с чаем подписаны и закрыты",
+        "requires_proof": True,
+        "proof_type": ProofType.PHOTO.value,
+        "verification_criteria": (
+            "На всех банках с чаем есть подписи/этикетки с названием, "
+            "крышки плотно закрыты."
+        ),
+    },
+    # Оборудование
+    {
         "title": "Включить вывеску и освещение",
         "requires_proof": False,
         "proof_type": ProofType.NONE.value,
+    },
+    {
+        "title": "Проверить лампы освещения",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить весы (чистота и калибровка)",
+        "requires_proof": True,
+        "proof_type": ProofType.PHOTO.value,
+        "verification_criteria": "Весы чистые, без остатков чая, пыли и разводов на платформе.",
+    },
+    {
+        "title": "Проверить кулер/бойлер (температура воды)",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    {
+        "title": "Проверить вентиляцию/кондиционер",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+    },
+    # Витрина
+    {
+        "title": "Протереть пыль на витрине и полках",
+        "requires_proof": True,
+        "proof_type": ProofType.PHOTO.value,
+        "verification_criteria": "На витрине и полках нет пыли, поверхности чистые.",
+    },
+    {
+        "title": "Проверить посуду для продажи",
+        "requires_proof": True,
+        "proof_type": ProofType.PHOTO.value,
+        "verification_criteria": (
+            "Посуда, выставленная на продажу, чистая, целая, без сколов и "
+            "трещин, аккуратно расставлена."
+        ),
     },
 ]
 

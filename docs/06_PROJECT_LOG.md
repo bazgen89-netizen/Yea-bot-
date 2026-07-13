@@ -598,6 +598,40 @@ tied to these checklist items beyond the existing MVP KPI list in
 
 ---
 
+## Decision 18
+
+Date: 2026-07-13
+
+Decision:
+
+Expanded the default checklist from 8 to 22 items, per owner picks across
+four categories: consumables (milk/syrups/juice, disposable cups,
+packaging, napkins), cash/accounting (change money, receipt tape, tea jars
+labeled and closed), equipment (light bulbs, scale cleanliness/calibration,
+water cooler temperature, ventilation), and display (wiping dust,
+sale-dishware condition). Water-for-tea check also added per owner request.
+
+Reason:
+
+Direct owner selection from a proposed list of additional tea-shop-specific
+tasks; owner explicitly excluded a standalone sugar item and added juice
+instead.
+
+Impact:
+
+`scripts/seed_task_templates.py` now has 22 `TaskTemplate` rows (up from 8).
+Photo-verified ones (jars labeled/closed, scale cleanliness, dust-free
+display, sale-dishware condition) got `verification_criteria` text; the
+rest are comment-based checks (quantity/state reports that don't lend
+themselves to a single photo). This is a lot of tasks for one shift-start
+checklist — worth watching whether employees find it overwhelming in
+practice; nothing in the design prevents splitting this into "opening" vs
+"closing" checklists later if so (docs/02_OPERATION_SYSTEM.md §13 already
+describes a separate closing checklist, not yet built — see Current Next
+Steps).
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

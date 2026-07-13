@@ -478,6 +478,43 @@ shell access.
 
 ---
 
+## Decision 15
+
+Date: 2026-07-13
+
+Decision:
+
+Bot confirmations/results (shift confirmed + checklist, task done,
+revenue/purchase recorded, knowledge-base answers) now go to the
+employee's private chat instead of replying in the group where they wrote
+the trigger message. Clarifying questions (name on first contact, which
+store) stay as group replies, since a brand-new employee has no private
+chat with the bot yet and Telegram forbids a bot from DMing someone who
+hasn't started a conversation with it.
+
+Reason:
+
+Owner request — revenue figures and personal task lists showing up in the
+shared group chat isn't appropriate; only the "everyone, who's on shift
+today" style group nudges (not yet built — see 02_OPERATION_SYSTEM.md §5)
+were meant to be public.
+
+Impact:
+
+New `app/services/messaging.py::notify_employee` — tries a private
+message, falls back to a one-time group nudge ("please open a DM with the
+bot") if that fails, so nothing silently disappears for employees who
+haven't started a private chat yet. `app/handlers/tasks.py::send_daily_checklist`
+signature changed to take `(bot, employee, tasks, fallback_message)`
+instead of just `(message, tasks)`. Also surfaced two Telegram-side
+requirements the owner hit while testing live: the bot needs either
+group-admin rights or Privacy Mode disabled (via @BotFather) to see
+ordinary group messages at all, and each employee must open a private chat
+with the bot once before it can message them there — both now documented
+in `waystea_one/README.md`.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

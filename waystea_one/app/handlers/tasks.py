@@ -2,8 +2,9 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.db import get_session
-from app.models import ProofType, Task
+from app.models import Employee, ProofType, Task
 from app.services.identity import get_employee
+from app.services.messaging import notify_employee
 from app.services.tasks import complete_task, get_task, get_waiting_proof_task, start_completion
 
 router = Router(name="tasks")
@@ -22,18 +23,26 @@ def checklist_keyboard(tasks: list[Task]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def send_daily_checklist(message: Message, tasks: list[Task]) -> None:
+async def send_daily_checklist(
+    bot, employee: Employee, tasks: list[Task], fallback_message: Message
+) -> None:
     if not tasks:
         return
     lines = "\n".join(f"☐ {task.title}" for task in tasks)
-    await message.answer(
+    await notify_employee(
+        bot,
+        employee,
         f"Задачи на сегодня:\n{lines}",
+        fallback_message,
         reply_markup=checklist_keyboard(tasks),
     )
 
 
 @router.callback_query(F.data.startswith("task_done:"))
 async def on_task_done(callback: CallbackQuery) -> None:
+    # Reply in the same chat as the checklist itself (private, since
+    # send_daily_checklist sends it to the employee's DM) — no extra
+    # routing needed here.
     task_id = int(callback.data.split(":", 1)[1])
     async with get_session() as session:
         task = await get_task(session, task_id)
@@ -60,4 +69,4 @@ async def on_photo_proof(message: Message) -> None:
         if task is None or task.proof_type != ProofType.PHOTO.value:
             return
         await complete_task(session, task)
-    await message.reply("Спасибо! Задача закрыта ✅")
+    await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)

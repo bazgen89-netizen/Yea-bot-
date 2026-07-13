@@ -16,6 +16,12 @@ Flow:
 - Anything left over that looks like a question is answered from the
   company knowledge base via the AI Processing Layer (app/services/ai.py),
   as the final fallback in the chain.
+- Per owner decision, results/confirmations (shift confirmed + checklist,
+  task done, revenue/purchase recorded, question answers) go to the
+  employee's private chat, not the group — see app/services/messaging.py.
+  Clarifying questions (name, which store) stay as group replies on
+  purpose: a brand-new employee has no private chat with the bot yet, so a
+  DM to them would just fail.
 """
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -34,6 +40,7 @@ from app.services.identity import (
     record_shift_start,
 )
 from app.services.knowledge import get_knowledge_base_text
+from app.services.messaging import notify_employee
 from app.services.purchasing import (
     create_purchase_request,
     extract_product,
@@ -74,8 +81,10 @@ async def _confirm_shift(
     async with get_session() as session:
         tasks = await create_daily_tasks_for_shift(session, employee.id, store_id)
 
-    await message.reply(f"Доброе утро 😊\nСмена отмечена: {store_name}.")
-    await send_daily_checklist(message, tasks)
+    await notify_employee(
+        message.bot, employee, f"Доброе утро 😊\nСмена отмечена: {store_name}.", message
+    )
+    await send_daily_checklist(message.bot, employee, tasks, message)
 
 
 async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
@@ -88,7 +97,7 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
         waiting_task = await get_waiting_proof_task(session, employee.id)
         if waiting_task is not None and waiting_task.proof_type == ProofType.COMMENT.value:
             await complete_task(session, waiting_task)
-            await message.reply("Спасибо! Задача закрыта ✅")
+            await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
             return True
 
         if not is_completion_phrase(text):
@@ -100,9 +109,12 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
 
         if len(open_tasks) > 1:
             titles = ", ".join(task.title for task in open_tasks)
-            await message.reply(
+            await notify_employee(
+                message.bot,
+                employee,
                 f"У вас несколько открытых задач: {titles}. "
-                "Отметьте нужную кнопкой в списке задач 🙂"
+                "Отметьте нужную кнопкой в списке задач 🙂",
+                message,
             )
             return True
 
@@ -110,9 +122,9 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
         proof_needed = await start_completion(session, task)
 
     if proof_needed:
-        await message.reply(PROOF_PROMPTS[proof_needed])
+        await notify_employee(message.bot, employee, PROOF_PROMPTS[proof_needed], message)
     else:
-        await message.reply("Готово, отмечено ✅")
+        await notify_employee(message.bot, employee, "Готово, отмечено ✅", message)
     return True
 
 
@@ -125,22 +137,28 @@ async def _try_handle_revenue_reply(message: Message, employee: Employee) -> boo
     async with get_session() as session:
         shift = await get_todays_shift(session, employee.id)
         if shift is None:
-            await message.reply(
-                "Сначала отметьте начало смены (напишите, что вы на месте)."
+            await notify_employee(
+                message.bot,
+                employee,
+                "Сначала отметьте начало смены (напишите, что вы на месте).",
+                message,
             )
             return True
 
         report = parse_revenue_message(text)
         if report is None:
-            await message.reply(
+            await notify_employee(
+                message.bot,
+                employee,
                 "Не разобрал сумму. Пришлите, пожалуйста, в таком виде:\n"
-                "Общая выручка: <сумма>\nНаличка: <сумма>\nБезнал: <сумма>"
+                "Общая выручка: <сумма>\nНаличка: <сумма>\nБезнал: <сумма>",
+                message,
             )
             return True
 
         await record_shift_revenue(session, employee.id, shift.store_id, report)
 
-    await message.reply("Спасибо, выручка записана 👍")
+    await notify_employee(message.bot, employee, "Спасибо, выручка записана 👍", message)
     return True
 
 
@@ -159,19 +177,24 @@ async def _try_handle_purchase_reply(message: Message, employee: Employee) -> bo
             return False
 
         if shift is None:
-            await message.reply(
-                "Сначала отметьте начало смены (напишите, что вы на месте)."
+            await notify_employee(
+                message.bot,
+                employee,
+                "Сначала отметьте начало смены (напишите, что вы на месте).",
+                message,
             )
             return True
 
         product = extract_product(text)
         if not product:
-            await message.reply("Что именно закончилось? Уточните название товара.")
+            await notify_employee(
+                message.bot, employee, "Что именно закончилось? Уточните название товара.", message
+            )
             return True
 
         await create_purchase_request(session, employee.id, shift.store_id, product)
 
-    await message.reply("Добавил в список закупки 👍")
+    await notify_employee(message.bot, employee, "Добавил в список закупки 👍", message)
     return True
 
 
@@ -187,7 +210,7 @@ async def _try_handle_question_reply(message: Message, employee: Employee) -> bo
         knowledge_base = await get_knowledge_base_text(session)
 
     answer = await answer_employee_question(text, knowledge_base)
-    await message.reply(answer)
+    await notify_employee(message.bot, employee, answer, message)
     return True
 
 

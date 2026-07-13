@@ -39,6 +39,14 @@ the 10 MVP steps.
 - `app/handlers/owner.py` — `/report` command for the owner to pull the
   daily report on demand (it's also sent automatically every day, see
   `DAILY_REPORT_HOUR` below).
+- `app/services/messaging.py` — routes confirmations/results (shift
+  confirmed, task done, revenue/purchase recorded, question answers) to the
+  employee's private chat rather than wherever they wrote from (usually a
+  group), per owner decision. Falls back to a group reply asking the
+  employee to open a DM with the bot once if the private message fails —
+  Telegram won't let a bot message someone who's never started a chat with
+  it. Clarifying questions (name, which store) stay as group replies for
+  exactly that reason.
 - `app/services/ai.py` — the AI Processing Layer. The only place that calls
   an LLM (Claude, via `ANTHROPIC_API_KEY`); everything else in this scaffold
   is deliberately keyword-based. Answers employee questions using
@@ -104,6 +112,16 @@ Without `ANTHROPIC_API_KEY` set, employee questions still get a polite
 
 The owner can also request the report on demand with `/report` (only
 responds to `OWNER_TELEGRAM_ID`).
+
+**Operational note:** each employee needs to open a private chat with the
+bot at least once (find it in Telegram, press Start) before it can send
+them confirmations privately — see `app/services/messaging.py`. Until they
+do, they'll get a one-time nudge in the group asking them to.
+
+Also, for the bot to see ordinary group messages at all (not just ones
+that mention it), it needs either group-admin status or Privacy Mode
+disabled via @BotFather → your bot → Bot Settings → Group Privacy → Turn
+off.
 
 ## Running tests
 

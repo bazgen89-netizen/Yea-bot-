@@ -1,16 +1,13 @@
-"""Routes employee-facing bot replies to their private chat instead of the
-group, per owner request: task/shift/revenue/purchase/question responses
-should be personal, not visible to the whole team.
+"""Routes all employee-facing bot replies (confirmations and clarifying
+questions alike) to the employee's private chat instead of the group, per
+owner request.
 
-Clarifying questions (onboarding name, store clarification) stay as group
-replies on purpose — a brand-new employee has never opened a private chat
-with the bot yet, and Telegram forbids a bot from messaging a user who
-hasn't started a conversation with it first. Attempting those privately
-would just fail for exactly the people who need them most.
-
-For everything else, if the private message fails (employee has never
-opened a DM with the bot, or blocked it), fall back to a group reply asking
-them to do that once — so nothing silently disappears.
+If the private message fails — the person has never opened a DM with the
+bot, or has blocked it — falls back to a group reply asking them to do
+that once, so nothing silently disappears. This is what lets onboarding
+(name, store clarification) go private too: a brand-new employee doesn't
+have a private chat yet, so the very first attempt falls back to the
+group automatically, same as anyone else who hasn't started one.
 """
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -25,6 +22,20 @@ NEEDS_PRIVATE_CHAT_HINT = (
 )
 
 
+async def send_private(
+    bot: Bot,
+    telegram_user_id: int,
+    name: str,
+    text: str,
+    fallback_message: Message,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    try:
+        await bot.send_message(telegram_user_id, text, reply_markup=reply_markup)
+    except TelegramAPIError:
+        await fallback_message.reply(NEEDS_PRIVATE_CHAT_HINT.format(name=name))
+
+
 async def notify_employee(
     bot: Bot,
     employee: Employee,
@@ -32,7 +43,4 @@ async def notify_employee(
     fallback_message: Message,
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
-    try:
-        await bot.send_message(employee.telegram_user_id, text, reply_markup=reply_markup)
-    except TelegramAPIError:
-        await fallback_message.reply(NEEDS_PRIVATE_CHAT_HINT.format(name=employee.name))
+    await send_private(bot, employee.telegram_user_id, employee.name, text, fallback_message, reply_markup)

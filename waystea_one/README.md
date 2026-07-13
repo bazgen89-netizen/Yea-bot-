@@ -39,14 +39,15 @@ the 10 MVP steps.
 - `app/handlers/owner.py` — `/report` command for the owner to pull the
   daily report on demand (it's also sent automatically every day, see
   `DAILY_REPORT_HOUR` below).
-- `app/services/messaging.py` — routes confirmations/results (shift
-  confirmed, task done, revenue/purchase recorded, question answers) to the
-  employee's private chat rather than wherever they wrote from (usually a
-  group), per owner decision. Falls back to a group reply asking the
+- `app/services/messaging.py` — routes every employee-facing reply
+  (confirmations and clarifying questions — name, which store — alike) to
+  the employee's private chat rather than wherever they wrote from (usually
+  a group), per owner decision. Falls back to a group reply asking the
   employee to open a DM with the bot once if the private message fails —
   Telegram won't let a bot message someone who's never started a chat with
-  it. Clarifying questions (name, which store) stay as group replies for
-  exactly that reason.
+  it. Multi-turn dialogs (name → store) are scoped per-user rather than
+  per-chat (`FSMStrategy.GLOBAL_USER` in `app/bot.py`) so a question asked
+  in the group can be answered in the private chat without losing track.
 - `app/services/ai.py` — the AI Processing Layer. The only place that calls
   an LLM (Claude, via `ANTHROPIC_API_KEY`); everything else in this scaffold
   is deliberately keyword-based. Answers employee questions using

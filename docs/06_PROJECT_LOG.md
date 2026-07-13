@@ -515,6 +515,43 @@ in `waystea_one/README.md`.
 
 ---
 
+## Decision 16
+
+Date: 2026-07-13
+
+Decision:
+
+Extended Decision 15's private-chat routing to clarifying questions too
+(name on first contact, which store) — not just confirmations. Also
+switched the FSM scoping from aiogram's default (per-chat) to
+`FSMStrategy.GLOBAL_USER` (per-user, across chats), and added a plain
+`/start` reply so opening a DM with the bot isn't silent.
+
+Reason:
+
+Found live while testing on Render: with per-chat FSM scoping, a question
+asked in the group and answered in the employee's private chat wouldn't
+have been recognized as the answer — aiogram would treat it as an
+unrelated new message in a different chat. GLOBAL_USER scoping fixes that
+generally, which then made it safe to route the remaining group-only
+messages (name, store clarification) through the same
+private-with-group-fallback pattern as everything else, since a failed
+private send still safely falls back to the group.
+
+Impact:
+
+`app/bot.py` now constructs `Dispatcher(..., fsm_strategy=FSMStrategy.GLOBAL_USER)`.
+`app/services/messaging.py` gained `send_private()` (works before an
+`Employee` row exists, using the raw Telegram user id + Telegram profile
+name) alongside the existing `notify_employee()`. `app/handlers/shift.py`'s
+onboarding and store-clarification prompts now go through these instead of
+`message.reply()`. `app/handlers/owner.py` gained a `/start` handler purely
+so pressing Start isn't silent — the important effect (unlocking private
+messaging) already happens on Telegram's side the moment the user sends
+anything to the bot in private, regardless of whether the bot replies.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

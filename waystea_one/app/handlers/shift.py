@@ -16,12 +16,13 @@ Flow:
 - Anything left over that looks like a question is answered from the
   company knowledge base via the AI Processing Layer (app/services/ai.py),
   as the final fallback in the chain.
-- Per owner decision, results/confirmations (shift confirmed + checklist,
-  task done, revenue/purchase recorded, question answers) go to the
-  employee's private chat, not the group — see app/services/messaging.py.
-  Clarifying questions (name, which store) stay as group replies on
-  purpose: a brand-new employee has no private chat with the bot yet, so a
-  DM to them would just fail.
+- Per owner decision, every employee-facing reply — including clarifying
+  questions (name, which store) — goes to the employee's private chat, not
+  the group; see app/services/messaging.py. If that fails (no private chat
+  opened yet), it falls back to a group nudge instead. Multi-turn dialogs
+  (name -> store) are scoped per-user, not per-chat (FSMStrategy.GLOBAL_USER
+  in app/bot.py), so the question can be asked in one chat and answered in
+  another without losing track.
 """
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -40,7 +41,7 @@ from app.services.identity import (
     record_shift_start,
 )
 from app.services.knowledge import get_knowledge_base_text
-from app.services.messaging import notify_employee
+from app.services.messaging import notify_employee, send_private
 from app.services.purchasing import (
     create_purchase_request,
     extract_product,
@@ -218,7 +219,13 @@ async def _try_handle_question_reply(message: Message, employee: Employee) -> bo
 async def receive_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
     if not name:
-        await message.reply("Не расслышал имя, напишите, пожалуйста, ещё раз 🙂")
+        await send_private(
+            message.bot,
+            message.from_user.id,
+            message.from_user.full_name,
+            "Не расслышал имя, напишите, пожалуйста, ещё раз 🙂",
+            message,
+        )
         return
 
     data = await state.get_data()
@@ -227,7 +234,9 @@ async def receive_name(message: Message, state: FSMContext) -> None:
 
     async with get_session() as session:
         employee = await create_employee(session, message.from_user.id, name)
-        await message.reply(f"Приятно познакомиться, {employee.name}! Записал вас.")
+        await notify_employee(
+            message.bot, employee, f"Приятно познакомиться, {employee.name}! Записал вас.", message
+        )
 
         if pending_text and is_shift_start_message(pending_text):
             stores = await list_store_options(session)
@@ -237,7 +246,9 @@ async def receive_name(message: Message, state: FSMContext) -> None:
                 await _confirm_shift(message, employee, store.id, store.name)
             else:
                 await state.set_state(ShiftClarification.awaiting_store)
-                await message.reply("В каком магазине вы сегодня работаете?")
+                await notify_employee(
+                    message.bot, employee, "В каком магазине вы сегодня работаете?", message
+                )
 
 
 @router.message(ShiftClarification.awaiting_store)
@@ -250,8 +261,11 @@ async def receive_store_clarification(message: Message, state: FSMContext) -> No
 
         if store is None:
             store_names = ", ".join(s.name for s in stores)
-            await message.reply(
-                f"Не понял, о каком магазине речь. Уточните, пожалуйста: {store_names}?"
+            await notify_employee(
+                message.bot,
+                employee,
+                f"Не понял, о каком магазине речь. Уточните, пожалуйста: {store_names}?",
+                message,
             )
             return
 
@@ -268,8 +282,12 @@ async def handle_text(message: Message, state: FSMContext) -> None:
         if employee is None:
             await state.update_data(pending_text=message.text)
             await state.set_state(Onboarding.awaiting_name)
-            await message.reply(
-                "Здравствуйте! Я вас ещё не знаю 🙂 Как вас зовут?"
+            await send_private(
+                message.bot,
+                message.from_user.id,
+                message.from_user.full_name,
+                "Здравствуйте! Я вас ещё не знаю 🙂 Как вас зовут?",
+                message,
             )
             return
 
@@ -294,7 +312,9 @@ async def handle_text(message: Message, state: FSMContext) -> None:
 
     if store is None:
         await state.set_state(ShiftClarification.awaiting_store)
-        await message.reply("В каком магазине вы сегодня работаете?")
+        await notify_employee(
+            message.bot, employee, "В каком магазине вы сегодня работаете?", message
+        )
         return
 
     async with get_session() as session:

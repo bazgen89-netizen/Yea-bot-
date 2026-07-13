@@ -2,6 +2,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.strategy import FSMStrategy
 
 from app.config import settings
 from app.handlers.owner import router as owner_router
@@ -9,7 +10,12 @@ from app.handlers.shift import router as shift_router
 from app.handlers.tasks import router as tasks_router
 
 bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dispatcher = Dispatcher(storage=MemoryStorage())
+# GLOBAL_USER (not the default PER-CHAT-CENTRIC strategy): our multi-turn
+# dialogs (onboarding name, store clarification) can now be asked in one
+# chat (group) and answered in another (the employee's private chat) once
+# they open a DM with the bot — see app/services/messaging.py. Per-chat
+# scoping would silently lose that state across chats.
+dispatcher = Dispatcher(storage=MemoryStorage(), fsm_strategy=FSMStrategy.GLOBAL_USER)
 dispatcher.include_router(tasks_router)
 # Command handlers (owner_router) must be included before shift_router's
 # generic F.text catch-all, or the catch-all would win first and "/report"

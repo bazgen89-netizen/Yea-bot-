@@ -58,6 +58,7 @@ async def create_daily_tasks_for_shift(
             title=template.title,
             requires_proof=template.requires_proof,
             proof_type=template.proof_type,
+            verification_criteria=template.verification_criteria,
             status=TaskStatus.CREATED.value,
         )
         session.add(task)

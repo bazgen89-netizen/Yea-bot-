@@ -552,6 +552,52 @@ anything to the bot in private, regardless of whether the bot replies.
 
 ---
 
+## Decision 17
+
+Date: 2026-07-13
+
+Decision:
+
+Added real photo verification instead of accepting any photo as task
+proof. `TaskTemplate`/`Task` gained `verification_criteria` (free text
+describing what a valid photo should show); `app/services/vision.py` sends
+the submitted photo plus that description to Claude's vision input and
+asks for a pass/fail judgment with a short explanation. On fail, the
+employee gets the explanation and is asked to resend — the task stays
+`WAITING_PROOF`, not completed. Also expanded the default checklist
+(`scripts/seed_task_templates.py`) from 4 generic items to 7 more specific
+ones per owner feedback ("very few tasks, too shallow"), and fixed the
+checklist buttons showing a ✅ prefix on every task before anything was
+done (confusing — looked like tasks were already complete) by relabeling
+them "Отметить: {title}".
+
+Reason:
+
+Direct owner request: bots that just accept any photo as "proof" aren't
+actually verifying anything. Owner also flagged the criteria as too vague
+initially (just "cleanliness") and asked for specifics: workspace
+cleanliness, clean cups/teapots, whether everything is laid out on the tea
+board (чабань), whether the tea board itself is clean — folded into the
+criteria text for the relevant checklist items. Owner said reference
+photos for calibration are coming later; not blocking on those now.
+
+Impact:
+
+New `app/services/vision.py::verify_photo` (same fail-open pattern as
+`ai.py` — no API key or an error means "accept the photo", not "block the
+employee"). `scripts/seed_task_templates.py` changed from insert-if-missing
+to upsert-by-title, so editing this list actually updates already-seeded
+rows (needed since `app/main.py` runs it on every boot) — and it now also
+deactivates global templates whose title dropped out of the list, so
+renamed/retired items don't linger as active tasks. Follow-up once
+reference photos arrive: attach them as additional images in the
+`verify_photo` call for a same-image comparison instead of relying on text
+description alone. Also still open: what specific KPI the owner wants
+tied to these checklist items beyond the existing MVP KPI list in
+09_KPI_AND_REVENUE_MODULE.md — asked for clarification, not yet built.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

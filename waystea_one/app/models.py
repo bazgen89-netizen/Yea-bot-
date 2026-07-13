@@ -174,6 +174,9 @@ class TaskTemplate(Base):
     title: Mapped[str] = mapped_column(String(200))
     requires_proof: Mapped[bool] = mapped_column(Boolean, default=False)
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
+    # Only meaningful when proof_type == PHOTO: what the AI vision check
+    # (app/services/vision.py) should look for before accepting the photo.
+    verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -197,6 +200,7 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(200))
     requires_proof: Mapped[bool] = mapped_column(Boolean, default=False)
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
+    verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=TaskStatus.CREATED.value)
 
     created_at: Mapped[datetime.datetime] = mapped_column(

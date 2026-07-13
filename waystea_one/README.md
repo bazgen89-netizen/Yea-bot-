@@ -48,13 +48,19 @@ the 10 MVP steps.
   it. Multi-turn dialogs (name → store) are scoped per-user rather than
   per-chat (`FSMStrategy.GLOBAL_USER` in `app/bot.py`) so a question asked
   in the group can be answered in the private chat without losing track.
-- `app/services/ai.py` — the AI Processing Layer. The only place that calls
-  an LLM (Claude, via `ANTHROPIC_API_KEY`); everything else in this scaffold
-  is deliberately keyword-based. Answers employee questions using
-  `app/services/knowledge.py` (the `KnowledgeEntry` table — Company Memory,
-  docs/03_AI_BRAIN.md §6.5) as context, and refuses to invent an answer if
-  the knowledge base doesn't cover it (docs/03_AI_BRAIN.md §13) or if the
-  API key isn't configured — see `FALLBACK_*` in that module.
+- `app/services/ai.py` — the AI Processing Layer. Calls an LLM (Claude, via
+  `ANTHROPIC_API_KEY`); everything else in this scaffold is deliberately
+  keyword-based. Answers employee questions using `app/services/knowledge.py`
+  (the `KnowledgeEntry` table — Company Memory, docs/03_AI_BRAIN.md §6.5) as
+  context, and refuses to invent an answer if the knowledge base doesn't
+  cover it (docs/03_AI_BRAIN.md §13) or if the API key isn't configured —
+  see `FALLBACK_*` in that module.
+- `app/services/vision.py` — the vision counterpart to `ai.py`. When a task
+  (`TaskTemplate.verification_criteria`) specifies what a valid photo should
+  show, submitted photos are checked against that description via Claude's
+  vision input instead of being accepted automatically. Same fail-open
+  behavior as `ai.py`: no API key, or the call erroring, means the photo is
+  accepted as before rather than blocking the employee on an AI outage.
 - `scripts/seed_knowledge_base.py` seeds two placeholder entries; replace/
   expand with real WAYSTEA instructions.
 

@@ -6,6 +6,7 @@ from app.models import Employee, ProofType, Task
 from app.services.identity import get_employee
 from app.services.messaging import notify_employee
 from app.services.tasks import complete_task, get_task, get_waiting_proof_task, start_completion
+from app.services.vision import verify_photo
 
 router = Router(name="tasks")
 
@@ -16,8 +17,10 @@ PROOF_PROMPTS = {
 
 
 def checklist_keyboard(tasks: list[Task]) -> InlineKeyboardMarkup:
+    # Plain action label, not a checkmark — a checkmark here would look like
+    # the task is already done before anyone's touched it.
     rows = [
-        [InlineKeyboardButton(text=f"✅ {task.title}", callback_data=f"task_done:{task.id}")]
+        [InlineKeyboardButton(text=f"Отметить: {task.title}", callback_data=f"task_done:{task.id}")]
         for task in tasks
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -68,5 +71,26 @@ async def on_photo_proof(message: Message) -> None:
         task = await get_waiting_proof_task(session, employee.id)
         if task is None or task.proof_type != ProofType.PHOTO.value:
             return
+        task_id, criteria = task.id, task.verification_criteria
+
+    # Verification (network call to the AI Processing Layer) happens with
+    # no DB session open, same reasoning as app/handlers/shift.py.
+    if criteria:
+        photo = message.photo[-1]
+        file = await message.bot.get_file(photo.file_id)
+        file_bytes = await message.bot.download_file(file.file_path)
+        result = await verify_photo(file_bytes.read(), criteria)
+        if not result.passed:
+            await notify_employee(
+                message.bot,
+                employee,
+                f"Похоже, на фото не то, что нужно 🙂 {result.comment}\n"
+                "Пришли, пожалуйста, ещё раз.",
+                message,
+            )
+            return
+
+    async with get_session() as session:
+        task = await get_task(session, task_id)
         await complete_task(session, task)
     await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)

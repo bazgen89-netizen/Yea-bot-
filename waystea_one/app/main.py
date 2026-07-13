@@ -11,6 +11,9 @@ from app.health import run_health_server
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
 from app.services.upsell import send_upsell_nudges
+from scripts.seed_knowledge_base import seed as seed_knowledge_base
+from scripts.seed_stores import seed as seed_stores
+from scripts.seed_task_templates import seed as seed_task_templates
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,6 +26,13 @@ async def send_daily_report() -> None:
 
 async def main() -> None:
     await init_models()
+    # Free hosting tiers (e.g. Render's free Web Service) often don't offer
+    # shell/one-off-job access to run `python -m scripts.seed_*` by hand, so
+    # run the (idempotent — see each script) seeders on every boot instead.
+    await seed_stores()
+    await seed_task_templates()
+    await seed_knowledge_base()
+
     await bot.delete_webhook(drop_pending_updates=True)
 
     scheduler = AsyncIOScheduler()

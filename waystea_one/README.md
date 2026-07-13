@@ -79,16 +79,24 @@ the 10 MVP steps.
   after ~15 minutes with no HTTP traffic and cold-starts on the next
   request; ping the health URL periodically (e.g. a free UptimeRobot
   monitor) if you need the bot to stay responsive without gaps.
+- **Seeding runs on every boot, not by hand.** Free Render Web Services also
+  don't include Shell/One-Off Job access, so there's no way to run
+  `python -m scripts.seed_stores` interactively after deploy. `app/main.py`
+  calls all three seeders itself on startup instead; they're written to be
+  safe to re-run (each checks for existing rows first).
 
 ## Running locally
 
 ```bash
 cp .env.example .env      # fill in BOT_TOKEN, OWNER_TELEGRAM_ID, and (optionally) ANTHROPIC_API_KEY
 docker compose up --build
-docker compose exec bot python -m scripts.seed_stores
-docker compose exec bot python -m scripts.seed_task_templates
-docker compose exec bot python -m scripts.seed_knowledge_base
 ```
+
+`app/main.py` runs all three `scripts/seed_*` seeders on every boot (they're
+idempotent — each checks for existing rows first), specifically so this
+works on hosts with no shell/one-off-job access (e.g. Render's free Web
+Service tier — see "Design choices" below). Run them by hand instead only
+if you need to, e.g. `docker compose exec bot python -m scripts.seed_stores`.
 
 Without `ANTHROPIC_API_KEY` set, employee questions still get a polite
 "I don't have that configured yet" reply instead of an error — see

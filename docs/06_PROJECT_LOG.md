@@ -450,6 +450,34 @@ infrastructure for the business.
 
 ---
 
+## Decision 14
+
+Date: 2026-07-13
+
+Decision:
+
+Moved the three `scripts/seed_*` seeders from "run by hand after deploy" to
+"run automatically on every boot", called from `app/main.py`. Render's free
+Web Service tier (Decision 13) has no Shell or One-Off Job access, so there
+was no way to run them interactively at all on that tier.
+
+Reason:
+
+Only way to seed stores/task templates/knowledge base on a host with no
+shell access. All three seeders already checked for existing rows before
+inserting (written that way from the start so they could be re-run safely),
+so calling them on every startup has no downside beyond a few extra no-op
+queries at boot.
+
+Impact:
+
+`app/main.py` now imports and awaits `seed_stores()`, `seed_task_templates()`,
+`seed_knowledge_base()` before starting the bot. The scripts are still
+runnable standalone (`python -m scripts.seed_stores`) for hosts that do have
+shell access.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

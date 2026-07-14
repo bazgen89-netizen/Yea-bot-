@@ -18,6 +18,7 @@ from app.models import (
     Task,
     TaskStatus,
 )
+from app.services.revenue import RevenueReport
 
 logger = logging.getLogger(__name__)
 
@@ -137,3 +138,23 @@ async def notify_owner_batch_progress(
         await bot.send_message(settings.owner_telegram_id, text)
     except Exception:
         logger.exception("Failed to notify owner about batch %s completion", batch_number)
+
+
+async def notify_owner_revenue_submitted(
+    bot, employee: Employee, store: Store | None, report: RevenueReport
+) -> None:
+    """Per owner decision: send the end-of-day revenue for a store to the
+    owner the moment it's submitted, not only rolled into the once-a-day
+    report.
+    """
+    store_name = store.name if store else "?"
+    text = (
+        f"💰 Выручка — {store_name} ({employee.name}):\n"
+        f"Общая выручка: {report.total}\n"
+        f"Наличка: {report.cash}\n"
+        f"Безнал: {report.non_cash}"
+    )
+    try:
+        await bot.send_message(settings.owner_telegram_id, text)
+    except Exception:
+        logger.exception("Failed to notify owner about revenue for store %s", store_name)

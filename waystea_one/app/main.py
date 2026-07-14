@@ -11,6 +11,7 @@ from app.health import run_health_server
 from app.services.music import send_music_nudges
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
+from app.services.revenue_reminders import send_revenue_reminders
 from app.services.tasks import sync_stale_tasks_to_templates
 from app.services.upsell import send_upsell_nudges
 from scripts.seed_knowledge_base import seed as seed_knowledge_base
@@ -66,6 +67,21 @@ async def main() -> None:
     scheduler.add_job(
         send_daily_report,
         CronTrigger(hour=settings.daily_report_hour, minute=settings.daily_report_minute),
+    )
+    # Owner decision: Гагарина/Черёмушки close earlier, so their revenue
+    # reminder goes out at 20:55; Рынок на Студёной closes later (21:55).
+    # Note: CronTrigger uses the scheduler's local timezone (the server's,
+    # unless APScheduler is configured otherwise) — adjust these hours if
+    # the server isn't running in the stores' local timezone.
+    scheduler.add_job(
+        send_revenue_reminders,
+        CronTrigger(hour=20, minute=55),
+        args=[bot, get_session, ["Гагарина", "Черёмушки"]],
+    )
+    scheduler.add_job(
+        send_revenue_reminders,
+        CronTrigger(hour=21, minute=55),
+        args=[bot, get_session, ["Рынок на Студёной"]],
     )
     scheduler.start()
 

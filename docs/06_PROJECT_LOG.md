@@ -1385,6 +1385,50 @@ notification. Full test suite (36) passes.
 
 ---
 
+## Decision 37
+
+Date: 2026-07-14
+
+Decision:
+
+Two additions around end-of-shift revenue:
+
+1. **Proactive per-store reminders.** New `app/services/revenue_reminders.py::send_revenue_reminders`,
+   scheduled as two `CronTrigger` jobs in `app/main.py`: 20:55 for
+   Гагарина and Черёмушки, 21:55 for Рынок на Студёной (it closes later).
+   Each finds whoever has a `ShiftLog` for that store today and hasn't
+   already submitted a `ShiftRevenue` row, and sends them the fixed
+   three-line format as a nudge. Skips anyone who already submitted.
+2. **Immediate owner notification on submission.** Previously revenue only
+   showed up in the once-a-day report; now
+   `app/services/reports.py::notify_owner_revenue_submitted` fires the
+   moment `_try_handle_revenue_reply` (`app/handlers/shift.py`) records a
+   report, sending the owner the store, employee, and the three figures
+   right away.
+
+Reason:
+
+Owner wants the day's revenue per store as it comes in, not just at
+report time, and wants employees actually prompted to send it rather than
+relying on them remembering — with the market's later closing time
+accounted for.
+
+Impact:
+
+Verified against a real local Postgres: a store group's reminder reaches
+only employees on shift there today who haven't yet submitted revenue
+(confirmed one already-submitted employee is skipped); submitting a
+report immediately produces an owner message with store/employee/figures.
+Full test suite (36) passes.
+
+Caveat: `CronTrigger` without an explicit timezone uses the scheduler's
+local timezone (the server's, likely UTC on Render unless configured
+otherwise) — if 20:55/21:55 land wrong in practice, it's this, not the
+logic, and the fix is passing a timezone to `CronTrigger` (or setting the
+container's `TZ`).
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

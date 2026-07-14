@@ -64,7 +64,7 @@ from app.services.purchasing import (
     is_purchase_request_message,
 )
 from app.services.question_detector import looks_like_question
-from app.services.reports import notify_owner_batch_progress
+from app.services.reports import notify_owner_batch_progress, notify_owner_revenue_submitted
 from app.services.revenue import (
     looks_like_revenue_message,
     parse_revenue_message,
@@ -240,8 +240,10 @@ async def _try_handle_revenue_reply(message: Message, employee: Employee) -> boo
             return True
 
         await record_shift_revenue(session, employee.id, shift.store_id, report)
+        store = await session.get(Store, shift.store_id)
 
     await notify_employee(message.bot, employee, "Спасибо, выручка записана 👍", message)
+    await notify_owner_revenue_submitted(message.bot, employee, store, report)
     return True
 
 

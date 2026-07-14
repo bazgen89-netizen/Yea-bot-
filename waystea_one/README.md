@@ -50,6 +50,14 @@ the 10 MVP steps.
 - `app/services/revenue.py` — parses the fixed three-line end-of-shift
   revenue report (docs/09_KPI_AND_REVENUE_MODULE.md §3.1); rejects and asks
   for clarification if a line is missing or cash + non-cash ≠ total.
+  Submitting one notifies the owner immediately, per store
+  (`app/services/reports.py::notify_owner_revenue_submitted`), not only
+  rolled into the once-a-day report.
+- `app/services/revenue_reminders.py` — owner decision: proactively remind
+  whoever's on shift today at a store to send the revenue report, at a
+  per-store-group time — 20:55 for Гагарина/Черёмушки, 21:55 for Рынок на
+  Студёной (it closes later). Two `CronTrigger` jobs in `app/main.py`, one
+  per group; skips anyone who already submitted today's figures.
 - `app/services/upsell.py` — keyword-detects upsell mentions (tasting,
   pairing, extra tea) and sends one proactive nudge per employee per shift
   if nothing's been logged ~2 hours in.

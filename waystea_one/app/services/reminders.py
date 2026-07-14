@@ -25,14 +25,14 @@ async def check_reminders(bot, session_factory) -> None:
         result = await session.execute(
             select(Task, Employee)
             .join(Employee, Task.employee_id == Employee.id)
-            .where(Task.status.in_(OPEN_STATUSES))
+            .where(Task.status.in_(OPEN_STATUSES), Task.sent_at.is_not(None))
         )
         rows = result.all()
 
         for task, employee in rows:
-            created_at = task.created_at
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+            sent_at = task.sent_at
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=datetime.timezone.utc)
 
             if task.second_reminder_sent_at is not None and task.owner_notified_at is None:
                 await _notify_owner(bot, task, employee)
@@ -40,7 +40,7 @@ async def check_reminders(bot, session_factory) -> None:
                 await session.commit()
                 continue
 
-            if created_at <= second_cutoff and task.second_reminder_sent_at is None:
+            if sent_at <= second_cutoff and task.second_reminder_sent_at is None:
                 await _send_reminder(
                     bot,
                     employee.telegram_user_id,
@@ -50,7 +50,7 @@ async def check_reminders(bot, session_factory) -> None:
                 await session.commit()
                 continue
 
-            if created_at <= first_cutoff and task.first_reminder_sent_at is None:
+            if sent_at <= first_cutoff and task.first_reminder_sent_at is None:
                 await _send_reminder(
                     bot,
                     employee.telegram_user_id,
@@ -73,7 +73,7 @@ async def _notify_owner(bot, task: Task, employee: Employee) -> None:
         "⚠️ Сотрудник не реагирует на напоминания.\n"
         f"Сотрудник: {employee.name}\n"
         f"Задача: {task.title}\n"
-        f"Создана: {task.created_at.strftime('%Y-%m-%d %H:%M')}"
+        f"Показана сотруднику: {task.sent_at.strftime('%Y-%m-%d %H:%M')}"
     )
     try:
         await bot.send_message(settings.owner_telegram_id, text)

@@ -37,7 +37,7 @@ from aiogram.types import Message
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
 from app.models import Employee, ProofType
-from app.services.ai import answer_employee_question
+from app.services.ai import answer_employee_question, chat_reply
 from app.services.identity import (
     create_employee,
     get_employee,
@@ -61,6 +61,7 @@ from app.services.revenue import (
 )
 from app.services.shift_detector import is_shift_start_message
 from app.services.tasks import (
+    advance_to_next_batch,
     complete_task,
     create_daily_tasks_for_shift,
     get_waiting_proof_task,
@@ -81,16 +82,55 @@ class ShiftClarification(StatesGroup):
     awaiting_store = State()
 
 
+class MoodCheck(StatesGroup):
+    """Per owner decision: greet + ask how they're doing, have one short
+    exchange, and only *then* hand over the first batch of tasks — not all
+    of them at once. See app/handlers/tasks.py for batch delivery.
+    """
+
+    awaiting_response = State()
+
+
 async def _confirm_shift(
-    message: Message, employee: Employee, store_id: int, store_name: str
+    message: Message, state: FSMContext, employee: Employee, store_id: int, store_name: str
 ) -> None:
+    await notify_employee(
+        message.bot,
+        employee,
+        f"Доброе утро, {employee.name}! 😊\nСмена отмечена: {store_name}.\n"
+        "Хорошего дня! Как настроение сегодня?",
+        message,
+    )
+    await state.update_data(mood_check_store_id=store_id)
+    await state.set_state(MoodCheck.awaiting_response)
+
+
+@router.message(MoodCheck.awaiting_response)
+async def receive_mood_response(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    store_id = data.get("mood_check_store_id")
+    await state.clear()
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+
+    reply = await chat_reply(message.text or "")
+    await notify_employee(message.bot, employee, reply, message)
+
     async with get_session() as session:
         tasks = await create_daily_tasks_for_shift(session, employee.id, store_id)
-
-    await notify_employee(
-        message.bot, employee, f"Доброе утро 😊\nСмена отмечена: {store_name}.", message
-    )
     await send_daily_checklist(message.bot, employee, tasks, message)
+
+
+async def _reveal_next_batch_if_ready(message: Message, employee: Employee) -> None:
+    """After any task completion, check whether the currently-visible batch
+    is now fully done — if so, send the next batch (3-5 tasks per owner
+    decision), instead of ever showing all tasks at once.
+    """
+    async with get_session() as session:
+        next_tasks = await advance_to_next_batch(session, employee.id)
+    if next_tasks:
+        await send_daily_checklist(message.bot, employee, next_tasks, message)
 
 
 async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
@@ -104,6 +144,7 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
         if waiting_task is not None and waiting_task.proof_type == ProofType.COMMENT.value:
             await complete_task(session, waiting_task)
             await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
+            await _reveal_next_batch_if_ready(message, employee)
             return True
 
         if not is_completion_phrase(text):
@@ -131,6 +172,7 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
         await notify_employee(message.bot, employee, PROOF_PROMPTS[proof_needed], message)
     else:
         await notify_employee(message.bot, employee, "Готово, отмечено ✅", message)
+        await _reveal_next_batch_if_ready(message, employee)
     return True
 
 
@@ -250,7 +292,7 @@ async def receive_name(message: Message, state: FSMContext) -> None:
         if store is not None:
             async with get_session() as session:
                 await record_shift_start(session, employee.id, store.id)
-            await _confirm_shift(message, employee, store.id, store.name)
+            await _confirm_shift(message, state, employee, store.id, store.name)
         else:
             await state.set_state(ShiftClarification.awaiting_store)
             await notify_employee(
@@ -280,7 +322,7 @@ async def receive_store_clarification(message: Message, state: FSMContext) -> No
     await state.clear()
     async with get_session() as session:
         await record_shift_start(session, employee.id, store.id)
-    await _confirm_shift(message, employee, store.id, store.name)
+    await _confirm_shift(message, state, employee, store.id, store.name)
 
 
 @router.message(F.text)
@@ -328,4 +370,4 @@ async def handle_text(message: Message, state: FSMContext) -> None:
 
     async with get_session() as session:
         await record_shift_start(session, employee.id, store.id)
-    await _confirm_shift(message, employee, store.id, store.name)
+    await _confirm_shift(message, state, employee, store.id, store.name)

@@ -746,6 +746,47 @@ if the owner keeps hitting phrasing those don't recognize.
 
 ---
 
+## Decision 22
+
+Date: 2026-07-14
+
+Decision:
+
+Reworked the shift-start-to-task flow per owner's specific spec: (1) after
+the store is confirmed, greet the employee by name, wish them a good day,
+and ask how they're doing; (2) their reply gets one short, warm
+AI-generated acknowledgement (not scripted, not a new question) before
+anything else; (3) only then does the first batch of tasks go out — 3
+simplest first, then batches of ~3-5 as each batch is fully completed, not
+all 22 at once. Reminders (already per-task, not per-block — confirmed
+this was already correct) now count from when a task's batch was actually
+revealed (`sent_at`), not when the Task row was created in the DB.
+
+Reason:
+
+Direct owner spec, in response to the "bot understands poorly" complaint —
+this is the conversational/pacing half of that fix (Decision 21 was the
+understanding half).
+
+Impact:
+
+New `Task.batch`/`sent_at` and `TaskTemplate.batch` columns (added to
+`app/db.py`'s manual migration list too — tested against a simulated old
+schema before pushing, same as Decision 20). `scripts/seed_task_templates.py`
+now assigns each of the 22 templates a batch (6 batches: 3, 4, 4, 5, 5, 1).
+`create_daily_tasks_for_shift` still creates all 22 Task rows up front
+(so completion/reminder bookkeeping has somewhere to live) but only
+stamps `sent_at` on batch 1; `advance_to_next_batch` reveals the next one
+once every currently-visible task is COMPLETED. New `MoodCheck` FSM state
+and `app/services/ai.py::chat_reply` (same fail-open contract as the rest
+of the AI Processing Layer — no API key means a generic friendly line
+instead of silence). Verified end-to-end against a real local Postgres
+before pushing: batch-1-only on creation, no early advance while a task's
+still open, batch-2 reveal on completion, all 22 rows present with only
+the sent ones counted as "open."
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

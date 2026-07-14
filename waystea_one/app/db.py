@@ -19,6 +19,9 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 MANUAL_COLUMN_MIGRATIONS = [
     "ALTER TABLE task_templates ADD COLUMN IF NOT EXISTS verification_criteria VARCHAR(500)",
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_criteria VARCHAR(500)",
+    "ALTER TABLE task_templates ADD COLUMN IF NOT EXISTS batch INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS batch INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ",
 ]
 
 

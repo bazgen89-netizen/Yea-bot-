@@ -177,6 +177,10 @@ class TaskTemplate(Base):
     # Only meaningful when proof_type == PHOTO: what the AI vision check
     # (app/services/vision.py) should look for before accepting the photo.
     verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Tasks are revealed a batch at a time (docs decision: 3 simplest first,
+    # then batches of ~3-5), not all at once — lower batch = shown sooner.
+    # See app/services/tasks.py::advance_to_next_batch.
+    batch: Mapped[int] = mapped_column(default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -202,9 +206,18 @@ class Task(Base):
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
     verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=TaskStatus.CREATED.value)
+    batch: Mapped[int] = mapped_column(default=1)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # NULL until this task's batch has actually been revealed to the
+    # employee. Reminders (app/services/reminders.py) count the 30/60-minute
+    # window from here, not from created_at — a task sitting unseen in a
+    # later batch shouldn't start "aging" before the employee even knows
+    # about it.
+    sent_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     completed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

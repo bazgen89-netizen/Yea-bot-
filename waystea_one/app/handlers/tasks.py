@@ -5,7 +5,13 @@ from app.db import get_session
 from app.models import Employee, ProofType, Task
 from app.services.identity import get_employee
 from app.services.messaging import notify_employee
-from app.services.tasks import complete_task, get_task, get_waiting_proof_task, start_completion
+from app.services.tasks import (
+    advance_to_next_batch,
+    complete_task,
+    get_task,
+    get_waiting_proof_task,
+    start_completion,
+)
 from app.services.vision import verify_photo
 
 router = Router(name="tasks")
@@ -41,6 +47,13 @@ async def send_daily_checklist(
     )
 
 
+async def _reveal_next_batch_if_ready(bot, employee: Employee, fallback_message: Message) -> None:
+    async with get_session() as session:
+        next_tasks = await advance_to_next_batch(session, employee.id)
+    if next_tasks:
+        await send_daily_checklist(bot, employee, next_tasks, fallback_message)
+
+
 @router.callback_query(F.data.startswith("task_done:"))
 async def on_task_done(callback: CallbackQuery) -> None:
     # Reply in the same chat as the checklist itself (private, since
@@ -54,12 +67,15 @@ async def on_task_done(callback: CallbackQuery) -> None:
             return
 
         proof_needed = await start_completion(session, task)
+        employee = await session.get(Employee, task.employee_id)
 
     if proof_needed:
         await callback.message.answer(PROOF_PROMPTS[proof_needed])
         await callback.answer()
-    else:
-        await callback.answer("Готово, отмечено ✅")
+        return
+
+    await callback.answer("Готово, отмечено ✅")
+    await _reveal_next_batch_if_ready(callback.bot, employee, callback.message)
 
 
 @router.message(F.photo)
@@ -94,3 +110,4 @@ async def on_photo_proof(message: Message) -> None:
         task = await get_task(session, task_id)
         await complete_task(session, task)
     await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
+    await _reveal_next_batch_if_ready(message.bot, employee, message)

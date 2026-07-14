@@ -52,3 +52,41 @@ async def answer_employee_question(question: str, knowledge_base: str) -> str:
     except Exception:
         logger.exception("AI Processing Layer call failed")
         return FALLBACK_ERROR
+
+
+CHAT_SYSTEM_PROMPT = (
+    "Ты — WAYSTEA ONE, AI-менеджер операций чайных магазинов WAYSTEA. "
+    "Сотрудник только что ответил на вопрос о своём настроении/делах в "
+    "начале смены. Коротко (1-2 предложения), тепло и по-человечески "
+    "отреагируй на его ответ — как хороший менеджер, который правда "
+    "интересуется, а не для галочки. Не задавай новых вопросов и не "
+    "переходи к рабочим задачам — просто поддержи разговор одной репликой."
+)
+
+CHAT_FALLBACK = "Здорово! 😊 Ну что, тогда приступим потихоньку."
+
+
+async def chat_reply(employee_message: str) -> str:
+    """One short, warm acknowledgement of the employee's mood/small-talk
+    reply — used once, right after the morning greeting and before task
+    assignment. Not knowledge-base bound like answer_employee_question;
+    this is just conversational, so an unconfigured/erroring AI layer
+    falls back to a generic friendly line rather than going silent.
+    """
+    if not settings.anthropic_api_key:
+        return CHAT_FALLBACK
+
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        response = await client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=150,
+            system=CHAT_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": employee_message}],
+        )
+        return response.content[0].text
+    except Exception:
+        logger.exception("AI chat reply failed")
+        return CHAT_FALLBACK

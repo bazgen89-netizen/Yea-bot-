@@ -15,11 +15,16 @@ the 10 MVP steps.
 - `app/services/store_matcher.py` — resolves a store name from free-form text.
 - `app/services/shift_detector.py` — recognizes "on site" shift-start phrasing.
 - `app/services/identity.py` — employee/shift persistence.
-- `app/services/tasks.py` — creates today's tasks from active templates when
-  a shift starts, and handles completion (with or without photo/comment proof).
+- `app/services/tasks.py` — creates every task for the day up front, but
+  only reveals them a `batch` at a time (per owner decision: 3 simplest
+  first, then batches of ~3-5) via `sent_at`; `advance_to_next_batch()`
+  reveals the next batch once the current one is fully completed. Also
+  handles completion (with or without photo/comment proof).
 - `app/services/reminders.py` — polled by APScheduler (`app/main.py`); sends
   the 30/60-minute reminders and escalates to the owner if both are ignored
-  (docs/02_OPERATION_SYSTEM.md §10).
+  (docs/02_OPERATION_SYSTEM.md §10). Counts from `Task.sent_at` (when the
+  employee actually saw it), not `created_at` — a task sitting in a later,
+  not-yet-revealed batch shouldn't start "aging" before it's shown.
 - `app/services/purchasing.py` — turns "закончился X" style messages into
   `PurchaseRequest` rows (keyword heuristic, not real NLU — see the module
   docstring for when to graduate to the AI Processing Layer).
@@ -34,8 +39,15 @@ the 10 MVP steps.
 - `app/handlers/shift.py` — the shift conversation flow, and also where
   task replies, purchase requests, revenue reports and upsell mentions are
   routed from, since aiogram sends a given text message to a single handler
-  (see the module docstring for the exact priority order).
-- `app/handlers/tasks.py` — task checklist buttons + photo proof.
+  (see the module docstring for the exact priority order). Confirming a
+  shift no longer goes straight to the checklist — it greets the employee
+  by name and asks how they're doing (`MoodCheck` state); their reply gets
+  one short AI-generated acknowledgement (`app/services/ai.py::chat_reply`)
+  before the first batch of tasks is sent.
+- `app/handlers/tasks.py` — task checklist buttons + photo proof. After any
+  completion, checks whether the current batch is now fully done and, if
+  so, sends the next one (`_reveal_next_batch_if_ready` in both this file
+  and `shift.py`, since completion can happen via button or via text).
 - `app/handlers/owner.py` — `/report` command for the owner to pull the
   daily report on demand (it's also sent automatically every day, see
   `DAILY_REPORT_HOUR` below).

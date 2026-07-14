@@ -5,6 +5,11 @@ These are still placeholders reflecting the examples already in the docs —
 the owner should review and adjust wording/criteria for what actually
 matters at each store.
 
+Tasks are revealed a `batch` at a time (owner decision: 3 simplest first,
+then batches of ~3-5) rather than all 22 at once — see
+app/services/tasks.py::advance_to_next_batch. Lower batch number = shown
+sooner; order within a batch doesn't matter.
+
 Upserts by title: existing rows get their fields updated (not just skipped)
 so edits to this list take effect even though app/main.py runs this seeder
 on every boot rather than once.
@@ -20,20 +25,104 @@ from app.db import get_session, init_models
 from app.models import ProofType, TaskTemplate
 
 TEMPLATES = [
+    # Batch 1 — the 3 simplest, quick presence/on-off checks.
     {
-        "title": "Проверить рабочее место",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-        "verification_criteria": (
-            "Рабочее место чистое и убранное: полы помыты, стойка протёрта "
-            "от пыли, поверхности чистые, нет мусора, разводов, разлитой "
-            "жидкости или посторонних предметов не по месту."
-        ),
+        "title": "Включить вывеску и освещение",
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "batch": 1,
     },
     {
         "title": "Проверить наличие чая",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
+        "batch": 1,
+    },
+    {
+        "title": "Проверить наличие воды для чая",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 1,
+    },
+    # Batch 2 — consumables.
+    {
+        "title": "Проверить наличие молока, сиропов и сока",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 2,
+    },
+    {
+        "title": "Проверить остаток одноразовой посуды",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 2,
+    },
+    {
+        "title": "Проверить наличие упаковки для отпуска чая",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 2,
+    },
+    {
+        "title": "Проверить наличие салфеток и бумажных полотенец",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 2,
+    },
+    # Batch 3 — cash/accounting.
+    {
+        "title": "Проверить кассу/POS",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 3,
+    },
+    {
+        "title": "Проверить наличие мелких купюр и монет для сдачи",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 3,
+    },
+    {
+        "title": "Проверить чековую ленту в кассе",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 3,
+    },
+    {
+        "title": "Проверить, что банки с чаем подписаны и закрыты",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "verification_criteria": (
+            "На всех банках с чаем есть подписи/этикетки с названием, "
+            "крышки плотно закрыты."
+        ),
+        "batch": 3,
+    },
+    # Batch 4 — equipment.
+    {
+        "title": "Проверить лампы освещения",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 4,
+    },
+    {
+        "title": "Проверить весы (чистота и калибровка)",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "verification_criteria": "Весы чистые, без остатков чая, пыли и разводов на платформе.",
+        "batch": 4,
+    },
+    {
+        "title": "Проверить кулер/бойлер (температура воды)",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 4,
+    },
+    {
+        "title": "Проверить вентиляцию/кондиционер",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 4,
     },
     {
         "title": "Подготовить оборудование",
@@ -43,6 +132,19 @@ TEMPLATES = [
             "Оборудование (чайники/кофемашина/техника) включено, чистое и "
             "готово к работе."
         ),
+        "batch": 4,
+    },
+    # Batch 5 — deeper cleaning, takes longer.
+    {
+        "title": "Проверить рабочее место",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "verification_criteria": (
+            "Рабочее место чистое и убранное: полы помыты, стойка протёрта "
+            "от пыли, поверхности чистые, нет мусора, разводов, разлитой "
+            "жидкости или посторонних предметов не по месту."
+        ),
+        "batch": 5,
     },
     {
         "title": "Проверить чистоту витрины и зала",
@@ -53,6 +155,14 @@ TEMPLATES = [
             "расставлен; в зале чисто и убрано, нет хаотично разбросанных "
             "вещей."
         ),
+        "batch": 5,
+    },
+    {
+        "title": "Протереть пыль на витрине и полках",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "verification_criteria": "На витрине и полках нет пыли, поверхности чистые.",
+        "batch": 5,
     },
     {
         "title": "Проверить чистые чашки и чайники",
@@ -63,6 +173,7 @@ TEMPLATES = [
             "жирных пятен, сколов и трещин. Расставлены аккуратно, не "
             "навалены друг на друга."
         ),
+        "batch": 5,
     },
     {
         "title": "Проверить чайную доску",
@@ -73,92 +184,9 @@ TEMPLATES = [
             "чайного налёта. Все нужные для церемонии предметы аккуратно "
             "разложены на своих местах, ничего лишнего не валяется."
         ),
+        "batch": 5,
     },
-    {
-        "title": "Проверить наличие воды для чая",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    # Расходники
-    {
-        "title": "Проверить наличие молока, сиропов и сока",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить остаток одноразовой посуды",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить наличие упаковки для отпуска чая",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить наличие салфеток и бумажных полотенец",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    # Касса и учёт
-    {
-        "title": "Проверить кассу/POS",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить наличие мелких купюр и монет для сдачи",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить чековую ленту в кассе",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить, что банки с чаем подписаны и закрыты",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-        "verification_criteria": (
-            "На всех банках с чаем есть подписи/этикетки с названием, "
-            "крышки плотно закрыты."
-        ),
-    },
-    # Оборудование
-    {
-        "title": "Включить вывеску и освещение",
-        "requires_proof": False,
-        "proof_type": ProofType.NONE.value,
-    },
-    {
-        "title": "Проверить лампы освещения",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить весы (чистота и калибровка)",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-        "verification_criteria": "Весы чистые, без остатков чая, пыли и разводов на платформе.",
-    },
-    {
-        "title": "Проверить кулер/бойлер (температура воды)",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    {
-        "title": "Проверить вентиляцию/кондиционер",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-    },
-    # Витрина
-    {
-        "title": "Протереть пыль на витрине и полках",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-        "verification_criteria": "На витрине и полках нет пыли, поверхности чистые.",
-    },
+    # Batch 6 — leftover.
     {
         "title": "Проверить посуду для продажи",
         "requires_proof": True,
@@ -167,6 +195,7 @@ TEMPLATES = [
             "Посуда, выставленная на продажу, чистая, целая, без сколов и "
             "трещин, аккуратно расставлена."
         ),
+        "batch": 6,
     },
 ]
 

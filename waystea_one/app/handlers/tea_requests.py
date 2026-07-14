@@ -1,8 +1,9 @@
-"""Owner request: a dedicated "какой чай привезти" chat/topic where every
-message IS a tea-restock request — no trigger-phrase detection needed
-(unlike app/services/purchasing.py), since the whole point of writing here
-is "bring this tea". The store is inferred from whichever store the sender
-is on shift at today (ShiftLog), not from the message text.
+"""Owner request: a dedicated "какой чай привезти" chat/topic. A message
+there is treated as a tea-restock request only if it contains at least one
+4- or 8-digit product article code (e.g. "3005 тг", "6242 9978 2023 г.") —
+not any text, since the topic can also carry casual chatter that isn't an
+order list. The store is inferred from whichever store the sender is on
+shift at today (ShiftLog), not from the message text.
 
 Configured via TEA_REQUEST_CHAT_ID (required) and TEA_REQUEST_THREAD_ID
 (only if it's a forum topic inside an existing group rather than its own
@@ -11,6 +12,8 @@ set. Registered in app/bot.py before shift.py's generic F.text catch-all,
 since a chat/thread match here should never fall through to shift-start/
 task-reply/etc. detection meant for the main work chat.
 """
+import re
+
 from aiogram import Router
 from aiogram.types import Message
 
@@ -22,22 +25,26 @@ from app.services.purchasing import create_purchase_request
 
 router = Router(name="tea_requests")
 
+# Article codes are exactly 4 or 8 digits, not any digit run — e.g. "3005"
+# or "6242"/"9978" (a following "2023 г." year is 4 digits too but harmless
+# to also match, since the whole message is what gets recorded anyway).
+_ARTICLE_CODE_PATTERN = re.compile(r"(?<!\d)\d{4}(?!\d)|(?<!\d)\d{8}(?!\d)")
+
 
 def _is_tea_request_message(message: Message) -> bool:
     if settings.tea_request_chat_id is None:
         return False
     if message.chat.id != settings.tea_request_chat_id:
         return False
-    if settings.tea_request_thread_id is None:
-        return True
-    return message.message_thread_id == settings.tea_request_thread_id
+    if settings.tea_request_thread_id is not None:
+        if message.message_thread_id != settings.tea_request_thread_id:
+            return False
+    return _ARTICLE_CODE_PATTERN.search(message.text or "") is not None
 
 
 @router.message(_is_tea_request_message)
 async def on_tea_request(message: Message) -> None:
     product = (message.text or "").strip()
-    if not product:
-        return
 
     async with get_session() as session:
         employee = await get_employee(session, message.from_user.id)

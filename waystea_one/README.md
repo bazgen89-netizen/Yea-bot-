@@ -38,11 +38,12 @@ the 10 MVP steps.
   through `app/handlers/tea_requests.py` instead (see below), not this
   module.
 - `app/handlers/tea_requests.py` — a dedicated "какой чай привезти"
-  chat/topic (owner decision): every message there is treated as a tea
-  restock request outright, no trigger-phrase detection needed, since
-  writing there already means "bring this". The store comes from
-  whichever store the sender is on shift at today, not from the message
-  text. Configured via `TEA_REQUEST_CHAT_ID`/`TEA_REQUEST_THREAD_ID` (see
+  chat/topic (owner decision): a message there is a tea restock request
+  only if it contains a 4- or 8-digit product article code (e.g. "3005
+  тг", "6242 9978 2023 г.") — not any text, since the topic can also carry
+  casual chatter that isn't an order list. The store comes from whichever
+  store the sender is on shift at today, not from the message text.
+  Configured via `TEA_REQUEST_CHAT_ID`/`TEA_REQUEST_THREAD_ID` (see
   `.env.example`); a no-op until `TEA_REQUEST_CHAT_ID` is set. Registered
   in `app/bot.py` before `shift.py`'s generic catch-all, same reasoning as
   `owner_router`.

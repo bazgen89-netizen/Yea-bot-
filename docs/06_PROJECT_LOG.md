@@ -1231,6 +1231,48 @@ still works via the dedicated topic).
 
 ---
 
+## Decision 33
+
+Date: 2026-07-14
+
+Decision:
+
+The tea-request topic (`app/handlers/tea_requests.py`, Decision 30) no
+longer treats every message as a request. It now requires the message to
+contain at least one 4- or 8-digit product article code (`\b\d{4}\b` or
+`\b\d{8}\b`, matched via `(?<!\d)\d{4}(?!\d)|(?<!\d)\d{8}(?!\d)` so a
+longer/shorter digit run doesn't accidentally qualify) — matching the
+owner's actual order-list format, e.g.:
+
+```
+В Черемушки нужен чай:
+3005 тг
+3101 дхп
+...
+6242 9978 2023 г
+```
+
+Without a matching code, the message is left alone (falls through
+untouched, same as before this topic existed).
+
+Reason:
+
+The topic can carry casual chatter too, not only order lists — treating
+literally every message as a purchase request would create bogus
+`PurchaseRequest` rows for things like "привет всем".
+
+Impact:
+
+Verified against a real local Postgres with the owner's own example
+message (multi-line list mixing 4-digit codes and an 8-digit one):
+creates exactly one `PurchaseRequest` scoped to the sender's today-shift
+store, with the whole message as the product text; a casual message with
+no digit codes in the same topic produces no request and no reply. New
+unit tests for the code-length boundary (3/5-digit runs don't count,
+4/8-digit do). Full test suite (36) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

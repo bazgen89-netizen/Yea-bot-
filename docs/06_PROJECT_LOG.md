@@ -1353,6 +1353,38 @@ still passes.
 
 ---
 
+## Decision 36
+
+Date: 2026-07-14
+
+Decision:
+
+Added `Task.proof_comment` — the comment an employee left when closing a
+COMMENT-proof task (or a photo's caption, for PHOTO-proof) is now actually
+saved instead of being discarded the moment the task is marked done.
+`complete_task(session, task, proof_comment=...)` takes the text; both
+call sites (`_try_handle_task_reply` in `handlers/shift.py` for text
+replies, `on_photo_proof` in `handlers/tasks.py` for photo captions) pass
+it through. `notify_owner_batch_progress` now shows it next to each task
+title (`- Проверить наличие чая: Чай в наличии, всё ок`) instead of just
+the bare title.
+
+Reason:
+
+Owner got a batch-5 completion report with task titles only, no comments
+— but the whole point of comment-proof tasks (per the very detailed
+criteria requested throughout this project) is to see *what the employee
+actually said*, not just that they tapped a button.
+
+Impact:
+
+New `proof_comment` column (manual migration in `app/db.py`, same pattern
+as every other schema change). Verified against a real local Postgres: a
+completed batch with comments now renders each one inline in the owner
+notification. Full test suite (36) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

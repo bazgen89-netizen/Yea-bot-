@@ -177,7 +177,7 @@ async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:
     async with get_session() as session:
         waiting_task = await get_waiting_proof_task(session, employee.id)
         if waiting_task is not None and waiting_task.proof_type == ProofType.COMMENT.value:
-            await complete_task(session, waiting_task)
+            await complete_task(session, waiting_task, proof_comment=text)
             await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
             await _reveal_next_batch_if_ready(message, employee)
             return True

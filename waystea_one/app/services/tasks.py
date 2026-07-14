@@ -254,7 +254,11 @@ async def start_completion(session: AsyncSession, task: Task) -> str:
     return task.proof_type
 
 
-async def complete_task(session: AsyncSession, task: Task) -> None:
+async def complete_task(
+    session: AsyncSession, task: Task, proof_comment: str | None = None
+) -> None:
     task.status = TaskStatus.COMPLETED.value
     task.completed_at = datetime.datetime.now(datetime.timezone.utc)
+    if proof_comment:
+        task.proof_comment = proof_comment
     await session.commit()

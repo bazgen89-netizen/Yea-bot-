@@ -237,6 +237,10 @@ class Task(Base):
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
     verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=TaskStatus.CREATED.value)
+    # The comment an employee left when closing a COMMENT-proof task — shown
+    # to the owner alongside the task title (app/services/reports.py), not
+    # just discarded once the task is marked done.
+    proof_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     batch: Mapped[int] = mapped_column(default=1)
 
     created_at: Mapped[datetime.datetime] = mapped_column(

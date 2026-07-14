@@ -26,6 +26,7 @@ MANUAL_COLUMN_MIGRATIONS = [
     "ALTER TABLE shift_logs ADD COLUMN IF NOT EXISTS last_music_nudge_at TIMESTAMPTZ",
     "ALTER TABLE task_templates ADD COLUMN IF NOT EXISTS description VARCHAR(500)",
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description VARCHAR(500)",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS proof_comment VARCHAR(500)",
 ]
 
 

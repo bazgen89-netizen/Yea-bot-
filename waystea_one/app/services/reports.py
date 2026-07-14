@@ -125,7 +125,10 @@ async def notify_owner_batch_progress(
 
     batch_number = completed_batch[0].batch
     store_name = store.name if store else "?"
-    titles = "\n".join(f"  - {task.title}" for task in completed_batch)
+    titles = "\n".join(
+        f"  - {task.title}" + (f": {task.proof_comment}" if task.proof_comment else "")
+        for task in completed_batch
+    )
     text = (
         f"✅ {employee.name} ({store_name}): закрыт блок задач {batch_number}\n"
         f"{titles}"

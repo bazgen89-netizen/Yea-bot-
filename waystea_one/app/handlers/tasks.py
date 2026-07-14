@@ -116,6 +116,6 @@ async def on_photo_proof(message: Message) -> None:
 
     async with get_session() as session:
         task = await get_task(session, task_id)
-        await complete_task(session, task)
+        await complete_task(session, task, proof_comment=message.caption)
     await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
     await _reveal_next_batch_if_ready(message.bot, employee, message)

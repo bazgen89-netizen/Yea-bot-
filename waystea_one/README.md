@@ -63,7 +63,10 @@ the 10 MVP steps.
   logs it into `MusicCheck` and it shows up in the daily owner report.
 - `app/services/reports.py` — assembles the daily owner report (attendance,
   task completion %, purchases, revenue, escalated/"problem" tasks, music
-  check-in notes).
+  check-in notes). Also `notify_owner_batch_progress`: a live update the
+  moment a task batch closes (not just the end-of-day report), listing
+  each task alongside the comment the employee left for it
+  (`Task.proof_comment`), not just the title.
 - `app/handlers/shift.py` — the shift conversation flow, and also where
   task replies, purchase requests, revenue reports and upsell mentions are
   routed from, since aiogram sends a given text message to a single handler

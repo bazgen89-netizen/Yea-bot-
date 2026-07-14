@@ -437,6 +437,7 @@ async def handle_text(message: Message, state: FSMContext) -> None:
         async with get_session() as session:
             stores = await list_store_options(session)
             tasks_started = await has_tasks_for_today(session, employee.id)
+            open_tasks = await list_open_tasks(session, employee.id) if tasks_started else []
         store_name = next((s.name for s in stores if s.id == existing_shift.store_id), "")
 
         if not tasks_started:
@@ -447,13 +448,26 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             await _confirm_shift(message, state, employee, existing_shift.store_id, store_name)
             return
 
-        # Already confirmed today and tasks exist (e.g. an employee
-        # re-announcing "на месте" later in the day) — the store is
-        # already known, don't ask again or restart the flow.
+        if open_tasks:
+            # Tasks exist and are still open — resend them. Covers both a
+            # normal re-announcement mid-shift and the case where the
+            # checklist was created but never actually delivered (a failed
+            # send earlier doesn't retry itself), so "где задачи?" always
+            # gets an answer instead of a static "already confirmed" line.
+            await notify_employee(
+                message.bot,
+                employee,
+                f"Смена уже отмечена сегодня: {store_name}. Вот ваши текущие задачи:",
+                message,
+            )
+            await send_daily_checklist(message.bot, employee, open_tasks, message)
+            return
+
+        # Already confirmed today and every currently-visible task is done.
         await notify_employee(
             message.bot,
             employee,
-            f"Смена уже отмечена сегодня: {store_name}. Хорошего дня! 😊",
+            f"Смена уже отмечена сегодня: {store_name}. Все текущие задачи выполнены 👍",
             message,
         )
         return

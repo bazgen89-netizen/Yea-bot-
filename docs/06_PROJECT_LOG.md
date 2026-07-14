@@ -1320,6 +1320,39 @@ group chat is still ignored. Full test suite (36) passes.
 
 ---
 
+## Decision 35
+
+Date: 2026-07-14
+
+Decision:
+
+Decision 34's fix only covered the case of *zero* tasks ever created.
+Owner hit the same symptom ("где задачи?") again with tasks that *were*
+created but apparently never actually reached them (delivery failure, or
+just lost in the chat). Re-announcing "на месте" with an existing shift
+now always resends the currently open tasks (`list_open_tasks`) if any
+exist, instead of a static "Смена уже отмечена" line — covers both a
+normal mid-shift re-announcement and a checklist that was created but
+never delivered. Only when every currently-visible task is COMPLETED
+does it fall back to a plain "already confirmed, all done" reply.
+
+Reason:
+
+A static acknowledgement with no actual task list is a dead end from the
+employee's perspective whenever anything upstream (delivery, an earlier
+crash) went wrong — there's no way to recover except a code fix. Resending
+whatever's actually open costs nothing and fixes the class of bug instead
+of one instance of it.
+
+Impact:
+
+Verified against a real local Postgres: a shift with tasks already
+created (batch 1 sent, none completed yet) now gets the checklist resent
+on the next "на месте", not just an acknowledgement. Full test suite (36)
+still passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

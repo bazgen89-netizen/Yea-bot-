@@ -29,9 +29,21 @@ the 10 MVP steps.
   (docs/02_OPERATION_SYSTEM.md §10). Counts from `Task.sent_at` (when the
   employee actually saw it), not `created_at` — a task sitting in a later,
   not-yet-revealed batch shouldn't start "aging" before it's shown.
-- `app/services/purchasing.py` — turns "закончился X" style messages into
-  `PurchaseRequest` rows (keyword heuristic, not real NLU — see the module
-  docstring for when to graduate to the AI Processing Layer).
+- `app/services/purchasing.py` — turns "закончился X"/"X осталось" style
+  messages into `PurchaseRequest` rows (keyword heuristic, not real NLU —
+  see the module docstring for when to graduate to the AI Processing
+  Layer). Trigger matching is whole-word only (`\b...\b`), not substring —
+  a stem match once turned "остальные" ("the other ones") into a false
+  purchase request.
+- `app/handlers/tea_requests.py` — a dedicated "какой чай привезти"
+  chat/topic (owner decision): every message there is treated as a tea
+  restock request outright, no trigger-phrase detection needed, since
+  writing there already means "bring this". The store comes from
+  whichever store the sender is on shift at today, not from the message
+  text. Configured via `TEA_REQUEST_CHAT_ID`/`TEA_REQUEST_THREAD_ID` (see
+  `.env.example`); a no-op until `TEA_REQUEST_CHAT_ID` is set. Registered
+  in `app/bot.py` before `shift.py`'s generic catch-all, same reasoning as
+  `owner_router`.
 - `app/services/revenue.py` — parses the fixed three-line end-of-shift
   revenue report (docs/09_KPI_AND_REVENUE_MODULE.md §3.1); rejects and asks
   for clarification if a line is missing or cash + non-cash ≠ total.

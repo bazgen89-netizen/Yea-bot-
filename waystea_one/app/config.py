@@ -21,6 +21,19 @@ class Settings:
     # a Web Service to answer on $PORT even though the bot itself is a
     # polling client, not an HTTP server.
     port: int = int(os.environ.get("PORT", "8080"))
+    # Optional: a dedicated "какой чай привезти" chat/topic (see
+    # app/handlers/tea_requests.py). Unset by default — the feature is off
+    # until both/either are configured. TEA_REQUEST_THREAD_ID is only needed
+    # if it's a forum topic inside an existing group rather than its own
+    # chat; TEA_REQUEST_CHAT_ID is required either way.
+    tea_request_chat_id: int | None = (
+        int(os.environ["TEA_REQUEST_CHAT_ID"]) if os.environ.get("TEA_REQUEST_CHAT_ID") else None
+    )
+    tea_request_thread_id: int | None = (
+        int(os.environ["TEA_REQUEST_THREAD_ID"])
+        if os.environ.get("TEA_REQUEST_THREAD_ID")
+        else None
+    )
 
 
 settings = Settings()

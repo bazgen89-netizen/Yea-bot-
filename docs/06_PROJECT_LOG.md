@@ -1117,6 +1117,55 @@ Full test suite still passes.
 
 ---
 
+## Decision 30
+
+Date: 2026-07-14
+
+Decision:
+
+Added `app/handlers/tea_requests.py`: a dedicated "какой чай привезти"
+chat/topic where every message is treated as a tea-restock request
+outright — no trigger-phrase detection like `purchasing.py`, since
+writing there already means "bring this tea". The store is inferred from
+whichever store the sender is on shift at *today* (`ShiftLog`), not from
+the message text, per owner's exact ask ("бот автоматически понимает в
+какой магазин" from who's on shift where). Configured via two new
+optional settings, `TEA_REQUEST_CHAT_ID` and `TEA_REQUEST_THREAD_ID`
+(`app/config.py`, `.env.example`) — the feature is a no-op until
+`TEA_REQUEST_CHAT_ID` is set. `TEA_REQUEST_THREAD_ID` is only needed if
+it's a forum topic inside the existing group (not its own chat).
+Registered in `app/bot.py` before `shift.py`'s generic catch-all so a
+match here never falls through to shift-start/task-reply detection meant
+for the main work chat.
+
+Reason:
+
+Owner wants tea restock requests to come from a dedicated topic instead
+of being detected by keyword inside the general work chat, with the
+store inferred automatically the same way the rest of the bot already
+knows who's where.
+
+Impact:
+
+Verified against a real local Postgres + constructed aiogram objects: a
+message in the configured topic creates a `PurchaseRequest` scoped to the
+sender's today-shift store; the exact same chat with a *different*
+thread ID falls through untouched (no request created). New unit tests
+for the chat/topic matching logic. Full test suite (36) passes.
+
+**Owner needs to provide the actual IDs to turn this on** — I can't
+guess them:
+1. If it's a topic inside the existing work group: open Telegram, go
+   into that topic, and check the URL when you tap a message/share it —
+   it'll look like `https://t.me/c/XXXXXXXXXX/YYY` where the group's
+   `chat_id` is `-100XXXXXXXXXX` and the topic's `message_thread_id` is
+   `YYY`.
+2. If it's a separate chat entirely, just its `chat_id` is enough (leave
+   `TEA_REQUEST_THREAD_ID` empty) — forward any message from that chat to
+   @userinfobot or @RawDataBot to get the numeric ID.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

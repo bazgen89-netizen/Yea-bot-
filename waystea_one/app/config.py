@@ -14,6 +14,11 @@ class Settings:
     reminder_poll_seconds: int = int(os.environ.get("REMINDER_POLL_SECONDS", "300"))
     daily_report_hour: int = int(os.environ.get("DAILY_REPORT_HOUR", "21"))
     daily_report_minute: int = int(os.environ.get("DAILY_REPORT_MINUTE", "0"))
+    # All CronTrigger-scheduled jobs (daily report, revenue reminders) use
+    # this timezone explicitly — without it, APScheduler falls back to the
+    # server's local timezone (UTC on Render), so "20:55" would fire at
+    # 20:55 UTC instead of 20:55 in the stores' actual timezone.
+    timezone: str = os.environ.get("TIMEZONE", "Europe/Moscow")
     # Optional: the knowledge-base Q&A feature degrades to a fallback message
     # (see app/services/ai.py) rather than crashing when this isn't set.
     anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")

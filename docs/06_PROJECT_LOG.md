@@ -1429,6 +1429,35 @@ container's `TZ`).
 
 ---
 
+## Decision 38
+
+Date: 2026-07-14
+
+Decision:
+
+The revenue reminders (Decision 37) never fired — exactly the timezone
+caveat flagged in that decision. `CronTrigger` without an explicit
+timezone uses the scheduler's local timezone, which on Render is UTC, so
+"20:55"/"21:55" were firing at UTC times unrelated to the stores' actual
+local time. Added `settings.timezone` (`TIMEZONE` env var, default
+`Europe/Moscow` per owner confirmation — "часовой пояс как в МСК") and
+passed it explicitly to every `CronTrigger` job: the daily report and
+both revenue-reminder jobs.
+
+Reason:
+
+Owner-reported: no revenue reminder messages arrived at all.
+
+Impact:
+
+Verified `CronTrigger(hour=20, minute=55, timezone="Europe/Moscow")`
+computes its next fire time at 20:55 Moscow time (`+03:00`), not 20:55
+UTC. Full test suite (36) passes. If the stores turn out to be in a
+different zone than Moscow, `TIMEZONE` can be overridden without a code
+change.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

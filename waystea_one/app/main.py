@@ -66,21 +66,25 @@ async def main() -> None:
     )
     scheduler.add_job(
         send_daily_report,
-        CronTrigger(hour=settings.daily_report_hour, minute=settings.daily_report_minute),
+        CronTrigger(
+            hour=settings.daily_report_hour,
+            minute=settings.daily_report_minute,
+            timezone=settings.timezone,
+        ),
     )
     # Owner decision: Гагарина/Черёмушки close earlier, so their revenue
     # reminder goes out at 20:55; Рынок на Студёной closes later (21:55).
-    # Note: CronTrigger uses the scheduler's local timezone (the server's,
-    # unless APScheduler is configured otherwise) — adjust these hours if
-    # the server isn't running in the stores' local timezone.
+    # Explicit timezone (settings.timezone, default Asia/Almaty) - without
+    # it CronTrigger uses the server's local timezone (UTC on Render),
+    # which would fire these hours completely off from actual local time.
     scheduler.add_job(
         send_revenue_reminders,
-        CronTrigger(hour=20, minute=55),
+        CronTrigger(hour=20, minute=55, timezone=settings.timezone),
         args=[bot, get_session, ["Гагарина", "Черёмушки"]],
     )
     scheduler.add_job(
         send_revenue_reminders,
-        CronTrigger(hour=21, minute=55),
+        CronTrigger(hour=21, minute=55, timezone=settings.timezone),
         args=[bot, get_session, ["Рынок на Студёной"]],
     )
     scheduler.start()

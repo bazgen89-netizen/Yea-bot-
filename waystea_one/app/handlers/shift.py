@@ -40,13 +40,7 @@ from app.config import settings
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
 from app.models import Employee, ProofType, Store
-from app.services.ai import (
-    FALLBACK_EMPTY_KB,
-    FALLBACK_ERROR,
-    FALLBACK_NO_KEY,
-    answer_employee_question,
-    chat_reply,
-)
+from app.services.ai import chat_reply
 from app.services.identity import (
     create_employee,
     get_employee,
@@ -55,7 +49,6 @@ from app.services.identity import (
     record_shift_start,
 )
 from app.services.intent import resolve_store
-from app.services.knowledge import get_knowledge_base_text
 from app.services.messaging import notify_employee, send_private
 from app.services.music import MusicNudge, record_music_note
 from app.services.purchasing import (
@@ -283,37 +276,31 @@ async def _try_handle_purchase_reply(message: Message, employee: Employee) -> bo
 
 
 async def _try_handle_question_reply(message: Message, employee: Employee) -> bool:
-    """Last resort in the chain: if it looks like a question, answer it from
-    the company knowledge base (docs/03_AI_BRAIN.md §7, §13 — never invent).
+    """Last resort in the chain: if it looks like a question, pass it
+    straight to the owner instead of answering it via the AI Processing
+    Layer. Per owner decision (docs/06_PROJECT_LOG.md Decision 29), the
+    bot's job right now is only shift/store identification plus assigning
+    and checking tasks — nothing else — so this no longer calls Claude at
+    all, just escalates.
     """
     text = message.text or ""
     if not looks_like_question(text):
         return False
 
-    async with get_session() as session:
-        knowledge_base = await get_knowledge_base_text(session)
-
-    is_owner = message.from_user.id == settings.owner_telegram_id
-    answer = await answer_employee_question(text, knowledge_base, include_debug=is_owner)
-    await notify_employee(message.bot, employee, answer, message)
-
-    # The answer itself tells the employee "I'll check with the owner and
-    # get back to you" — that has to actually happen, not just be a line of
-    # text, otherwise it's a promise the bot never keeps.
-    if answer.startswith(FALLBACK_NO_KEY) or answer.startswith(FALLBACK_EMPTY_KB) or answer.startswith(
-        FALLBACK_ERROR
-    ):
-        await _notify_owner_of_unanswered_question(message.bot, employee, text)
+    await notify_employee(
+        message.bot, employee, "Хороший вопрос! Уточню у владельца и вернусь с ответом.", message
+    )
+    await _notify_owner_of_unanswered_question(message.bot, employee, text)
     return True
 
 
 async def _notify_owner_of_unanswered_question(bot, employee: Employee, question: str) -> None:
     text = (
-        "❓ Сотрудник задал вопрос, на который я не смог ответить из базы знаний.\n"
+        "❓ Сотрудник задал вопрос — сейчас я не отвечаю на них сам, только "
+        "передаю вам.\n"
         f"Сотрудник: {employee.name}\n"
         f"Вопрос: {question}\n\n"
-        "Можно ответить ему напрямую, а заодно добавить эту тему в базу "
-        "знаний командой /addknowledge, чтобы в следующий раз я ответил сам."
+        "Ответьте ему напрямую."
     )
     try:
         await bot.send_message(settings.owner_telegram_id, text)

@@ -77,12 +77,15 @@ the 10 MVP steps.
   per-chat (`FSMStrategy.GLOBAL_USER` in `app/bot.py`) so a question asked
   in the group can be answered in the private chat without losing track.
 - `app/services/ai.py` — the AI Processing Layer. Calls an LLM (Claude, via
-  `ANTHROPIC_API_KEY`); everything else in this scaffold is deliberately
-  keyword-based. Answers employee questions using `app/services/knowledge.py`
-  (the `KnowledgeEntry` table — Company Memory, docs/03_AI_BRAIN.md §6.5) as
-  context, and refuses to invent an answer if the knowledge base doesn't
-  cover it (docs/03_AI_BRAIN.md §13) or if the API key isn't configured —
-  see `FALLBACK_*` in that module.
+  `ANTHROPIC_API_KEY`) for exactly one thing right now: the short
+  acknowledgement after the mood-check question (`chat_reply`).
+  `answer_employee_question` (knowledge-base Q&A) still lives here but
+  isn't called from any handler — per owner decision (docs/06_PROJECT_LOG.md
+  Decision 29), the bot's scope for now is only shift/store identification
+  plus assigning and checking tasks, so an employee question is escalated
+  straight to the owner (`app/handlers/shift.py::_try_handle_question_reply`)
+  instead of being answered by the AI layer. Re-wire that one call site to
+  bring Q&A back.
 - `app/services/vision.py` — the vision counterpart to `ai.py`. When a task
   (`TaskTemplate.verification_criteria`) specifies what a valid photo should
   show, submitted photos are checked against that description via Claude's

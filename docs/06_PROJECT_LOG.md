@@ -1079,6 +1079,44 @@ before implementing.
 
 ---
 
+## Decision 29
+
+Date: 2026-07-14
+
+Decision:
+
+Disabled the AI Q&A fallback (`app/services/ai.py::answer_employee_question`)
+as a handler call site. `app/handlers/shift.py::_try_handle_question_reply`
+no longer calls the AI Processing Layer at all when an employee asks a
+question — it replies with a fixed line ("Хороший вопрос! Уточню у
+владельца и вернусь с ответом.") and escalates straight to the owner
+(reusing the Decision 27 escalation path), with no Claude call in between.
+The mood-check acknowledgement (`chat_reply`, one line after "как
+настроение сегодня?") is unaffected — the owner's request was about
+open-ended question answering, not the greeting exchange.
+
+Reason:
+
+Owner's stated scope: "его задача понять кто на смене и где и после этого
+давать и проверять задания. больше пока ничего" (its job is to figure out
+who's on shift and where, then assign and check tasks — nothing else for
+now). The immediate trigger was the `ThinkingBlock` crash (Decision 28)
+recurring on ordinary questions, but the owner's ask was broader than
+"fix the crash" — scale the bot back to the core loop until this feature
+is wanted again.
+
+Impact:
+
+`answer_employee_question`/`FALLBACK_*`/knowledge-base wiring stay in
+`app/services/ai.py` (untouched, still unit-tested) so re-enabling Q&A
+later is a one-line change at the single call site, not a rebuild.
+Verified against a real local Postgres + constructed aiogram
+Message/Update: a question now produces exactly two messages (the fixed
+employee reply, the owner escalation) and zero AI Processing Layer calls.
+Full test suite still passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

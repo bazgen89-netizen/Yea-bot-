@@ -1,10 +1,14 @@
 """Feature 5 (docs/08_MVP_REQUIREMENTS.md §9, docs/02_OPERATION_SYSTEM.md §11):
 Purchasing System.
 
-Product extraction is a simple keyword-strip heuristic, not real NLU — good
-enough for MVP reliability, same trade-off as shift_detector.py. Once the
-AI Processing Layer (docs/04_TECH_SPEC.md §3.1) is wired to a real LLM, this
-is the natural place to replace the heuristic with proper entity extraction.
+Tea restock requests go through the dedicated topic instead
+(app/handlers/tea_requests.py) — every message there is a request outright,
+no phrase needed. This module now only covers everything else (packaging,
+napkins, milk, etc.) in the main work chat, and per owner decision uses a
+single unambiguous trigger phrase instead of a keyword-soup heuristic — the
+broader keyword list (закончился/осталось/нет/...) matched too much,
+including inside unrelated words like "остальные" ("the other ones"),
+which fired a false-positive purchase request in production.
 """
 import re
 
@@ -13,28 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import PurchaseRequest
 from app.services.store_matcher import normalize
 
-# Whole-word forms only, matched with \b — a stem like "остал" would also
-# match inside unrelated words such as "остальные" ("the other ones"),
-# which fired a false-positive purchase request in production.
 TRIGGER_PHRASES = [
-    "закончился",
-    "закончилась",
-    "закончились",
-    "закончилось",
-    "нет",
-    "нужны",
-    "нужен",
-    "нужна",
-    # Running-low phrasing ("молоко осталось 1 упаковка, надо привезти"),
-    # not just fully-out-of-stock.
-    "осталось",
-    "осталась",
-    "остались",
-    "остался",
-    "заканчивается",
-    "заканчиваются",
-    "докупить",
-    "привезти",
+    "нужно привезти",
 ]
 
 _TRIGGER_PATTERN = re.compile(

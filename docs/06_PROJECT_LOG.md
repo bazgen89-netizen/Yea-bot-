@@ -1196,6 +1196,41 @@ test suite (36) passes.
 
 ---
 
+## Decision 32
+
+Date: 2026-07-14
+
+Decision:
+
+Replaced `purchasing.py`'s whole keyword list (закончился/осталось/нет/
+докупить/привезти/...) with a single unambiguous trigger phrase: "нужно
+привезти". Tea restock requests are handled entirely by the dedicated
+topic (`app/handlers/tea_requests.py`, Decision 30) — this module now
+only covers everything else in the main work chat (packaging, napkins,
+milk, etc.).
+
+Reason:
+
+Owner's explicit scope: question-shaped sentences never concern the bot;
+the bot only cares about private dialogs with employees and the first
+morning shift-start message — and for purchases specifically, drop
+keyword-phrase guessing in favor of the dedicated tea topic plus one
+clear phrase for everything else, instead of a growing list of fuzzy
+triggers that kept producing false positives (Decision 28's "остальные"
+bug being the clearest example).
+
+Impact:
+
+`extract_product`'s position-aware logic (trigger leads vs. trigger
+follows) is unchanged and still handles both "Нужно привезти сахар" and
+"Сахар нужно привезти". Test suite rewritten for the single-phrase
+behavior (34 tests, all passing) — old tests for
+закончился/осталось/докупить wording were removed since that wording no
+longer triggers a purchase request in this module (tea-specific phrasing
+still works via the dedicated topic).
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

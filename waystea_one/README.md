@@ -29,12 +29,14 @@ the 10 MVP steps.
   (docs/02_OPERATION_SYSTEM.md §10). Counts from `Task.sent_at` (when the
   employee actually saw it), not `created_at` — a task sitting in a later,
   not-yet-revealed batch shouldn't start "aging" before it's shown.
-- `app/services/purchasing.py` — turns "закончился X"/"X осталось" style
-  messages into `PurchaseRequest` rows (keyword heuristic, not real NLU —
-  see the module docstring for when to graduate to the AI Processing
-  Layer). Trigger matching is whole-word only (`\b...\b`), not substring —
-  a stem match once turned "остальные" ("the other ones") into a false
-  purchase request.
+- `app/services/purchasing.py` — non-tea purchase requests (packaging,
+  napkins, milk, etc.) in the main work chat. Per owner decision, uses a
+  single unambiguous trigger phrase ("нужно привезти") instead of a
+  keyword-soup heuristic — the old broader list matched too much,
+  including inside unrelated words like "остальные" ("the other ones"),
+  which fired a false-positive purchase request. Tea restock requests go
+  through `app/handlers/tea_requests.py` instead (see below), not this
+  module.
 - `app/handlers/tea_requests.py` — a dedicated "какой чай привезти"
   chat/topic (owner decision): every message there is treated as a tea
   restock request outright, no trigger-phrase detection needed, since

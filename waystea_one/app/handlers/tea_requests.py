@@ -42,8 +42,15 @@ async def on_tea_request(message: Message) -> None:
     async with get_session() as session:
         employee = await get_employee(session, message.from_user.id)
         if employee is None:
-            # Can't attribute a store to someone we don't know yet — let
-            # them go through the normal onboarding/shift flow first.
+            # Can't attribute a store to someone we don't know yet. No
+            # Employee object means notify_employee (which needs one) can't
+            # be used — reply directly in this chat instead of staying
+            # silent, which looked like the bot ignoring the message.
+            await message.reply(
+                "Не узнаю вас 🙂 Сначала напишите в рабочий чат, что вы на "
+                "месте (это разово знакомит меня с вами), потом можно писать "
+                "сюда."
+            )
             return
 
         shift = await get_todays_shift(session, employee.id)

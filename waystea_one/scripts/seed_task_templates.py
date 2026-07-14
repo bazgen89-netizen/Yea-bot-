@@ -40,8 +40,8 @@ TEMPLATES = [
     },
     {
         "title": "Проверить, что музыка играет",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
         "batch": 1,
     },
     {

@@ -13,32 +13,64 @@ import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ProofType, Task, TaskStatus, TaskTemplate
+from app.models import Task, TaskStatus, TaskTemplate
 
 COMPLETION_PHRASES = ["готово", "сделал", "сделала", "выполнил", "выполнила", "всё", "все", "ок"]
 
 
-async def downgrade_stale_photo_tasks(session: AsyncSession) -> int:
-    """One-time data fix: photo proof was disabled (Decision 19), but
-    `create_daily_tasks_for_shift` copies `proof_type` from the template
-    onto the `Task` row at creation time and never revisits already-created
-    rows. Any employee whose tasks for today were created before that
-    change is stuck being asked for a photo forever. Run at every boot
-    (idempotent — after the first run there's nothing left to downgrade,
-    since templates no longer produce PHOTO tasks).
+async def sync_stale_tasks_to_templates(session: AsyncSession) -> int:
+    """`create_daily_tasks_for_shift` copies `requires_proof`/`proof_type`/
+    `verification_criteria` from the template onto the `Task` row at
+    creation time and never revisits already-created rows — so editing
+    `scripts/seed_task_templates.py` (e.g. disabling photo proof, Decision
+    19; or turning off comment proof for a simple on/off task) has no
+    effect on tasks already created for someone's current shift. Run at
+    every boot: for any not-yet-completed task, re-sync those three fields
+    from its template if they've drifted, so an employee never gets stuck
+    on a requirement the checklist doesn't actually have anymore.
     """
     result = await session.execute(
         select(Task).where(
-            Task.proof_type == ProofType.PHOTO.value,
             Task.status.in_((TaskStatus.CREATED.value, TaskStatus.WAITING_PROOF.value)),
+            Task.template_id.is_not(None),
         )
     )
-    stale_tasks = list(result.scalars())
-    for task in stale_tasks:
-        task.proof_type = ProofType.COMMENT.value
-    if stale_tasks:
+    open_tasks = list(result.scalars())
+    if not open_tasks:
+        return 0
+
+    template_ids = {task.template_id for task in open_tasks}
+    templates_result = await session.execute(
+        select(TaskTemplate).where(TaskTemplate.id.in_(template_ids))
+    )
+    templates_by_id = {template.id: template for template in templates_result.scalars()}
+
+    updated = 0
+    for task in open_tasks:
+        template = templates_by_id.get(task.template_id)
+        if template is None:
+            continue
+        changed = (
+            task.requires_proof != template.requires_proof
+            or task.proof_type != template.proof_type
+            or task.verification_criteria != template.verification_criteria
+        )
+        if not changed:
+            continue
+        task.requires_proof = template.requires_proof
+        task.proof_type = template.proof_type
+        task.verification_criteria = template.verification_criteria
+        # A task already sitting in WAITING_PROOF whose template no longer
+        # requires proof at all should just close outright, not linger
+        # waiting for a comment/photo nobody's going to send.
+        if not template.requires_proof and task.status == TaskStatus.WAITING_PROOF.value:
+            task.status = TaskStatus.COMPLETED.value
+            task.completed_at = datetime.datetime.now(datetime.timezone.utc)
+        updated += 1
+
+    if updated:
         await session.commit()
-    return len(stale_tasks)
+    return updated
 
 
 def is_completion_phrase(text: str) -> bool:

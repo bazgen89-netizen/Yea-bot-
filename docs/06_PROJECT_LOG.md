@@ -871,6 +871,41 @@ Render — not a code bug. Worth checking that before assuming otherwise.
 
 ---
 
+## Decision 25
+
+Date: 2026-07-14
+
+Decision:
+
+Generalized `downgrade_stale_photo_tasks` (Decision 23, photo-only) into
+`sync_stale_tasks_to_templates`: for any not-yet-completed task, re-syncs
+`requires_proof`/`proof_type`/`verification_criteria` from its current
+template on every boot, and auto-closes it if the template no longer
+requires proof at all. Also set "Проверить, что музыка играет" to
+no-proof — it was asking for a comment on what's meant to be a quick
+yes/no glance.
+
+Reason:
+
+Owner hit the same underlying issue again, this time for "Включить
+музыку"/light-check tasks demanding a comment: editing
+`scripts/seed_task_templates.py` only affects new tasks, never
+already-created ones for someone's current shift. The photo-specific fix
+was too narrow — any future proof-requirement edit would hit the same
+bug, so this closes the whole class rather than patching one more
+instance of it.
+
+Impact:
+
+`app/services/tasks.py::sync_stale_tasks_to_templates` replaces
+`downgrade_stale_photo_tasks` (same call site in `app/main.py`). Verified
+against a real local Postgres: a simulated stale comment-required task
+gets its `requires_proof` corrected AND auto-completes once its template
+no longer requires proof, matching what an employee actually needs to
+see.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

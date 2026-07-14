@@ -90,11 +90,13 @@ the 10 MVP steps.
   request, until reference photos for calibration are ready; the
   `verification_criteria` text is kept on those templates so switching a
   given task back to `ProofType.PHOTO` later is a one-line change.
-  `app/services/tasks.py::downgrade_stale_photo_tasks` (run at every boot)
-  handles the transition: any already-created `Task` row that's still
-  PHOTO-proof from before this decision gets switched to comment-proof, so
-  an employee never gets stuck being asked for a photo the checklist no
-  longer requires.
+  `app/services/tasks.py::sync_stale_tasks_to_templates` (run at every
+  boot) handles template edits in general: any not-yet-completed `Task`
+  row whose `requires_proof`/`proof_type`/`verification_criteria` has
+  drifted from its current template gets re-synced (and auto-closes if the
+  template no longer requires proof at all), so an employee never gets
+  stuck on a requirement — photo or otherwise — the checklist doesn't
+  actually have anymore.
 - `app/services/intent.py` — AI Processing Layer fallback for store-name
   resolution. `store_matcher.py`'s exact alias matching runs first (free,
   instant); only if that fails does `resolve_store()` ask Claude which of

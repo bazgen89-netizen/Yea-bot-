@@ -659,6 +659,53 @@ unchanged — still tested, just not exercised by the seeded checklist.
 
 ---
 
+## Decision 20
+
+Date: 2026-07-13
+
+Decision:
+
+Fixed a real production bug that took the bot down: `init_models()` only
+calls `Base.metadata.create_all`, which creates tables that don't exist
+yet but does **not** add new columns to tables that already exist on a
+live database. Render's Postgres already had `task_templates`/`tasks` from
+before `verification_criteria` was added (Decision 17), so every deploy
+since then crashed at startup with `UndefinedColumnError`. `app/db.py` now
+also runs `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for the columns
+added so far, as a stand-in for a real migration tool.
+
+Reason:
+
+Found live: two consecutive Render deploys failed ("Exited with status
+1"), which is why the bot appeared to stop responding entirely — Render
+correctly kept serving the last successfully deployed (older) version
+rather than swapping to a broken one, but that older version didn't have
+the fixes from the two failed commits either.
+
+Reproduced locally before pushing the fix: built a local Postgres,
+created the old schema, dropped the new column to match Render's actual
+state, ran the current seeders against it to confirm the crash, applied
+the fix, and confirmed the seeders now run cleanly against that same
+old-schema database.
+
+Impact:
+
+`app/db.py::MANUAL_COLUMN_MIGRATIONS`. This approach doesn't scale well —
+if the schema keeps changing, this should become a real Alembic migration
+instead of a hand-maintained list of `ALTER TABLE` statements. Also
+explains the separate symptom the owner reported ("reminders fire
+immediately, not after 30 minutes"): while deploys were failing, test
+tasks from earlier sessions sat open for well over 30-60 minutes; the
+first successful boot after the fix finds them already overdue and
+reminds right away. That's correct behavior for a backlog, not a
+recurring bug — newly created tasks will wait the full 30/60 minutes as
+designed. Owner also asked for a watchdog that restarts the bot on crash;
+noted in reply that Render already auto-restarts a crashed process — the
+actual gap is free-tier sleep-on-inactivity, which needs an external
+uptime ping (e.g. UptimeRobot), not a custom watchdog.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

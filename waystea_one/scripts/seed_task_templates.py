@@ -185,8 +185,13 @@ TEMPLATES = [
     # Batch 5 — deeper cleaning, takes longer.
     {
         "title": "Проверить рабочее место",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "description": (
+            "Полы помыты, стойка протёрта от пыли, поверхности чистые, нет "
+            "мусора, разводов, разлитой жидкости или посторонних предметов "
+            "не по месту. Если грязно — помыть/протереть."
+        ),
         "verification_criteria": (
             "Рабочее место чистое и убранное: полы помыты, стойка протёрта "
             "от пыли, поверхности чистые, нет мусора, разводов, разлитой "
@@ -195,9 +200,14 @@ TEMPLATES = [
         "batch": 5,
     },
     {
-        "title": "Проверить чистоту витрины и зала",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
+        "title": "Навести чистоту витрины и зала",
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "description": (
+            "Витрина протёрта, без пыли и разводов; товар аккуратно "
+            "расставлен; в зале чисто и убрано, нет хаотично разбросанных "
+            "вещей."
+        ),
         "verification_criteria": (
             "Витрина протёрта, без пыли и разводов; товар аккуратно "
             "расставлен; в зале чисто и убрано, нет хаотично разбросанных "
@@ -207,8 +217,8 @@ TEMPLATES = [
     },
     {
         "title": "Протереть пыль на витрине и полках",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
         "verification_criteria": "На витрине и полках нет пыли, поверхности чистые.",
         "batch": 5,
     },
@@ -224,9 +234,13 @@ TEMPLATES = [
         "batch": 5,
     },
     {
-        "title": "Проверить чайную доску",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
+        "title": "Протереть чайную доску",
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "description": (
+            "Протереть чайную доску (чабань) от разводов и воды, расставить "
+            "все чайные принадлежности на свои места."
+        ),
         "verification_criteria": (
             "Чайная доска (чабань) чистая: нет пятен, потёков воды или "
             "чайного налёта. Все нужные для церемонии предметы аккуратно "

@@ -37,7 +37,10 @@ async def send_daily_checklist(
 ) -> None:
     if not tasks:
         return
-    lines = "\n".join(f"☐ {task.title}" for task in tasks)
+    lines = "\n".join(
+        f"☐ {task.title}" + (f"\n    {task.description}" if task.description else "")
+        for task in tasks
+    )
     await notify_employee(
         bot,
         employee,

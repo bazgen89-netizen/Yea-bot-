@@ -12,6 +12,10 @@ the 10 MVP steps.
 
 - `app/models.py` — `Employee`, `Store`, `ShiftLog`, `TaskTemplate`, `Task`,
   `PurchaseRequest`, `ShiftRevenue`, `UpsellEvent` (PostgreSQL via SQLAlchemy async).
+  `TaskTemplate`/`Task.description` carries the detailed instructions shown
+  under a task's title in the checklist (e.g. what "banks with tea labeled
+  and sealed" actually means) — `verification_criteria` stays internal,
+  used only by the AI vision check.
 - `app/services/store_matcher.py` — resolves a store name from free-form text.
 - `app/services/shift_detector.py` — recognizes "on site" shift-start phrasing.
 - `app/services/identity.py` — employee/shift persistence.

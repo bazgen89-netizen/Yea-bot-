@@ -54,12 +54,14 @@ async def sync_stale_tasks_to_templates(session: AsyncSession) -> int:
             task.requires_proof != template.requires_proof
             or task.proof_type != template.proof_type
             or task.verification_criteria != template.verification_criteria
+            or task.description != template.description
         )
         if not changed:
             continue
         task.requires_proof = template.requires_proof
         task.proof_type = template.proof_type
         task.verification_criteria = template.verification_criteria
+        task.description = template.description
         # A task already sitting in WAITING_PROOF whose template no longer
         # requires proof at all should just close outright, not linger
         # waiting for a comment/photo nobody's going to send.
@@ -126,6 +128,7 @@ async def create_daily_tasks_for_shift(
             store_id=store_id,
             date=date,
             title=template.title,
+            description=template.description,
             requires_proof=template.requires_proof,
             proof_type=template.proof_type,
             verification_criteria=template.verification_criteria,

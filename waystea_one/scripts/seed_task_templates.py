@@ -14,6 +14,11 @@ Upserts by title: existing rows get their fields updated (not just skipped)
 so edits to this list take effect even though app/main.py runs this seeder
 on every boot rather than once.
 
+Most templates apply to every store (`store_name` omitted -> store_id NULL).
+A few are specific to one store (e.g. the exhaust hood at Гагарина) — give
+those a `store_name` matching a row in scripts/seed_stores.py and it's
+resolved to that store's id at seed time.
+
 Run standalone if needed:
     python -m scripts.seed_task_templates
 """
@@ -22,12 +27,20 @@ import asyncio
 from sqlalchemy import select
 
 from app.db import get_session, init_models
-from app.models import ProofType, TaskTemplate
+from app.models import ProofType, Store, TaskTemplate
 
 TEMPLATES = [
-    # Batch 1 — the simplest, quick presence/on-off checks.
+    # Batch 1 — the simplest, quick presence/on-off checks. Lighting check
+    # goes first per owner decision (before it used to be buried in batch 4).
     {
         "title": "Включить вывеску и освещение",
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "batch": 1,
+    },
+    {
+        "title": "Проверить освещение",
+        "description": "Все лампы горят, ничего не перегорело и не мигает.",
         "requires_proof": False,
         "proof_type": ProofType.NONE.value,
         "batch": 1,
@@ -104,19 +117,34 @@ TEMPLATES = [
         "title": "Проверить, что банки с чаем подписаны и закрыты",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
+        "description": (
+            "На каждой банке — подпись/этикетка с названием чая, банка в "
+            "аккуратном виде, крышка закрыта плотно, резинка на месте."
+        ),
         "verification_criteria": (
-            "На всех банках с чаем есть подписи/этикетки с названием, "
-            "крышки плотно закрыты."
+            "На всех банках с чаем есть подписи/этикетки с названием, банки "
+            "аккуратные, крышки плотно закрыты, резинки на месте."
+        ),
+        "batch": 3,
+    },
+    {
+        "title": "Проверить наполнение банок с чаем",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "description": "Если в банке мало чая или она пустая — досыпать из запаса.",
+        "batch": 3,
+    },
+    {
+        "title": "Сверить чай в шкафах со списком на дверцах",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "description": (
+            "Проверить, что чай в шкафах совпадает со списком на дверцах, и "
+            "вписать в список актуальное количество каждого чая."
         ),
         "batch": 3,
     },
     # Batch 4 — equipment.
-    {
-        "title": "Проверить лампы освещения",
-        "requires_proof": True,
-        "proof_type": ProofType.COMMENT.value,
-        "batch": 4,
-    },
     {
         "title": "Проверить весы (чистота и калибровка)",
         "requires_proof": True,
@@ -125,15 +153,23 @@ TEMPLATES = [
         "batch": 4,
     },
     {
-        "title": "Проверить кулер/бойлер (температура воды)",
+        "title": "Проверить чайник",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
+        "description": "Чайник включается, температура выставляется, вода греется.",
         "batch": 4,
     },
     {
         "title": "Проверить вентиляцию/кондиционер",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,
+        "batch": 4,
+    },
+    {
+        "title": "Проверить вытяжку",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "store_name": "Гагарина",
         "batch": 4,
     },
     {
@@ -215,35 +251,45 @@ TEMPLATES = [
 async def seed() -> None:
     await init_models()
     async with get_session() as session:
-        current_titles = {t["title"] for t in TEMPLATES}
+        stores_by_name = {
+            store.name: store.id
+            for store in (await session.execute(select(Store))).scalars()
+        }
 
-        for template_data in TEMPLATES:
+        # (title, store_id) uniquely identifies a template — most are global
+        # (store_id None), a few are store-specific (e.g. the Гагарина hood).
+        current_keys = set()
+
+        for raw in TEMPLATES:
+            template_data = {k: v for k, v in raw.items() if k != "store_name"}
+            store_id = stores_by_name.get(raw["store_name"]) if "store_name" in raw else None
+            current_keys.add((template_data["title"], store_id))
+
             existing = await session.execute(
                 select(TaskTemplate).where(
                     TaskTemplate.title == template_data["title"],
-                    TaskTemplate.store_id.is_(None),
+                    TaskTemplate.store_id == store_id
+                    if store_id is not None
+                    else TaskTemplate.store_id.is_(None),
                 )
             )
             template = existing.scalar_one_or_none()
             if template is None:
-                session.add(TaskTemplate(store_id=None, **template_data))
+                session.add(TaskTemplate(store_id=store_id, **template_data))
                 continue
             for field, value in template_data.items():
                 setattr(template, field, value)
 
-        # Deactivate global templates from an older version of this list
-        # (e.g. the old "Проверить чистоту", superseded by the more
-        # specific checklist items above) rather than leaving them active
-        # forever just because this seeder only ever adds/updates.
-        stale = await session.execute(
-            select(TaskTemplate).where(
-                TaskTemplate.store_id.is_(None),
-                TaskTemplate.title.not_in(current_titles),
-                TaskTemplate.active.is_(True),
-            )
+        # Deactivate templates from an older version of this list (e.g. the
+        # old "Проверить чистоту", superseded by the more specific checklist
+        # items above) rather than leaving them active forever just because
+        # this seeder only ever adds/updates.
+        all_active = await session.execute(
+            select(TaskTemplate).where(TaskTemplate.active.is_(True))
         )
-        for template in stale.scalars():
-            template.active = False
+        for template in all_active.scalars():
+            if (template.title, template.store_id) not in current_keys:
+                template.active = False
 
         await session.commit()
 

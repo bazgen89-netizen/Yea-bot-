@@ -906,6 +906,67 @@ see.
 
 ---
 
+## Decision 26
+
+Date: 2026-07-14
+
+Decision:
+
+Added a `description` field to `TaskTemplate`/`Task` (shown under the
+title in the checklist message, alongside the "Отметить: ..." button) so
+detailed instructions can be attached to a task instead of only living in
+`verification_criteria` (which is internal, AI-vision-only, and never
+shown to the employee). Used it to expand the tea-jar task and added two
+new batch-3 tasks: checking jar fill levels (top up if low/empty) and
+comparing the tea in the cabinets against the inventory list on the
+cabinet doors (write the current quantity into that list). Moved the
+lighting check ("Проверить освещение") to batch 1, per owner request that
+it be one of the very first things checked. Replaced "Проверить
+кулер/бойлер" (there's no water cooler) with "Проверить чайник" (turns
+on, temperature sets, heats). Kept the ventilation/AC check, and added a
+Гагарина-only "Проверить вытяжку" (exhaust hood) task — the seeder now
+supports per-store templates via an optional `store_name` key resolved to
+`Store.id` at seed time, in addition to the global (`store_id=NULL`)
+ones.
+
+Reason:
+
+Owner's detailed criteria for the jar/cabinet tasks ("подписаны все или
+нет, в надлежащем аккуратном виде, закрыты плотно, резинки на месте",
+plus separate fill-level and cabinet-vs-door-list checks) didn't fit in a
+short task title, and had nowhere else to go that the employee would
+actually see.
+
+Impact:
+
+New `description` column on both tables (manual migration in `app/db.py`,
+same pattern as every other schema change so far).
+`create_daily_tasks_for_shift` copies it onto new `Task` rows;
+`sync_stale_tasks_to_templates` now also re-syncs `description` for
+already-created tasks, same as the other template-drift fields.
+`send_daily_checklist` renders it as an indented line under the task
+title. Verified against a real local Postgres: seeded templates show the
+right batch placement, descriptions, and the store-scoped hood task
+resolves to the correct store id; a full shift-start-through-batch-1
+handler run renders descriptions correctly in the checklist message.
+
+Also fixed, same session: an employee re-announcing "на месте" later in
+the day (after already confirming a shift) was being asked "in which
+store are you working today?" again, even though `ShiftLog` already had
+the answer — `app/handlers/shift.py::handle_text` now checks
+`get_todays_shift` first and just replies that the shift's already
+confirmed, without re-resolving the store.
+
+Owner's `question` (not yet resolved): whether "Проверить кассу/POS"
+should keep requiring a comment. Reasoning given back to the owner:
+a comment there is useful because a POS check can silently fail (wrong
+till count, register not opening, printer jam) in ways a bare tap of "done"
+wouldn't surface — same logic as the other cash/accounting tasks. Left as
+a checkbox-only vs. comment-required decision for the owner to make;
+no code changed for that specific task pending their answer.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

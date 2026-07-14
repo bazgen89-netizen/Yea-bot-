@@ -198,6 +198,10 @@ class TaskTemplate(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(200))
+    # Shown alongside the title in the checklist message — the detailed
+    # instructions for what "done" actually means (e.g. which specific
+    # things to check), since the title alone is just a short label.
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     requires_proof: Mapped[bool] = mapped_column(Boolean, default=False)
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
     # Only meaningful when proof_type == PHOTO: what the AI vision check
@@ -228,6 +232,7 @@ class Task(Base):
     store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
     date: Mapped[datetime.date] = mapped_column(Date)
     title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     requires_proof: Mapped[bool] = mapped_column(Boolean, default=False)
     proof_type: Mapped[str] = mapped_column(String(20), default=ProofType.NONE.value)
     verification_criteria: Mapped[str | None] = mapped_column(String(500), nullable=True)

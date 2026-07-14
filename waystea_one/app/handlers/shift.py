@@ -361,14 +361,15 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
 
         is_shift_start = is_shift_start_message(message.text or "")
-        stores = await list_store_options(session) if is_shift_start else []
+        existing_shift = await get_todays_shift(session, employee.id) if is_shift_start else None
+        stores = (
+            await list_store_options(session) if is_shift_start and existing_shift is None else []
+        )
 
     # Session closed above before any slower/network-bound step (task reply,
     # purchase/revenue lookups, resolve_store's AI fallback, and the AI
     # Processing Layer call for questions) so we're not holding a DB
     # connection open during those.
-    store = await resolve_store(message.text or "", stores) if is_shift_start else None
-
     if not is_shift_start:
         if await _try_handle_task_reply(message, employee):
             return
@@ -378,6 +379,23 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
         await _try_handle_question_reply(message, employee)
         return
+
+    if existing_shift is not None:
+        # Already confirmed today (e.g. an employee re-announcing "на
+        # месте" later in the day) — the store is already known, don't
+        # ask again.
+        async with get_session() as session:
+            stores = await list_store_options(session)
+        store_name = next((s.name for s in stores if s.id == existing_shift.store_id), "")
+        await notify_employee(
+            message.bot,
+            employee,
+            f"Смена уже отмечена сегодня: {store_name}. Хорошего дня! 😊",
+            message,
+        )
+        return
+
+    store = await resolve_store(message.text or "", stores)
 
     if store is None:
         await state.set_state(ShiftClarification.awaiting_store)

@@ -1166,6 +1166,36 @@ guess them:
 
 ---
 
+## Decision 31
+
+Date: 2026-07-14
+
+Decision:
+
+`_try_handle_question_reply` (Decision 29's escalation-only path) now
+only runs for messages sent in a private chat with the bot —
+`message.chat.type == "private"`. In the group chat it no longer reacts
+to question-shaped text at all.
+
+Reason:
+
+Owner wrote "Вам там бот пишет?" to employees in the group chat — a
+question aimed at the *employees*, not the bot — and it got escalated to
+the owner as if an employee had asked the bot something. The group chat
+is where the owner and employees talk to each other; a trailing "?" there
+doesn't mean the message is addressed to the bot the way it reasonably
+would in a 1:1 DM with it, where there's no one else it could be talking
+to.
+
+Impact:
+
+Verified against a real local Postgres + constructed aiogram objects: the
+exact same question text now produces zero messages when sent in a group
+chat, and still escalates correctly when sent in a private chat. Full
+test suite (36) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

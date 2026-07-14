@@ -405,7 +405,13 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
         if await _try_handle_purchase_reply(message, employee):
             return
-        await _try_handle_question_reply(message, employee)
+        # Group-chat text is people talking to *each other* (the owner
+        # asking employees something, employees chatting) — a trailing "?"
+        # there doesn't mean it's addressed to the bot. Only escalate
+        # question-shaped text from a private chat with the bot, where
+        # there's no one else it could be directed at.
+        if message.chat.type == "private":
+            await _try_handle_question_reply(message, employee)
         return
 
     if existing_shift is not None:

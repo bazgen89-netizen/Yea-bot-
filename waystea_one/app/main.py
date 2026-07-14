@@ -10,6 +10,7 @@ from app.db import get_session, init_models
 from app.health import run_health_server
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
+from app.services.tasks import downgrade_stale_photo_tasks
 from app.services.upsell import send_upsell_nudges
 from scripts.seed_knowledge_base import seed as seed_knowledge_base
 from scripts.seed_stores import seed as seed_stores
@@ -32,6 +33,13 @@ async def main() -> None:
     await seed_stores()
     await seed_task_templates()
     await seed_knowledge_base()
+
+    async with get_session() as session:
+        downgraded = await downgrade_stale_photo_tasks(session)
+        if downgraded:
+            logging.getLogger(__name__).info(
+                "Downgraded %d stale photo-proof task(s) to comment-proof", downgraded
+            )
 
     await bot.delete_webhook(drop_pending_updates=True)
 

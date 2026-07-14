@@ -13,9 +13,32 @@ import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Task, TaskStatus, TaskTemplate
+from app.models import ProofType, Task, TaskStatus, TaskTemplate
 
 COMPLETION_PHRASES = ["готово", "сделал", "сделала", "выполнил", "выполнила", "всё", "все", "ок"]
+
+
+async def downgrade_stale_photo_tasks(session: AsyncSession) -> int:
+    """One-time data fix: photo proof was disabled (Decision 19), but
+    `create_daily_tasks_for_shift` copies `proof_type` from the template
+    onto the `Task` row at creation time and never revisits already-created
+    rows. Any employee whose tasks for today were created before that
+    change is stuck being asked for a photo forever. Run at every boot
+    (idempotent — after the first run there's nothing left to downgrade,
+    since templates no longer produce PHOTO tasks).
+    """
+    result = await session.execute(
+        select(Task).where(
+            Task.proof_type == ProofType.PHOTO.value,
+            Task.status.in_((TaskStatus.CREATED.value, TaskStatus.WAITING_PROOF.value)),
+        )
+    )
+    stale_tasks = list(result.scalars())
+    for task in stale_tasks:
+        task.proof_type = ProofType.COMMENT.value
+    if stale_tasks:
+        await session.commit()
+    return len(stale_tasks)
 
 
 def is_completion_phrase(text: str) -> bool:

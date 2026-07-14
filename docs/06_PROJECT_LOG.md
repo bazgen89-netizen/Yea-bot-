@@ -787,6 +787,43 @@ the sent ones counted as "open."
 
 ---
 
+## Decision 23
+
+Date: 2026-07-14
+
+Decision:
+
+Two fixes plus one infra addition: (1) `downgrade_stale_photo_tasks`
+(run at every boot) converts any already-created `Task` row still stuck
+on `ProofType.PHOTO` (from before photo proof was disabled, Decision 19)
+to comment-proof, so an employee never gets stuck being asked for a photo
+the checklist no longer requires. (2) Reworded the upsell nudge
+(`UPSELL_NUDGE_TEXT`) — the old wording ("пока собираешь заказ") assumed
+an in-progress customer order and read as nonsensical noise outside that
+moment; now it's a generic "remember to offer tastings/pairings" reminder.
+(3) Added `.github/workflows/waystea-keep-alive.yml`, a scheduled GitHub
+Actions job pinging the health endpoint every 10 minutes, addressing
+Render's free-tier inactivity sleep without needing a third-party account
+(UptimeRobot etc.) — done via GitHub Actions since that's infra already
+under this session's access, unlike Render or a monitoring service.
+
+Reason:
+
+(1) and (2) are real bugs/UX issues hit live while testing. (3) is the
+practical equivalent of the "watchdog that restarts the bot" the owner
+asked for, given no access to third-party accounts on their behalf; crash
+recovery itself is already automatic on Render regardless.
+
+Impact:
+
+`app/services/tasks.py::downgrade_stale_photo_tasks`, called from
+`app/main.py` right after seeding. Verified against a real local Postgres
+with a simulated stuck task before pushing. New workflow file — GitHub
+disables scheduled workflows after 60 days of repo inactivity, worth
+remembering if pings mysteriously stop.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

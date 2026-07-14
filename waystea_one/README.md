@@ -78,6 +78,11 @@ the 10 MVP steps.
   request, until reference photos for calibration are ready; the
   `verification_criteria` text is kept on those templates so switching a
   given task back to `ProofType.PHOTO` later is a one-line change.
+  `app/services/tasks.py::downgrade_stale_photo_tasks` (run at every boot)
+  handles the transition: any already-created `Task` row that's still
+  PHOTO-proof from before this decision gets switched to comment-proof, so
+  an employee never gets stuck being asked for a photo the checklist no
+  longer requires.
 - `app/services/intent.py` — AI Processing Layer fallback for store-name
   resolution. `store_matcher.py`'s exact alias matching runs first (free,
   instant); only if that fails does `resolve_store()` ask Claude which of
@@ -114,8 +119,12 @@ the 10 MVP steps.
   on `$PORT` — so `app/main.py` also starts a one-route health server
   alongside the Telegram polling loop. A free Web Service on Render sleeps
   after ~15 minutes with no HTTP traffic and cold-starts on the next
-  request; ping the health URL periodically (e.g. a free UptimeRobot
-  monitor) if you need the bot to stay responsive without gaps.
+  request. `.github/workflows/waystea-keep-alive.yml` pings the health URL
+  every 10 minutes via a scheduled GitHub Actions run so the bot doesn't
+  need to be re-woken manually before each use — swap in an external
+  monitor (e.g. UptimeRobot) instead if you'd rather not rely on GitHub
+  Actions' scheduling. Render's own crash recovery is separate and already
+  automatic — this only prevents the inactivity-sleep case.
 - **Seeding runs on every boot, not by hand.** Free Render Web Services also
   don't include Shell/One-Off Job access, so there's no way to run
   `python -m scripts.seed_stores` interactively after deploy. `app/main.py`

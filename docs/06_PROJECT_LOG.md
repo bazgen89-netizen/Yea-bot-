@@ -1273,6 +1273,53 @@ unit tests for the code-length boundary (3/5-digit runs don't count,
 
 ---
 
+## Decision 34
+
+Date: 2026-07-14
+
+Decision:
+
+Two fixes:
+
+1. **Reverted the "no AI at all" part of Decision 29.** Owner's stated
+   need flipped from "nothing but shift/tasks" to "the bot should be able
+   to hold a conversation and answer" after seeing an employee's "что
+   умеет бот" get a flat escalation instead of an answer. Private-chat
+   questions now go through `answer_employee_question` again (the
+   loosened, general-conversation-friendly system prompt from Decisions
+   27/28, with the `ThinkingBlock` crash already fixed) — only actually
+   unanswerable factual questions (empty knowledge base, no API key, a
+   real error) still escalate to the owner. Decision 31's group-chat
+   restriction is unchanged: a question typed in the group is still never
+   treated as addressed to the bot.
+2. **Fixed a stuck-shift dead end.** An employee re-announcing "на
+   месте" got "Смена уже отмечена" and nothing else, forever — because
+   `ShiftLog` existing was treated as proof the whole flow (mood-check +
+   task creation) had completed, but that flow's FSM state lives in
+   `MemoryStorage` and doesn't survive a process restart (which happens
+   on every Render redeploy). If the employee's shift got recorded but
+   the process restarted before they answered "как настроение", they'd
+   be stuck: shift confirmed, no tasks, every future "на месте" a no-op.
+   Added `tasks.py::has_tasks_for_today`; `handle_text` now checks it and
+   resumes via `_confirm_shift` (re-asks mood, then creates tasks) instead
+   of just repeating "already confirmed" when no tasks exist yet.
+
+Reason:
+
+Both owner-reported: an employee's meta question got an unhelpfully
+mechanical escalation instead of a real answer, and a real employee
+(Вазген) got permanently stuck after a redeploy landed mid-shift-start.
+
+Impact:
+
+Verified against a real local Postgres + constructed aiogram objects: a
+`ShiftLog` with zero `Task` rows now re-triggers the mood-check greeting
+on the next "на месте" instead of a dead-end reply; a private-chat
+question goes through the AI layer again while the same question in the
+group chat is still ignored. Full test suite (36) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

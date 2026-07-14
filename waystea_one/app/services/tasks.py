@@ -191,6 +191,22 @@ async def advance_to_next_batch(
     return visible_tasks, to_reveal
 
 
+async def has_tasks_for_today(
+    session: AsyncSession, employee_id: int, date: datetime.date | None = None
+) -> bool:
+    """Whether `create_daily_tasks_for_shift` has actually run for this
+    employee today. `ShiftLog` existing isn't enough — the in-memory FSM
+    state between confirming a shift and creating tasks (the mood-check
+    exchange) is lost on every process restart, which can leave a shift
+    recorded with no tasks ever created behind it.
+    """
+    date = date or datetime.date.today()
+    result = await session.execute(
+        select(Task.id).where(Task.employee_id == employee_id, Task.date == date).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def list_open_tasks(
     session: AsyncSession, employee_id: int, date: datetime.date | None = None
 ) -> list[Task]:

@@ -92,15 +92,16 @@ the 10 MVP steps.
   per-chat (`FSMStrategy.GLOBAL_USER` in `app/bot.py`) so a question asked
   in the group can be answered in the private chat without losing track.
 - `app/services/ai.py` — the AI Processing Layer. Calls an LLM (Claude, via
-  `ANTHROPIC_API_KEY`) for exactly one thing right now: the short
-  acknowledgement after the mood-check question (`chat_reply`).
-  `answer_employee_question` (knowledge-base Q&A) still lives here but
-  isn't called from any handler — per owner decision (docs/06_PROJECT_LOG.md
-  Decision 29), the bot's scope for now is only shift/store identification
-  plus assigning and checking tasks, so an employee question is escalated
-  straight to the owner (`app/handlers/shift.py::_try_handle_question_reply`)
-  instead of being answered by the AI layer. Re-wire that one call site to
-  bring Q&A back.
+  `ANTHROPIC_API_KEY`) for two things: the short acknowledgement after the
+  mood-check question (`chat_reply`), and answering employee questions
+  (`answer_employee_question`) — general conversation/questions about the
+  bot itself are answered freely, but factual claims about the shop stick
+  strictly to the knowledge base and escalate to the owner if it's not
+  covered (docs/03_AI_BRAIN.md §13). Only wired up for private-chat
+  messages (`app/handlers/shift.py::_try_handle_question_reply`,
+  docs/06_PROJECT_LOG.md Decision 31/34) — a question typed in the group
+  chat is never treated as addressed to the bot, since that's where the
+  owner and employees talk to each other.
 - `app/services/vision.py` — the vision counterpart to `ai.py`. When a task
   (`TaskTemplate.verification_criteria`) specifies what a valid photo should
   show, submitted photos are checked against that description via Claude's

@@ -39,7 +39,7 @@ from aiogram.types import Message
 from app.config import settings
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
-from app.models import Employee, ProofType
+from app.models import Employee, ProofType, Store
 from app.services.ai import (
     FALLBACK_EMPTY_KB,
     FALLBACK_ERROR,
@@ -64,6 +64,7 @@ from app.services.purchasing import (
     is_purchase_request_message,
 )
 from app.services.question_detector import looks_like_question
+from app.services.reports import notify_owner_batch_progress
 from app.services.revenue import (
     looks_like_revenue_message,
     parse_revenue_message,
@@ -152,10 +153,16 @@ async def receive_music_response(message: Message, state: FSMContext) -> None:
 async def _reveal_next_batch_if_ready(message: Message, employee: Employee) -> None:
     """After any task completion, check whether the currently-visible batch
     is now fully done — if so, send the next batch (3-5 tasks per owner
-    decision), instead of ever showing all tasks at once.
+    decision), instead of ever showing all tasks at once. Also tells the
+    owner right away which batch just closed, per owner decision — not
+    only in the end-of-day report.
     """
     async with get_session() as session:
-        next_tasks = await advance_to_next_batch(session, employee.id)
+        completed_batch, next_tasks = await advance_to_next_batch(session, employee.id)
+        store = (
+            await session.get(Store, completed_batch[0].store_id) if completed_batch else None
+        )
+    await notify_owner_batch_progress(message.bot, employee, store, completed_batch)
     if next_tasks:
         await send_daily_checklist(message.bot, employee, next_tasks, message)
 
@@ -269,7 +276,9 @@ async def _try_handle_purchase_reply(message: Message, employee: Employee) -> bo
 
         await create_purchase_request(session, employee.id, shift.store_id, product)
 
-    await notify_employee(message.bot, employee, "Добавил в список закупки 👍", message)
+    await notify_employee(
+        message.bot, employee, f"Добавил в список закупки: {product} 👍", message
+    )
     return True
 
 

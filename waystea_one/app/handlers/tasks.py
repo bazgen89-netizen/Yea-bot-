@@ -2,9 +2,10 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.db import get_session
-from app.models import Employee, ProofType, Task
+from app.models import Employee, ProofType, Store, Task
 from app.services.identity import get_employee
 from app.services.messaging import notify_employee
+from app.services.reports import notify_owner_batch_progress
 from app.services.tasks import (
     advance_to_next_batch,
     complete_task,
@@ -52,7 +53,11 @@ async def send_daily_checklist(
 
 async def _reveal_next_batch_if_ready(bot, employee: Employee, fallback_message: Message) -> None:
     async with get_session() as session:
-        next_tasks = await advance_to_next_batch(session, employee.id)
+        completed_batch, next_tasks = await advance_to_next_batch(session, employee.id)
+        store = (
+            await session.get(Store, completed_batch[0].store_id) if completed_batch else None
+        )
+    await notify_owner_batch_progress(bot, employee, store, completed_batch)
     if next_tasks:
         await send_daily_checklist(bot, employee, next_tasks, fallback_message)
 

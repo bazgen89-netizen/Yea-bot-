@@ -1015,6 +1015,70 @@ passes.
 
 ---
 
+## Decision 28
+
+Date: 2026-07-14
+
+Decision:
+
+Four fixes/features in one session, all owner-reported:
+
+1. **Purchase-detection false positive.** Decision 26's broadened
+   trigger phrases used the stem `"остал"` (to catch
+   осталось/осталась/остались/остался), which also matches inside
+   unrelated words like "остальные" ("the other ones") — this created a
+   purchase request out of an ordinary sentence. Rewrote
+   `app/services/purchasing.py` to match whole words only via a compiled
+   `\b(...)\b` regex, dropped the overly generic `"мало "` trigger
+   entirely, and confirmation messages now say what was actually added
+   (`"Добавил в список закупки: {product} 👍"`) instead of a contentless
+   "Добавил 👍" — so a legitimate hit is at least identifiable after the
+   fact.
+2. **Per-batch owner reports.** Owner wants a live update the moment each
+   task batch closes, per store/employee — not only the end-of-day
+   report. `tasks.py::advance_to_next_batch` now returns
+   `(completed_batch, revealed_batch)` instead of just the revealed
+   batch; `app/services/reports.py::notify_owner_batch_progress` sends
+   the owner a short message (employee, store, batch number, task
+   titles) whenever a batch is fully closed, wired into both call sites
+   (`handlers/shift.py` and `handlers/tasks.py`).
+3. **`ThinkingBlock` crash.** Every AI Processing Layer call
+   (`ai.py::answer_employee_question`, `ai.py::chat_reply`,
+   `vision.py::verify_photo`) assumed `response.content[0]` was the text
+   block and did `.text` on it directly — with extended thinking enabled,
+   `content[0]` can be a `ThinkingBlock` with no `.text` attribute, which
+   crashed every single call with `AttributeError` (visible to the owner
+   via the Decision 27 debug-detail addition). Added `_extract_text()` in
+   both modules: scans `response.content` for the first block with
+   `type == "text"` instead of assuming position.
+
+Reason:
+
+All four were owner-reported: a confusing unexplained purchase
+confirmation (turned out to be the false-positive trigger), a request for
+faster/more granular visibility into the day's progress instead of
+waiting for the evening report, and the debug detail added in Decision
+27 immediately paid off by surfacing the exact `ThinkingBlock` crash the
+owner was hitting on every single AI question.
+
+Impact:
+
+Verified against a real local Postgres: a simulated shift + full batch-1
+completion produces exactly the expected owner notification with the
+right store/employee/task list, and the next batch is still revealed
+correctly afterward. Full test suite (32) passes; added dedicated
+purchasing tests for the running-low phrasing and confirmed
+`"остальные"`-style false positives no longer match.
+
+Open item raised by the owner, not yet built: recognizing purchase
+requests from a dedicated "какой чай привезти" chat/topic and inferring
+the store from whichever employee is on shift that day, without needing
+the message to name the store explicitly — needs a decision on whether
+that's a Telegram forum topic (message_thread_id) or a separate chat
+before implementing.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

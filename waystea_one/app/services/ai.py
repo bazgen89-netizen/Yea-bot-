@@ -10,6 +10,19 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_text(response) -> str:
+    """`response.content[0]` isn't reliably the text block — with extended
+    thinking the model can put a `ThinkingBlock` (no `.text` attribute)
+    first, which crashed every call with an AttributeError. Find the first
+    actual text block instead of assuming position.
+    """
+    for block in response.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    return ""
+
+
 SYSTEM_PROMPT = (
     "Ты — WAYSTEA ONE, AI-менеджер операций чайных магазинов WAYSTEA. "
     "Общайся с сотрудниками дружелюбно, уважительно, профессионально, "
@@ -55,7 +68,7 @@ async def answer_employee_question(
             system=f"{SYSTEM_PROMPT}\n\nБаза знаний:\n{knowledge_base}",
             messages=[{"role": "user", "content": question}],
         )
-        return response.content[0].text
+        return _extract_text(response) or FALLBACK_ERROR
     except Exception as error:
         logger.exception("AI Processing Layer call failed")
         # The owner has no access to Render's logs, so when it's the owner
@@ -99,7 +112,7 @@ async def chat_reply(employee_message: str) -> str:
             system=CHAT_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": employee_message}],
         )
-        return response.content[0].text
+        return _extract_text(response) or CHAT_FALLBACK
     except Exception:
         logger.exception("AI chat reply failed")
         return CHAT_FALLBACK

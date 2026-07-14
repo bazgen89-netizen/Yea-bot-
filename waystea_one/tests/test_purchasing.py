@@ -25,3 +25,9 @@ def test_recognizes_running_low_message():
 def test_extracts_product_name_from_running_low_message():
     assert extract_product("Молоко осталось 1 упаковка, надо привезти") == "Молоко"
     assert extract_product("Сахар заканчивается").strip() == "Сахар"
+
+
+def test_ignores_word_only_containing_a_trigger_stem():
+    # "остальным" contains "остал" as a substring but isn't the word
+    # "осталось" — matching it created a false-positive purchase request.
+    assert not is_purchase_request_message("Остальным сотрудникам тоже не написал")

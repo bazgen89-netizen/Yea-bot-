@@ -2,10 +2,12 @@
 Daily Owner Report.
 """
 import datetime
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models import (
     Employee,
     MusicCheck,
@@ -16,6 +18,8 @@ from app.models import (
     Task,
     TaskStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def build_daily_report(session: AsyncSession, date: datetime.date | None = None) -> str:
@@ -107,3 +111,26 @@ async def build_daily_report(session: AsyncSession, date: datetime.date | None =
         lines.append("  Пока нет отметок за сегодня.")
 
     return "\n".join(lines)
+
+
+async def notify_owner_batch_progress(
+    bot, employee: Employee, store: Store | None, completed_batch: list[Task]
+) -> None:
+    """Per owner decision: instead of only one report at the end of the day,
+    send a short live update the moment each task batch is fully closed —
+    one message per store/employee, not one combined end-of-day summary.
+    """
+    if not completed_batch:
+        return
+
+    batch_number = completed_batch[0].batch
+    store_name = store.name if store else "?"
+    titles = "\n".join(f"  - {task.title}" for task in completed_batch)
+    text = (
+        f"✅ {employee.name} ({store_name}): закрыт блок задач {batch_number}\n"
+        f"{titles}"
+    )
+    try:
+        await bot.send_message(settings.owner_telegram_id, text)
+    except Exception:
+        logger.exception("Failed to notify owner about batch %s completion", batch_number)

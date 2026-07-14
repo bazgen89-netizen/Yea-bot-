@@ -15,6 +15,17 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_text(response) -> str:
+    """Same fix as app/services/ai.py::_extract_text — `content[0]` can be a
+    `ThinkingBlock` (no `.text`) rather than the text block.
+    """
+    for block in response.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    return ""
+
+
 SYSTEM_PROMPT = (
     "Ты проверяешь фото, присланное сотрудником чайного магазина как "
     "подтверждение выполненной задачи. Тебе дан критерий, которому должно "
@@ -64,7 +75,11 @@ async def verify_photo(image_bytes: bytes, criteria: str) -> VerificationResult:
                 }
             ],
         )
-        text = response.content[0].text
+        text = _extract_text(response)
+        if not text:
+            # No text block at all (e.g. the model only thought, never
+            # answered) — fail open like every other AI-layer degradation.
+            return VerificationResult(passed=True, comment="")
         return _parse_result(text)
     except Exception:
         logger.exception("Photo verification call failed")

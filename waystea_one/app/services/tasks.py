@@ -148,10 +148,13 @@ async def create_daily_tasks_for_shift(
 
 async def advance_to_next_batch(
     session: AsyncSession, employee_id: int, date: datetime.date | None = None
-) -> list[Task]:
-    """Call after completing a task. If every currently-visible task for
-    today is COMPLETED, reveals the next batch (lowest batch number among
-    tasks still `sent_at is None`) and returns it — otherwise returns [].
+) -> tuple[list[Task], list[Task]]:
+    """Call after completing a task. Returns `(completed_batch, revealed_batch)`:
+    - `completed_batch` is the currently-visible batch, but only once every
+      task in it is COMPLETED — otherwise `[]` (the batch isn't done yet).
+    - `revealed_batch` is the next batch just revealed (`sent_at` stamped),
+      picked as the lowest batch number among tasks still `sent_at is None`
+      — `[]` if the completed batch was the last one, or if nothing's done.
     """
     date = date or datetime.date.today()
 
@@ -164,7 +167,7 @@ async def advance_to_next_batch(
     )
     visible_tasks = list(visible_result.scalars())
     if any(t.status != TaskStatus.COMPLETED.value for t in visible_tasks):
-        return []
+        return [], []
 
     hidden_result = await session.execute(
         select(Task).where(
@@ -175,7 +178,7 @@ async def advance_to_next_batch(
     )
     hidden_tasks = list(hidden_result.scalars())
     if not hidden_tasks:
-        return []
+        return visible_tasks, []
 
     next_batch = min(t.batch for t in hidden_tasks)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -185,7 +188,7 @@ async def advance_to_next_batch(
     await session.commit()
     for task in to_reveal:
         await session.refresh(task)
-    return to_reveal
+    return visible_tasks, to_reveal
 
 
 async def list_open_tasks(

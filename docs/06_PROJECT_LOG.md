@@ -706,6 +706,46 @@ uptime ping (e.g. UptimeRobot), not a custom watchdog.
 
 ---
 
+## Decision 21
+
+Date: 2026-07-13
+
+Decision:
+
+Added an AI Processing Layer fallback for store-name resolution
+(`app/services/intent.py::resolve_store`). Exact alias matching
+(`store_matcher.py`) still runs first and handles the common case for
+free with no network call; only when that fails does the bot ask Claude
+which of the three known stores the message means, before giving up and
+asking the employee to clarify. Wired into all three places `shift.py`
+resolves a store: the initial shift-start message, the post-onboarding
+pending message, and the explicit clarification answer.
+
+Reason:
+
+Owner feedback: the bot "understands poorly," is "dumb" — traced to
+deterministic keyword/alias matching missing phrasing outside the fixed
+list. Full autonomous self-modifying behavior (the owner's literal ask —
+"pull a skill for creating agents," "should correct itself") isn't
+something to build — a bot that rewrites its own logic in production
+isn't safe or standard practice. What's actually buildable and directly
+addresses the complaint is using the already-configured Claude API to
+understand phrasing the hand-written detectors don't cover, as a fallback
+behind the deterministic fast path, not a replacement for it.
+
+Impact:
+
+New `app/services/intent.py` (`match_store_with_ai`, `resolve_store`).
+Same fail-open contract as `ai.py`/`vision.py`: no API key or an error
+returns None, so the caller's existing clarifying-question behavior is
+unchanged, just reached less often. Good candidate for the same treatment
+next: `is_completion_phrase` (task done detection) and
+`purchasing.py::extract_product` are still pure keyword/regex and would
+benefit from the same "deterministic first, AI fallback second" pattern
+if the owner keeps hitting phrasing those don't recognize.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

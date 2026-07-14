@@ -66,6 +66,11 @@ the 10 MVP steps.
   request, until reference photos for calibration are ready; the
   `verification_criteria` text is kept on those templates so switching a
   given task back to `ProofType.PHOTO` later is a one-line change.
+- `app/services/intent.py` — AI Processing Layer fallback for store-name
+  resolution. `store_matcher.py`'s exact alias matching runs first (free,
+  instant); only if that fails does `resolve_store()` ask Claude which of
+  the known stores the message means, before the bot gives up and asks the
+  employee to clarify. Same fail-open contract as `ai.py`/`vision.py`.
 - `scripts/seed_knowledge_base.py` seeds two placeholder entries; replace/
   expand with real WAYSTEA instructions.
 

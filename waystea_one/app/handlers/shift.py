@@ -16,6 +16,11 @@ Flow:
 - Anything left over that looks like a question is answered from the
   company knowledge base via the AI Processing Layer (app/services/ai.py),
   as the final fallback in the chain.
+- Store name resolution tries exact alias matching first, then falls back
+  to the AI Processing Layer (app/services/intent.py::resolve_store) for
+  phrasing the fixed alias list doesn't cover, before asking the employee
+  to clarify — see that module's docstring for why this stays a fallback,
+  not the primary path.
 - Per owner decision, every employee-facing reply — including clarifying
   questions (name, which store) — goes to the employee's private chat, not
   the group; see app/services/messaging.py. If that fails (no private chat
@@ -40,6 +45,7 @@ from app.services.identity import (
     list_store_options,
     record_shift_start,
 )
+from app.services.intent import resolve_store
 from app.services.knowledge import get_knowledge_base_text
 from app.services.messaging import notify_employee, send_private
 from app.services.purchasing import (
@@ -54,7 +60,6 @@ from app.services.revenue import (
     record_shift_revenue,
 )
 from app.services.shift_detector import is_shift_start_message
-from app.services.store_matcher import match_store
 from app.services.tasks import (
     complete_task,
     create_daily_tasks_for_shift,
@@ -234,21 +239,23 @@ async def receive_name(message: Message, state: FSMContext) -> None:
 
     async with get_session() as session:
         employee = await create_employee(session, message.from_user.id, name)
-        await notify_employee(
-            message.bot, employee, f"Приятно познакомиться, {employee.name}! Записал вас.", message
-        )
+        stores = await list_store_options(session) if pending_text else []
 
-        if pending_text and is_shift_start_message(pending_text):
-            stores = await list_store_options(session)
-            store = match_store(pending_text, stores)
-            if store is not None:
+    await notify_employee(
+        message.bot, employee, f"Приятно познакомиться, {employee.name}! Записал вас.", message
+    )
+
+    if pending_text and is_shift_start_message(pending_text):
+        store = await resolve_store(pending_text, stores)
+        if store is not None:
+            async with get_session() as session:
                 await record_shift_start(session, employee.id, store.id)
-                await _confirm_shift(message, employee, store.id, store.name)
-            else:
-                await state.set_state(ShiftClarification.awaiting_store)
-                await notify_employee(
-                    message.bot, employee, "В каком магазине вы сегодня работаете?", message
-                )
+            await _confirm_shift(message, employee, store.id, store.name)
+        else:
+            await state.set_state(ShiftClarification.awaiting_store)
+            await notify_employee(
+                message.bot, employee, "В каком магазине вы сегодня работаете?", message
+            )
 
 
 @router.message(ShiftClarification.awaiting_store)
@@ -257,21 +264,23 @@ async def receive_store_clarification(message: Message, state: FSMContext) -> No
     async with get_session() as session:
         employee = await get_employee(session, message.from_user.id)
         stores = await list_store_options(session)
-        store = match_store(text, stores)
 
-        if store is None:
-            store_names = ", ".join(s.name for s in stores)
-            await notify_employee(
-                message.bot,
-                employee,
-                f"Не понял, о каком магазине речь. Уточните, пожалуйста: {store_names}?",
-                message,
-            )
-            return
+    store = await resolve_store(text, stores)
 
-        await state.clear()
+    if store is None:
+        store_names = ", ".join(s.name for s in stores)
+        await notify_employee(
+            message.bot,
+            employee,
+            f"Не понял, о каком магазине речь. Уточните, пожалуйста: {store_names}?",
+            message,
+        )
+        return
+
+    await state.clear()
+    async with get_session() as session:
         await record_shift_start(session, employee.id, store.id)
-        await _confirm_shift(message, employee, store.id, store.name)
+    await _confirm_shift(message, employee, store.id, store.name)
 
 
 @router.message(F.text)
@@ -292,14 +301,14 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
 
         is_shift_start = is_shift_start_message(message.text or "")
-        store = None
-        if is_shift_start:
-            stores = await list_store_options(session)
-            store = match_store(message.text or "", stores)
+        stores = await list_store_options(session) if is_shift_start else []
 
     # Session closed above before any slower/network-bound step (task reply,
-    # purchase/revenue lookups, and especially the AI Processing Layer call
-    # for questions) so we're not holding a DB connection open during those.
+    # purchase/revenue lookups, resolve_store's AI fallback, and the AI
+    # Processing Layer call for questions) so we're not holding a DB
+    # connection open during those.
+    store = await resolve_store(message.text or "", stores) if is_shift_start else None
+
     if not is_shift_start:
         if await _try_handle_task_reply(message, employee):
             return

@@ -967,6 +967,54 @@ no code changed for that specific task pending their answer.
 
 ---
 
+## Decision 27
+
+Date: 2026-07-14
+
+Decision:
+
+Two fixes to the AI question-answering flow (`app/services/ai.py`,
+`app/handlers/shift.py`):
+
+1. Every fallback reply told the employee "I'll check with the owner and
+   get back to you" (`FALLBACK_NO_KEY`/`FALLBACK_EMPTY_KB`/`FALLBACK_ERROR`)
+   but never actually messaged the owner — it was a promise the bot never
+   kept. `_try_handle_question_reply` now actually notifies the owner
+   (employee name + their question) whenever the answer is one of those
+   three fallbacks, same escalation pattern as the reminder engine's
+   unresponsive-employee notice.
+2. Loosened `SYSTEM_PROMPT`: general/meta questions ("what can you do",
+   small talk) are now answered freely and conversationally — the
+   knowledge-base-only, never-invent restriction still applies, but only
+   to factual questions about the shop/product/instructions, which was
+   the actual point of that rule (docs/03_AI_BRAIN.md §13). Previously
+   every question was forced through the knowledge-base lens, so a
+   question like "ты сам себя настроить можешь?" got an oddly stiff,
+   self-describing reply instead of a normal answer.
+
+Also added `include_debug` to `answer_employee_question`: when the owner
+is the one asking and the AI call actually throws, the fallback message
+now includes the exception type/message. The owner has no Render log
+access, so a bare "couldn't find an answer" gave no way to tell a real
+API/billing problem apart from a code bug without another round-trip.
+
+Reason:
+
+Owner reported the bot claiming it would "check with the owner" without
+ever actually doing so, and separately found it answering meta/self
+questions in a strangely robotic, knowledge-base-bound way and then
+erroring on a follow-up with no diagnosable detail.
+
+Impact:
+
+Verified against a real local Postgres + constructed aiogram
+Message/Update objects (network stubbed at the session level): a
+knowledge-base miss now sends a second message to `OWNER_TELEGRAM_ID`
+with the employee's name and question. Full test suite (32) still
+passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

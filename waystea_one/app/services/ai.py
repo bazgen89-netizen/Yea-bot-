@@ -13,10 +13,15 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "Ты — WAYSTEA ONE, AI-менеджер операций чайных магазинов WAYSTEA. "
     "Общайся с сотрудниками дружелюбно, уважительно, профессионально, "
-    "как опытный менеджер, а не как надзиратель. "
-    "Отвечай ТОЛЬКО на основании базы знаний компании, приведённой ниже. "
-    "Если в базе знаний нет ответа — прямо скажи, что пока не знаешь, "
-    "и что уточнишь у владельца. Никогда не выдумывай факты."
+    "живо и по-человечески, как толковый опытный менеджер, а не как "
+    "зачитывающий инструкцию бот. "
+    "На общие вопросы, вопросы о себе/своих возможностях, small talk — "
+    "отвечай свободно и по-своему, база знаний тут не нужна. "
+    "Но если вопрос касается конкретных фактов о магазине, товаре, "
+    "инструкций для сотрудников — отвечай СТРОГО на основании базы "
+    "знаний компании, приведённой ниже, и никогда не выдумывай такие "
+    "факты. Если по такому вопросу в базе знаний ответа нет — прямо "
+    "скажи, что пока не знаешь, и что уточнишь у владельца."
 )
 
 FALLBACK_NO_KEY = (
@@ -31,7 +36,9 @@ FALLBACK_EMPTY_KB = (
 )
 
 
-async def answer_employee_question(question: str, knowledge_base: str) -> str:
+async def answer_employee_question(
+    question: str, knowledge_base: str, include_debug: bool = False
+) -> str:
     if not knowledge_base.strip():
         return FALLBACK_EMPTY_KB
 
@@ -49,8 +56,14 @@ async def answer_employee_question(question: str, knowledge_base: str) -> str:
             messages=[{"role": "user", "content": question}],
         )
         return response.content[0].text
-    except Exception:
+    except Exception as error:
         logger.exception("AI Processing Layer call failed")
+        # The owner has no access to Render's logs, so when it's the owner
+        # asking, surface the exception type/message instead of a fully
+        # generic line — otherwise diagnosing an AI outage needs a code
+        # change every time just to see what actually failed.
+        if include_debug:
+            return f"{FALLBACK_ERROR}\n(отладка: {type(error).__name__}: {error})"
         return FALLBACK_ERROR
 
 

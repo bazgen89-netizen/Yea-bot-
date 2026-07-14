@@ -29,15 +29,24 @@ Flow:
   in app/bot.py), so the question can be asked in one chat and answered in
   another without losing track.
 """
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from app.config import settings
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
 from app.models import Employee, ProofType
-from app.services.ai import answer_employee_question, chat_reply
+from app.services.ai import (
+    FALLBACK_EMPTY_KB,
+    FALLBACK_ERROR,
+    FALLBACK_NO_KEY,
+    answer_employee_question,
+    chat_reply,
+)
 from app.services.identity import (
     create_employee,
     get_employee,
@@ -275,9 +284,32 @@ async def _try_handle_question_reply(message: Message, employee: Employee) -> bo
     async with get_session() as session:
         knowledge_base = await get_knowledge_base_text(session)
 
-    answer = await answer_employee_question(text, knowledge_base)
+    is_owner = message.from_user.id == settings.owner_telegram_id
+    answer = await answer_employee_question(text, knowledge_base, include_debug=is_owner)
     await notify_employee(message.bot, employee, answer, message)
+
+    # The answer itself tells the employee "I'll check with the owner and
+    # get back to you" — that has to actually happen, not just be a line of
+    # text, otherwise it's a promise the bot never keeps.
+    if answer.startswith(FALLBACK_NO_KEY) or answer.startswith(FALLBACK_EMPTY_KB) or answer.startswith(
+        FALLBACK_ERROR
+    ):
+        await _notify_owner_of_unanswered_question(message.bot, employee, text)
     return True
+
+
+async def _notify_owner_of_unanswered_question(bot, employee: Employee, question: str) -> None:
+    text = (
+        "❓ Сотрудник задал вопрос, на который я не смог ответить из базы знаний.\n"
+        f"Сотрудник: {employee.name}\n"
+        f"Вопрос: {question}\n\n"
+        "Можно ответить ему напрямую, а заодно добавить эту тему в базу "
+        "знаний командой /addknowledge, чтобы в следующий раз я ответил сам."
+    )
+    try:
+        await bot.send_message(settings.owner_telegram_id, text)
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to notify owner about unanswered question")
 
 
 @router.message(Onboarding.awaiting_name)

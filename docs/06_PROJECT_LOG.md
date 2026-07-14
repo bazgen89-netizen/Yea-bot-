@@ -632,6 +632,33 @@ Steps).
 
 ---
 
+## Decision 19
+
+Date: 2026-07-13
+
+Decision:
+
+Temporarily switched every photo-proof checklist item to comment-proof
+(`scripts/seed_task_templates.py`), and sharpened the "workplace" and
+"cups & teapots" criteria wording (floors washed, counter dust-wiped, no
+drips on teapots) per owner feedback.
+
+Reason:
+
+Owner said photo verification isn't needed yet ("пока фотоотчет не
+нужен") — reference photos for calibrating the vision check are still
+being prepared and will come later.
+
+Impact:
+
+All templates are `ProofType.COMMENT` for now; `verification_criteria`
+text is left in place on the affected rows (unused while `proof_type` is
+COMMENT) so re-enabling photo verification per task is a one-line change
+once reference photos arrive. `app/services/vision.py` itself is
+unchanged — still tested, just not exercised by the seeded checklist.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

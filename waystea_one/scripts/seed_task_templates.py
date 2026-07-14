@@ -23,11 +23,11 @@ TEMPLATES = [
     {
         "title": "Проверить рабочее место",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
-            "Рабочее место чистое и убранное: поверхности протёрты, нет "
-            "мусора, пыли, разводов, разлитой жидкости или посторонних "
-            "предметов не по месту."
+            "Рабочее место чистое и убранное: полы помыты, стойка протёрта "
+            "от пыли, поверхности чистые, нет мусора, разводов, разлитой "
+            "жидкости или посторонних предметов не по месту."
         ),
     },
     {
@@ -38,7 +38,7 @@ TEMPLATES = [
     {
         "title": "Подготовить оборудование",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
             "Оборудование (чайники/кофемашина/техника) включено, чистое и "
             "готово к работе."
@@ -47,7 +47,7 @@ TEMPLATES = [
     {
         "title": "Проверить чистоту витрины и зала",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
             "Витрина протёрта, без пыли и разводов; товар аккуратно "
             "расставлен; в зале чисто и убрано, нет хаотично разбросанных "
@@ -57,9 +57,9 @@ TEMPLATES = [
     {
         "title": "Проверить чистые чашки и чайники",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
-            "Чашки и чайники чистые: нет следов чая, разводов, потёков, "
+            "Чашки и чайники чистые: нет следов чая, потёков и подтёков, "
             "жирных пятен, сколов и трещин. Расставлены аккуратно, не "
             "навалены друг на друга."
         ),
@@ -67,7 +67,7 @@ TEMPLATES = [
     {
         "title": "Проверить чайную доску",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
             "Чайная доска (чабань) чистая: нет пятен, потёков воды или "
             "чайного налёта. Все нужные для церемонии предметы аккуратно "
@@ -119,7 +119,7 @@ TEMPLATES = [
     {
         "title": "Проверить, что банки с чаем подписаны и закрыты",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
             "На всех банках с чаем есть подписи/этикетки с названием, "
             "крышки плотно закрыты."
@@ -139,7 +139,7 @@ TEMPLATES = [
     {
         "title": "Проверить весы (чистота и калибровка)",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": "Весы чистые, без остатков чая, пыли и разводов на платформе.",
     },
     {
@@ -156,13 +156,13 @@ TEMPLATES = [
     {
         "title": "Протереть пыль на витрине и полках",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": "На витрине и полках нет пыли, поверхности чистые.",
     },
     {
         "title": "Проверить посуду для продажи",
         "requires_proof": True,
-        "proof_type": ProofType.PHOTO.value,
+        "proof_type": ProofType.COMMENT.value,
         "verification_criteria": (
             "Посуда, выставленная на продажу, чистая, целая, без сколов и "
             "трещин, аккуратно расставлена."

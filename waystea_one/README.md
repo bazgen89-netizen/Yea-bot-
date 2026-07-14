@@ -61,6 +61,11 @@ the 10 MVP steps.
   vision input instead of being accepted automatically. Same fail-open
   behavior as `ai.py`: no API key, or the call erroring, means the photo is
   accepted as before rather than blocking the employee on an AI outage.
+  **Currently unused by the seeded checklist** — every template in
+  `scripts/seed_task_templates.py` is comment-proof for now, per owner
+  request, until reference photos for calibration are ready; the
+  `verification_criteria` text is kept on those templates so switching a
+  given task back to `ProofType.PHOTO` later is a one-line change.
 - `scripts/seed_knowledge_base.py` seeds two placeholder entries; replace/
   expand with real WAYSTEA instructions.
 

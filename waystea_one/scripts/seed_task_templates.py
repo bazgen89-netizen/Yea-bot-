@@ -5,8 +5,8 @@ These are still placeholders reflecting the examples already in the docs —
 the owner should review and adjust wording/criteria for what actually
 matters at each store.
 
-Tasks are revealed a `batch` at a time (owner decision: 3 simplest first,
-then batches of ~3-5) rather than all 22 at once — see
+Tasks are revealed a `batch` at a time (owner decision: simplest first,
+then batches of ~3-5) rather than all at once — see
 app/services/tasks.py::advance_to_next_batch. Lower batch number = shown
 sooner; order within a batch doesn't matter.
 
@@ -25,11 +25,23 @@ from app.db import get_session, init_models
 from app.models import ProofType, TaskTemplate
 
 TEMPLATES = [
-    # Batch 1 — the 3 simplest, quick presence/on-off checks.
+    # Batch 1 — the simplest, quick presence/on-off checks.
     {
         "title": "Включить вывеску и освещение",
         "requires_proof": False,
         "proof_type": ProofType.NONE.value,
+        "batch": 1,
+    },
+    {
+        "title": "Включить музыку",
+        "requires_proof": False,
+        "proof_type": ProofType.NONE.value,
+        "batch": 1,
+    },
+    {
+        "title": "Проверить, что музыка играет",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
         "batch": 1,
     },
     {

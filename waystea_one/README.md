@@ -34,8 +34,17 @@ the 10 MVP steps.
 - `app/services/upsell.py` — keyword-detects upsell mentions (tasting,
   pairing, extra tea) and sends one proactive nudge per employee per shift
   if nothing's been logged ~2 hours in.
+- `app/services/music.py` — owner request: "Включить музыку" and "Проверить,
+  что музыка играет" are now in batch 1, and `send_music_nudges` proactively
+  asks up to twice per shift what's playing and whether the volume is
+  right. Unlike `upsell.py`'s nudge (which is fire-and-forget), the reply
+  is actually captured: sets an FSM state (`MusicNudge.awaiting_response`)
+  directly on the dispatcher's storage since this runs from a scheduler
+  job, not a message handler, then `app/handlers/shift.py::receive_music_response`
+  logs it into `MusicCheck` and it shows up in the daily owner report.
 - `app/services/reports.py` — assembles the daily owner report (attendance,
-  task completion %, purchases, revenue, escalated/"problem" tasks).
+  task completion %, purchases, revenue, escalated/"problem" tasks, music
+  check-in notes).
 - `app/handlers/shift.py` — the shift conversation flow, and also where
   task replies, purchase requests, revenue reports and upsell mentions are
   routed from, since aiogram sends a given text message to a single handler
@@ -50,7 +59,10 @@ the 10 MVP steps.
   and `shift.py`, since completion can happen via button or via text).
 - `app/handlers/owner.py` — `/report` command for the owner to pull the
   daily report on demand (it's also sent automatically every day, see
-  `DAILY_REPORT_HOUR` below).
+  `DAILY_REPORT_HOUR` below). `/addknowledge` lets the owner grow the
+  company knowledge base (used to answer employee questions) directly
+  from Telegram — asks for a title, then content, then saves — instead
+  of needing a code change for every new entry.
 - `app/services/messaging.py` — routes every employee-facing reply
   (confirmations and clarifying questions — name, which store — alike) to
   the employee's private chat rather than wherever they wrote from (usually

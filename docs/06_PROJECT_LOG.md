@@ -824,6 +824,53 @@ remembering if pings mysteriously stop.
 
 ---
 
+## Decision 24
+
+Date: 2026-07-14
+
+Decision:
+
+Added a music check-in feature per owner request: two new batch-1 tasks
+("Включить музыку", "Проверить, что музыка играет"), plus a proactive
+check-in up to twice per shift asking what's playing and whether the
+volume is right (`app/services/music.py::send_music_nudges`) — reused the
+same "ask a question, capture the reply via a dedicated FSM state" pattern
+as `MoodCheck`, but since this nudge fires from a scheduler job rather
+than in response to a message, it sets the FSM state directly on the
+dispatcher's storage. Replies are logged (`MusicCheck` table) and rolled
+into the daily owner report, not just acknowledged and discarded like the
+upsell nudge.
+
+Also added `/addknowledge` (`app/handlers/owner.py`): an owner-only FSM
+flow (title, then content) that lets the owner grow the company knowledge
+base directly from Telegram, since the owner asked how to get better
+answers out of the bot and the honest answer was "the knowledge base only
+has 2 placeholder entries — it needs real content, and that shouldn't
+require a code change every time."
+
+Reason:
+
+Direct owner requests — the music feature as its own spec, `/addknowledge`
+in response to "how do I talk to it so it answers well."
+
+Impact:
+
+New `MusicCheck` table; new `music_nudges_sent`/`last_music_nudge_at`
+columns on `ShiftLog` (added to `app/db.py`'s manual migration list).
+`app/services/knowledge.py::create_knowledge_entry`. Verified both features
+end-to-end against a real local Postgres before pushing (music: batch-1
+task count, nudge timing/dedup, FSM state set correctly via the scheduler
+path, reply captured and shown in the report; addknowledge: full
+title→content→save flow, confirmation message, DB row created).
+
+Also flagged to the owner separately: the AI Processing Layer returning
+its generic error fallback on every question (not just unknown-topic ones)
+almost always means the Anthropic API key has no billing/credits set up
+on console.anthropic.com, or got mangled by whitespace when pasted into
+Render — not a code bug. Worth checking that before assuming otherwise.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

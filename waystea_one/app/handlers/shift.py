@@ -48,6 +48,7 @@ from app.services.identity import (
 from app.services.intent import resolve_store
 from app.services.knowledge import get_knowledge_base_text
 from app.services.messaging import notify_employee, send_private
+from app.services.music import MusicNudge, record_music_note
 from app.services.purchasing import (
     create_purchase_request,
     extract_product,
@@ -120,6 +121,23 @@ async def receive_mood_response(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         tasks = await create_daily_tasks_for_shift(session, employee.id, store_id)
     await send_daily_checklist(message.bot, employee, tasks, message)
+
+
+@router.message(MusicNudge.awaiting_response)
+async def receive_music_response(message: Message, state: FSMContext) -> None:
+    """Reply to the proactive music check-in (app/services/music.py) sent
+    a couple of times per shift — logged and rolled into the daily owner
+    report, not just acknowledged and discarded.
+    """
+    data = await state.get_data()
+    store_id = data.get("music_store_id")
+    await state.clear()
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        await record_music_note(session, employee.id, store_id, message.text or "")
+
+    await notify_employee(message.bot, employee, "Спасибо! 🎵", message)
 
 
 async def _reveal_next_batch_if_ready(message: Message, employee: Employee) -> None:

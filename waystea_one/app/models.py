@@ -85,6 +85,12 @@ class ShiftLog(Base):
     upsell_nudge_sent_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # docs decision: ask about music a couple of times per shift — not a
+    # single nudge like upsell. See app/services/music.py.
+    music_nudges_sent: Mapped[int] = mapped_column(default=0)
+    last_music_nudge_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     employee: Mapped["Employee"] = relationship()
     store: Mapped["Store"] = relationship()
@@ -142,6 +148,26 @@ class UpsellEvent(Base):
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
     store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
     upsell_type: Mapped[str] = mapped_column(String(30))
+    note: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    store: Mapped["Store"] = relationship()
+
+
+class MusicCheck(Base):
+    """Owner request: ask a couple times per shift what's playing and
+    whether the volume is right; each reply is logged here and rolled into
+    the daily owner report (app/services/reports.py).
+    """
+
+    __tablename__ = "music_checks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
     note: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

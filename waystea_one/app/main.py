@@ -8,6 +8,7 @@ from app.bot import bot, dispatcher
 from app.config import settings
 from app.db import get_session, init_models
 from app.health import run_health_server
+from app.services.music import send_music_nudges
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
 from app.services.tasks import downgrade_stale_photo_tasks
@@ -52,6 +53,12 @@ async def main() -> None:
     )
     scheduler.add_job(
         send_upsell_nudges,
+        "interval",
+        seconds=settings.reminder_poll_seconds,
+        args=[bot, get_session],
+    )
+    scheduler.add_job(
+        send_music_nudges,
         "interval",
         seconds=settings.reminder_poll_seconds,
         args=[bot, get_session],

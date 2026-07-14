@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Employee,
+    MusicCheck,
     PurchaseRequest,
     ShiftLog,
     ShiftRevenue,
@@ -45,6 +46,17 @@ async def build_daily_report(session: AsyncSession, date: datetime.date | None =
 
     revenue_result = await session.execute(select(ShiftRevenue).where(ShiftRevenue.date == date))
     revenues = list(revenue_result.scalars())
+
+    music_result = await session.execute(
+        select(MusicCheck, Employee)
+        .join(Employee, MusicCheck.employee_id == Employee.id)
+        .where(
+            MusicCheck.created_at >= datetime.datetime.combine(
+                date, datetime.time.min, tzinfo=datetime.timezone.utc
+            )
+        )
+    )
+    music_checks = music_result.all()
 
     lines = [f"WAYSTEA ONE — отчёт за {date.isoformat()}", ""]
 
@@ -85,5 +97,13 @@ async def build_daily_report(session: AsyncSession, date: datetime.date | None =
             lines.append(f"  - {task.title} (сотрудник не отреагировал на напоминания)")
     else:
         lines.append("Проблемы: не обнаружено.")
+    lines.append("")
+
+    lines.append("Музыка в зале:")
+    if music_checks:
+        for check, employee in music_checks:
+            lines.append(f"  - {employee.name}: {check.note}")
+    else:
+        lines.append("  Пока нет отметок за сегодня.")
 
     return "\n".join(lines)

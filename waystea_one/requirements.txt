@@ -4,6 +4,12 @@ SQLAlchemy>=2.0,<3
 asyncpg>=0.29
 python-dotenv>=1.0
 APScheduler>=3.10,<4
+# python:3.12-slim (see Dockerfile) has no system tz database, so
+# zoneinfo.ZoneInfo("Europe/Moscow") - used by CronTrigger(timezone=...)
+# in app/main.py - raises ZoneInfoNotFoundError and crashes the process
+# at startup without this. tzdata ships the IANA database as pure Python
+# data and zoneinfo falls back to it automatically when present.
+tzdata>=2024.1
 anthropic>=0.40
 pytest>=8.0
 pytest-asyncio>=0.23

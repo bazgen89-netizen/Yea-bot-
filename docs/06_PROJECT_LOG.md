@@ -1458,6 +1458,45 @@ change.
 
 ---
 
+## Decision 39
+
+Date: 2026-07-15
+
+Decision:
+
+Decision 38 (pinning `CronTrigger` to `timezone=settings.timezone`,
+"Europe/Moscow") almost certainly crashed the bot completely on the next
+deploy — nobody got anything this morning, not even a shift confirmation.
+Root cause: the Dockerfile's base image is `python:3.12-slim`, which has
+no system IANA timezone database. `zoneinfo.ZoneInfo("Europe/Moscow")`
+(what `CronTrigger(timezone=...)` uses internally) raises
+`ZoneInfoNotFoundError` with no tz data available, and that call happens
+directly in `app/main.py::main()`, outside any try/except — so the whole
+process dies at startup before polling ever starts. Added `tzdata` to
+`requirements.txt`, which ships the IANA database as pure Python data;
+`zoneinfo` uses it automatically when the system database is missing.
+
+Reason:
+
+Owner reported the bot didn't respond at all this morning when employees
+wrote "на месте" — not a logic bug, a full startup crash.
+
+Impact:
+
+Reproduced the exact failure locally: `zoneinfo.reset_tzpath(to=[])`
+(simulating a system with no tz database, matching `python:3.12-slim`)
+raises `ZoneInfoNotFoundError` for "Europe/Moscow" without `tzdata`
+installed, and resolves correctly with it installed — confirmed both
+directions in a clean venv before pushing. This is now the second
+timezone-related outage in as many days (Decision 38 was "reminders
+silently don't fire", this one is "the whole bot doesn't start") — the
+lesson here is that **any change to scheduler/startup code needs to be
+smoke-tested against the actual production base image**, not just
+locally where the sandbox's full OS already has tzdata installed and
+masks this exact class of bug.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

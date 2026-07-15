@@ -11,11 +11,11 @@ from app.db import get_session, init_models
 from app.models import Store
 
 STORES = [
-    {"name": "Черёмушки", "aliases": ["черемушки", "черёмушк"]},
-    {"name": "Гагарина", "aliases": ["гагарин"]},
+    {"name": "Черёмушки", "aliases": ["черемушки", "черёмушк", "че"]},
+    {"name": "Гагарина", "aliases": ["гагарин", "гага"]},
     {
         "name": "Рынок на Студёной",
-        "aliases": ["студен", "рынок", "маркет", "market", "маркете"],
+        "aliases": ["студен", "рынок", "рынок на студеной", "маркет", "market"],
     },
 ]
 

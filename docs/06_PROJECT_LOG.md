@@ -1497,6 +1497,40 @@ masks this exact class of bug.
 
 ---
 
+## Decision 40
+
+Date: 2026-07-15
+
+Decision:
+
+`notify_owner_batch_progress` now forms a document (a `.txt` file via
+`build_batch_document`) and sends it to the owner after each batch closes,
+instead of a plain chat message. The document lists every task with its
+comment, plus a dedicated "⚠️ ТРЕБУЕТ ВНИМАНИЯ / НЕ ХВАТАЕТ" section that
+pulls out any task whose comment contains a shortage marker
+(`_looks_like_shortage`: нет/мало/закончилось/не хватает/не работает/
+грязн/…). The Telegram caption on the file carries the shortage count so
+it's visible without opening the file; if `send_document` fails it falls
+back to a plain text message so the update isn't lost.
+
+Reason:
+
+Owner asked for a formed document after each block, specifically so that
+anything missing is surfaced ("если что-то не хватает чтобы я знал") —
+rather than having to read through every task comment to notice a
+shortage.
+
+Impact:
+
+Verified against a real local Postgres: a batch where one task's comment
+was "воды мало, надо привезти" produces a document with that task in the
+shortage section and a caption reading "Требует внимания: 1"; a batch with
+only in-stock comments says "Нехватки не отмечено." New unit tests for
+`_looks_like_shortage` and `build_batch_document` (39 tests total, all
+passing).
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

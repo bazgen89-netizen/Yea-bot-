@@ -71,10 +71,14 @@ the 10 MVP steps.
   logs it into `MusicCheck` and it shows up in the daily owner report.
 - `app/services/reports.py` — assembles the daily owner report (attendance,
   task completion %, purchases, revenue, escalated/"problem" tasks, music
-  check-in notes). Also `notify_owner_batch_progress`: a live update the
-  moment a task batch closes (not just the end-of-day report), listing
-  each task alongside the comment the employee left for it
-  (`Task.proof_comment`), not just the title.
+  check-in notes). Also `notify_owner_batch_progress`: the moment a task
+  batch closes, builds a document (`build_batch_document`, a `.txt` file)
+  and sends it to the owner — each task with the employee's comment, plus a
+  dedicated "⚠️ ТРЕБУЕТ ВНИМАНИЯ / НЕ ХВАТАЕТ" section listing tasks whose
+  comment contains a shortage marker (`_looks_like_shortage`: нет/мало/
+  закончилось/не работает/…), so missing items aren't buried in per-task
+  comments. The file's caption carries the shortage count; falls back to a
+  plain message if the document send fails.
 - `app/handlers/shift.py` — the shift conversation flow, and also where
   task replies, purchase requests, revenue reports and upsell mentions are
   routed from, since aiogram sends a given text message to a single handler

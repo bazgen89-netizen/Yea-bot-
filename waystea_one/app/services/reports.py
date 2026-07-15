@@ -114,30 +114,107 @@ async def build_daily_report(session: AsyncSession, date: datetime.date | None =
     return "\n".join(lines)
 
 
+# Words in a task comment that signal something is missing / running out /
+# needs attention, so it can be pulled into the document's "не хватает"
+# section instead of the owner having to read every comment to spot it.
+_SHORTAGE_MARKERS = [
+    "нет",
+    "нету",
+    "мало",
+    "не хватает",
+    "нехватает",
+    "закончил",
+    "закончится",
+    "заканчива",
+    "пусто",
+    "отсутству",
+    "надо",
+    "нужно",
+    "докупить",
+    "привезти",
+    "сломан",
+    "не работает",
+    "грязн",
+]
+
+
+def _looks_like_shortage(comment: str | None) -> bool:
+    if not comment:
+        return False
+    lowered = comment.lower()
+    return any(marker in lowered for marker in _SHORTAGE_MARKERS)
+
+
+def build_batch_document(
+    employee_name: str, store_name: str, batch_number: int, completed_batch: list[Task]
+) -> tuple[str, str]:
+    """Build the per-batch report document (owner request: a formed document
+    after each block, with anything missing called out). Returns
+    `(filename, text)` — pure, so it's unit-testable without a bot/DB.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = [
+        f"WAYSTEA ONE — отчёт по блоку задач {batch_number}",
+        f"Магазин: {store_name}",
+        f"Сотрудник: {employee_name}",
+        f"Дата: {now.strftime('%Y-%m-%d %H:%M')} UTC",
+        "",
+        "Выполненные задачи:",
+    ]
+    for task in completed_batch:
+        line = f"  ✅ {task.title}"
+        if task.proof_comment:
+            line += f" — {task.proof_comment}"
+        lines.append(line)
+
+    shortages = [t for t in completed_batch if _looks_like_shortage(t.proof_comment)]
+    lines.append("")
+    if shortages:
+        lines.append("⚠️ ТРЕБУЕТ ВНИМАНИЯ / НЕ ХВАТАЕТ:")
+        for task in shortages:
+            lines.append(f"  - {task.title}: {task.proof_comment}")
+    else:
+        lines.append("Нехватки не отмечено.")
+
+    filename = f"otchet_blok_{batch_number}_{store_name}.txt".replace(" ", "_")
+    return filename, "\n".join(lines)
+
+
 async def notify_owner_batch_progress(
     bot, employee: Employee, store: Store | None, completed_batch: list[Task]
 ) -> None:
-    """Per owner decision: instead of only one report at the end of the day,
-    send a short live update the moment each task batch is fully closed —
-    one message per store/employee, not one combined end-of-day summary.
+    """Per owner decision: after each task batch closes, form a document and
+    send it to the owner — with anything the employee flagged as missing/
+    running out pulled into a dedicated "не хватает" section so it's not
+    buried in the per-task comments.
     """
     if not completed_batch:
         return
 
     batch_number = completed_batch[0].batch
     store_name = store.name if store else "?"
-    titles = "\n".join(
-        f"  - {task.title}" + (f": {task.proof_comment}" if task.proof_comment else "")
-        for task in completed_batch
+    filename, document_text = build_batch_document(
+        employee.name, store_name, batch_number, completed_batch
     )
-    text = (
-        f"✅ {employee.name} ({store_name}): закрыт блок задач {batch_number}\n"
-        f"{titles}"
-    )
+
+    shortage_count = sum(1 for t in completed_batch if _looks_like_shortage(t.proof_comment))
+    caption = f"✅ {employee.name} ({store_name}): закрыт блок задач {batch_number}"
+    if shortage_count:
+        caption += f"\n⚠️ Требует внимания: {shortage_count}"
+
+    from aiogram.types import BufferedInputFile
+
+    document = BufferedInputFile(document_text.encode("utf-8"), filename=filename)
     try:
-        await bot.send_message(settings.owner_telegram_id, text)
+        await bot.send_document(settings.owner_telegram_id, document, caption=caption)
     except Exception:
-        logger.exception("Failed to notify owner about batch %s completion", batch_number)
+        logger.exception("Failed to send batch %s document to owner", batch_number)
+        # Fall back to a plain text message so the update isn't lost entirely
+        # if sending the document fails.
+        try:
+            await bot.send_message(settings.owner_telegram_id, f"{caption}\n\n{document_text}")
+        except Exception:
+            logger.exception("Fallback batch %s message to owner also failed", batch_number)
 
 
 async def notify_owner_revenue_submitted(

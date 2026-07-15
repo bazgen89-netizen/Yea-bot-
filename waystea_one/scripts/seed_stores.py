@@ -15,7 +15,7 @@ STORES = [
     {"name": "Гагарина", "aliases": ["гагарин"]},
     {
         "name": "Рынок на Студёной",
-        "aliases": ["студен", "рынок"],
+        "aliases": ["студен", "рынок", "маркет", "market", "маркете"],
     },
 ]
 
@@ -27,9 +27,15 @@ async def seed() -> None:
             existing = await session.execute(
                 select(Store).where(Store.name == store_data["name"])
             )
-            if existing.scalar_one_or_none() is not None:
+            store = existing.scalar_one_or_none()
+            if store is None:
+                session.add(Store(**store_data))
                 continue
-            session.add(Store(**store_data))
+            # Update aliases on an already-seeded store too — this seeder
+            # runs on every boot, so a newly added alias (e.g. "маркет" for
+            # Рынок на Студёной) must actually take effect on the live DB,
+            # not be skipped just because the store row already exists.
+            store.aliases = store_data["aliases"]
         await session.commit()
 
 

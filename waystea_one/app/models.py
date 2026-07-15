@@ -82,9 +82,13 @@ class ShiftLog(Base):
     confirmed_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Kept the timestamp as the "last upsell nudge sent" anchor; the counter
+    # below is what gates how many go out per shift (owner wants several
+    # reminders, not one). See app/services/upsell.py.
     upsell_nudge_sent_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    upsell_nudges_sent: Mapped[int] = mapped_column(default=0)
     # docs decision: ask about music a couple of times per shift — not a
     # single nudge like upsell. See app/services/music.py.
     music_nudges_sent: Mapped[int] = mapped_column(default=0)

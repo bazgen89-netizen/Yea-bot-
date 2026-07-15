@@ -1531,6 +1531,38 @@ passing).
 
 ---
 
+## Decision 41
+
+Date: 2026-07-15
+
+Decision:
+
+Upgraded the upsell nudge (`app/services/upsell.py`) from a single
+fire-once-per-shift generic reminder to up to `MAX_NUDGES_PER_SHIFT` (3)
+private reminders per shift, rotating through three concrete tips the
+owner asked for: suggesting tea to go with a purchase, cross-selling
+("с этим чаем часто берут вот такой"), and offering a ready-packed 10g
+sample. First goes ~90 min after shift start, the rest spaced
+`NUDGE_GAP_MINUTES` (150) apart — mirrors the music-nudge cadence. Added a
+`upsell_nudges_sent` counter to `ShiftLog` (reusing `upsell_nudge_sent_at`
+as the last-sent anchor); manual migration in `app/db.py`. Dropped the old
+"skip if any upsell already logged" guard — the point now is a steady
+stream of concrete ideas, not a one-time poke.
+
+Reason:
+
+Owner wants the on-shift employee reminded (privately) about upselling
+with specific, actionable ideas, not one vague line once a day.
+
+Impact:
+
+Verified against a real local Postgres by stepping the clock: first nudge
+fires after the 90-min gap, subsequent ones only after the 150-min gap,
+capped at 3, cycling through all three tip texts in order. Full test suite
+(39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

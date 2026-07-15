@@ -59,8 +59,11 @@ the 10 MVP steps.
   Студёной (it closes later). Two `CronTrigger` jobs in `app/main.py`, one
   per group; skips anyone who already submitted today's figures.
 - `app/services/upsell.py` — keyword-detects upsell mentions (tasting,
-  pairing, extra tea) and sends one proactive nudge per employee per shift
-  if nothing's been logged ~2 hours in.
+  pairing, extra tea), and sends up to `MAX_NUDGES_PER_SHIFT` proactive
+  private reminders per shift (first ~90 min in, then spaced apart),
+  rotating through `UPSELL_NUDGE_TEXTS` so each carries a different concrete
+  idea: suggesting tea to go with a purchase, cross-selling ("с этим чаем
+  часто берут вот такой"), and offering a 10g ready-packed sample.
 - `app/services/music.py` — owner request: "Включить музыку" and "Проверить,
   что музыка играет" are now in batch 1, and `send_music_nudges` proactively
   asks up to twice per shift what's playing and whether the volume is

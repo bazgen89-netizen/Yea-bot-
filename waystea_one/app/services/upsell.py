@@ -51,48 +51,60 @@ async def record_upsell_event(
     return event
 
 
-UPSELL_NUDGE_TEXT = (
-    "Напоминаю про допродажи 😊 Если будет случай — предложи клиенту "
-    "дегустацию чая или что-то к чаю. Отметь здесь, если предложишь."
-)
-NUDGE_AFTER_MINUTES = 120
+# Owner request: several private reminders per shift about upselling, with
+# concrete ideas rotated through so it's not the same line every time —
+# suggesting tea to go with a purchase, cross-selling ("people who take this
+# tea often also take..."), and offering a 10g ready-packed tea sample.
+UPSELL_NUDGE_TEXTS = [
+    "Напоминаю про допродажи 😊 Если клиент берёт чай — предложи что-то к "
+    "нему: ещё один сорт, сладость или посуду.",
+    "Идея для допродажи: подскажи клиенту — «с этим чаем часто берут вот "
+    "такой» и предложи попробовать сочетание.",
+    "Не забывай про пробники! Предложи клиенту готовый упакованный пробник "
+    "10 г — отличный способ познакомить с новым сортом.",
+]
+FIRST_NUDGE_AFTER_MINUTES = 90
+NUDGE_GAP_MINUTES = 150
+MAX_NUDGES_PER_SHIFT = 3
 
 
 async def send_upsell_nudges(bot, session_factory) -> None:
-    """Feature: Level-1 proactive nudge, one per employee per shift, sent
-    ~2 hours after shift start if they haven't logged any upsell yet.
+    """Feature: proactive private upsell reminders, up to MAX_NUDGES_PER_SHIFT
+    times per shift, rotating through UPSELL_NUDGE_TEXTS so each one carries a
+    different concrete idea. First goes out ~90 min after shift start, the
+    rest spaced NUDGE_GAP_MINUTES apart.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
-    cutoff = now - datetime.timedelta(minutes=NUDGE_AFTER_MINUTES)
     today = datetime.date.today()
 
     async with session_factory() as session:
         result = await session.execute(
             select(ShiftLog, Employee)
             .join(Employee, ShiftLog.employee_id == Employee.id)
-            .where(ShiftLog.date == today, ShiftLog.upsell_nudge_sent_at.is_(None))
+            .where(ShiftLog.date == today, ShiftLog.upsell_nudges_sent < MAX_NUDGES_PER_SHIFT)
         )
         for shift_log, employee in result.all():
-            confirmed_at = shift_log.confirmed_at
-            if confirmed_at.tzinfo is None:
-                confirmed_at = confirmed_at.replace(tzinfo=datetime.timezone.utc)
-            if confirmed_at > cutoff:
+            if shift_log.upsell_nudges_sent == 0:
+                anchor = shift_log.confirmed_at
+                gap_minutes = FIRST_NUDGE_AFTER_MINUTES
+            else:
+                anchor = shift_log.upsell_nudge_sent_at
+                gap_minutes = NUDGE_GAP_MINUTES
+
+            if anchor is None:
+                continue
+            if anchor.tzinfo is None:
+                anchor = anchor.replace(tzinfo=datetime.timezone.utc)
+            if now < anchor + datetime.timedelta(minutes=gap_minutes):
                 continue
 
-            already_logged = await session.execute(
-                select(UpsellEvent.id).where(
-                    UpsellEvent.employee_id == employee.id,
-                    UpsellEvent.created_at >= confirmed_at,
-                )
-            )
-            if already_logged.scalar_one_or_none() is not None:
-                shift_log.upsell_nudge_sent_at = now
-                await session.commit()
-                continue
-
+            text = UPSELL_NUDGE_TEXTS[shift_log.upsell_nudges_sent % len(UPSELL_NUDGE_TEXTS)]
             try:
-                await bot.send_message(employee.telegram_user_id, UPSELL_NUDGE_TEXT)
+                await bot.send_message(employee.telegram_user_id, text)
             except Exception:
                 logger.exception("Failed to send upsell nudge to %s", employee.telegram_user_id)
+                continue
+
+            shift_log.upsell_nudges_sent += 1
             shift_log.upsell_nudge_sent_at = now
             await session.commit()

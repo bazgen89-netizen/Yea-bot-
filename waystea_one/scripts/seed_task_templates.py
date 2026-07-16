@@ -89,6 +89,12 @@ TEMPLATES = [
         "batch": 2,
     },
     {
+        "title": "Проверить наличие трубочек и фильтр-пакетов",
+        "requires_proof": True,
+        "proof_type": ProofType.COMMENT.value,
+        "batch": 2,
+    },
+    {
         "title": "Проверить наличие салфеток и бумажных полотенец",
         "requires_proof": True,
         "proof_type": ProofType.COMMENT.value,

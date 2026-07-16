@@ -65,6 +65,7 @@ from app.services.purchasing import (
 )
 from app.services.question_detector import looks_like_question
 from app.services.reports import notify_owner_batch_progress, notify_owner_revenue_submitted
+from app.services.shift_wrapup import ShiftWrapUp, send_shift_wrapup
 from app.services.revenue import (
     looks_like_revenue_message,
     parse_revenue_message,
@@ -106,6 +107,19 @@ class MoodCheck(StatesGroup):
 async def _confirm_shift(
     message: Message, state: FSMContext, employee: Employee, store_id: int, store_name: str
 ) -> None:
+    # The director (owner) doesn't get a task checklist — only completion
+    # reports (which go to OWNER_TELEGRAM_ID regardless). So confirm the
+    # shift and stop here: no mood-check, no task creation for them.
+    if employee.telegram_user_id == settings.owner_telegram_id:
+        await notify_employee(
+            message.bot,
+            employee,
+            f"Отмечено: {store_name} 👍 Вы директор — задачи не назначаю, "
+            "буду присылать отчёты о выполнении.",
+            message,
+        )
+        return
+
     await notify_employee(
         message.bot,
         employee,
@@ -151,6 +165,39 @@ async def receive_music_response(message: Message, state: FSMContext) -> None:
     await notify_employee(message.bot, employee, "Спасибо! 🎵", message)
 
 
+@router.message(ShiftWrapUp.awaiting_comment)
+async def receive_shift_comment(message: Message, state: FSMContext) -> None:
+    """Reply to the end-of-tasks "well done, any comments?" prompt
+    (app/services/shift_wrapup.py). A real comment is forwarded to the
+    owner; a plain "нет" is just acknowledged.
+    """
+    data = await state.get_data()
+    store_id = data.get("wrapup_store_id")
+    await state.clear()
+
+    text = (message.text or "").strip()
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        store = await session.get(Store, store_id) if store_id else None
+
+    if text.lower().strip(" .!") in ("нет", "не", "no", "нету", "всё хорошо", "все хорошо"):
+        await notify_employee(message.bot, employee, "Отлично, хорошей смены! 😊", message)
+        return
+
+    store_name = store.name if store else "?"
+    try:
+        await message.bot.send_message(
+            settings.owner_telegram_id,
+            f"💬 Комментарий по смене — {store_name} ({employee.name}):\n{text}",
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to forward shift comment to owner")
+    await notify_employee(
+        message.bot, employee, "Спасибо, передал владельцу 👍 Хорошей смены!", message
+    )
+
+
 async def _reveal_next_batch_if_ready(message: Message, employee: Employee) -> None:
     """After any task completion, check whether the currently-visible batch
     is now fully done — if so, send the next batch (3-5 tasks per owner
@@ -166,6 +213,10 @@ async def _reveal_next_batch_if_ready(message: Message, employee: Employee) -> N
     await notify_owner_batch_progress(message.bot, employee, store, completed_batch)
     if next_tasks:
         await send_daily_checklist(message.bot, employee, next_tasks, message)
+    elif completed_batch:
+        # No more batches left and the last one is done — all tasks for the
+        # day are complete. Congratulate + ask for a shift comment.
+        await send_shift_wrapup(message.bot, employee.telegram_user_id, completed_batch[0].store_id)
 
 
 async def _try_handle_task_reply(message: Message, employee: Employee) -> bool:

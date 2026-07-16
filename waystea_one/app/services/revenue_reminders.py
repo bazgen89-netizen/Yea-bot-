@@ -11,6 +11,7 @@ import logging
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.models import Employee, ShiftLog, ShiftRevenue, Store
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ async def send_revenue_reminders(bot, session_factory, store_names: list[str]) -
 
     for _shift_log, employee in shifts:
         if employee.id in already_submitted:
+            continue
+        # Director (owner) gets only completion reports, not this nudge.
+        if employee.telegram_user_id == settings.owner_telegram_id:
             continue
         try:
             await bot.send_message(employee.telegram_user_id, REVENUE_REMINDER_TEXT)

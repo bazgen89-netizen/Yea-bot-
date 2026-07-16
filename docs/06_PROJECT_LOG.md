@@ -1669,6 +1669,52 @@ test suite (39) passes.
 
 ---
 
+## Decision 45
+
+Date: 2026-07-16
+
+Decision:
+
+Batch of owner-requested changes:
+
+1. Added "Проверить наличие трубочек и фильтр-пакетов" to the batch-2
+   consumables checklist.
+2. **End-of-day wrap-up** (`app/services/shift_wrapup.py`): when an
+   employee completes ALL task blocks, the bot congratulates them
+   ("Молодец! 🎉"), tells them what to focus on for the rest of the shift
+   — guests and selling (tasting, 10g samples, cross-sell), keeping the
+   place tidy/stocked — which answers the owner's question of what an
+   employee should do after finishing early, and folds in the upsell
+   reminder. It then asks whether they have any comments about today's
+   shift; a real comment is forwarded to the owner
+   (`ShiftWrapUp.awaiting_comment` state, handler in
+   `app/handlers/shift.py`), a plain "нет" is just acknowledged. Wired
+   into `_reveal_next_batch_if_ready` in both shift.py and tasks.py:
+   `advance_to_next_batch` returning a completed batch with no next batch
+   means the day is done.
+3. **Director exclusion**: the owner (`OWNER_TELEGRAM_ID`, i.e. @waysgen)
+   marking a shift now gets a short confirmation and NO task
+   checklist/mood-check (`_confirm_shift` returns early for them), and is
+   skipped in the upsell, music, and revenue-reminder scheduled jobs — the
+   director only receives completion reports, never employee-facing tasks
+   or nudges.
+4. Upsell nudge wording: "клиент" → "гость"/"покупатель" per owner.
+
+Reason:
+
+All explicitly requested this session, plus the "what should an employee
+do when they finish before/after lunch" question — answered in-product by
+the wrap-up message redirecting them to guests/sales.
+
+Impact:
+
+Verified against a real local Postgres with the real `app.bot` dispatcher:
+a director's shift creates zero tasks and gets the "вы директор" reply; an
+employee completing every block gets the wrap-up, and a shift comment is
+forwarded to the owner. Full test suite (39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

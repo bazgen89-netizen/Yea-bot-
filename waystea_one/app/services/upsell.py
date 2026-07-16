@@ -9,6 +9,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models import Employee, ShiftLog, UpsellEvent, UpsellType
 from app.services.store_matcher import normalize
 
@@ -56,11 +57,11 @@ async def record_upsell_event(
 # suggesting tea to go with a purchase, cross-selling ("people who take this
 # tea often also take..."), and offering a 10g ready-packed tea sample.
 UPSELL_NUDGE_TEXTS = [
-    "Напоминаю про допродажи 😊 Если клиент берёт чай — предложи что-то к "
+    "Напоминаю про допродажи 😊 Если гость берёт чай — предложи что-то к "
     "нему: ещё один сорт, сладость или посуду.",
-    "Идея для допродажи: подскажи клиенту — «с этим чаем часто берут вот "
+    "Идея для допродажи: подскажи покупателю — «с этим чаем часто берут вот "
     "такой» и предложи попробовать сочетание.",
-    "Не забывай про пробники! Предложи клиенту готовый упакованный пробник "
+    "Не забывай про пробники! Предложи гостю готовый упакованный пробник "
     "10 г — отличный способ познакомить с новым сортом.",
 ]
 FIRST_NUDGE_AFTER_MINUTES = 90
@@ -84,6 +85,10 @@ async def send_upsell_nudges(bot, session_factory) -> None:
             .where(ShiftLog.date == today, ShiftLog.upsell_nudges_sent < MAX_NUDGES_PER_SHIFT)
         )
         for shift_log, employee in result.all():
+            # The director (owner) gets only completion reports, not
+            # employee-facing nudges — skip them here.
+            if employee.telegram_user_id == settings.owner_telegram_id:
+                continue
             if shift_log.upsell_nudges_sent == 0:
                 anchor = shift_log.confirmed_at
                 gap_minutes = FIRST_NUDGE_AFTER_MINUTES

@@ -1634,6 +1634,41 @@ by the shift catch-all. Full test suite (39) passes.
 
 ---
 
+## Decision 44
+
+Date: 2026-07-16
+
+Decision:
+
+Start the health HTTP server FIRST in `app/main.py::main()`, before
+`init_models` + the three seeders + `sync_stale_tasks_to_templates` +
+`delete_webhook`, instead of last (just before polling).
+
+Reason:
+
+UptimeRobot (set up by the owner, correct URL) reported the service
+"down" for 20+ minutes across multiple 5-min pings — not the transient
+cold-start blip a keep-alive is meant to smooth over. Root cause: the
+health endpoint only bound the port AFTER the whole init sequence
+(DB migrations, three seeders, stale-task sync, a network call to
+delete_webhook), which on a cold free-tier DB can take 30-60s. During
+that window the public URL answers nothing, so Render and UptimeRobot see
+the service as down, and Render can mark a web service unhealthy if it
+doesn't bind $PORT quickly after boot. The health server is a static
+responder that touches no DB, so binding it first is safe and makes the
+URL live within milliseconds of process start.
+
+Impact:
+
+Verified against a real local Postgres: with the reorder, the port binds
+in ~0.001s and `GET /` returns 200 "WAYSTEA ONE is running" *while* the
+heavy init still runs concurrently in the background (previously it would
+have hung until init finished). This should turn the UptimeRobot monitor
+green and stop Render from treating slow cold-starts as failures. Full
+test suite (39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

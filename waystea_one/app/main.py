@@ -28,6 +28,16 @@ async def send_daily_report() -> None:
 
 
 async def main() -> None:
+    # Bind the HTTP port FIRST, before any slow startup work. Render's free
+    # Web Service (and the UptimeRobot keep-alive that pings it) expect the
+    # service to answer on $PORT quickly after boot; if the health endpoint
+    # only came up AFTER init_models + all three seeders + sync + webhook
+    # cleanup (30-60s on a cold DB), Render/UptimeRobot see the URL as
+    # "down" the whole time and the service can be marked unhealthy. The
+    # health server is a static responder that touches no DB, so it's safe
+    # to start immediately; the rest of init runs right after.
+    await run_health_server(settings.port)
+
     await init_models()
     # Free hosting tiers (e.g. Render's free Web Service) often don't offer
     # shell/one-off-job access to run `python -m scripts.seed_*` by hand, so
@@ -97,7 +107,6 @@ async def main() -> None:
     )
     scheduler.start()
 
-    await run_health_server(settings.port)
     await dispatcher.start_polling(bot)
 
 

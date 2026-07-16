@@ -9,7 +9,14 @@ name: WAYSTEA ONE keep-alive
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Every 5 min to try to stay under Render's ~15-min inactivity window.
+    # NOTE: GitHub Actions' scheduler is best-effort and often delays runs
+    # by 10-30+ min on low-traffic repos, so this can't *guarantee* the bot
+    # stays awake. A dedicated uptime monitor (e.g. UptimeRobot's free tier,
+    # which pings every 5 min reliably) pointed at the same health URL is a
+    # more dependable free option; the only fully reliable fix is Render's
+    # paid tier, which doesn't sleep at all.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:

@@ -43,7 +43,14 @@ async def main() -> None:
                 "Synced %d open task(s) to their current template settings", synced
             )
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    # drop_pending_updates=False on purpose: on Render's free tier the
+    # service is SIGTERM'd after ~15 min of no inbound HTTP (and on every
+    # redeploy), so messages employees send while it's asleep/restarting
+    # would be silently discarded if we dropped pending updates on boot.
+    # Telegram retains updates ~24h, so keeping them means a "на месте"
+    # sent during a short downtime is still processed once the bot wakes,
+    # instead of the bot appearing to ignore it.
+    await bot.delete_webhook(drop_pending_updates=False)
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(

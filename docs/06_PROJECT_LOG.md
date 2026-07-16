@@ -1599,6 +1599,41 @@ not. Full test suite (39) passes.
 
 ---
 
+## Decision 43
+
+Date: 2026-07-15
+
+Decision:
+
+Reverted `drop_pending_updates` back to `True` (Decision 42 set it False).
+Owner's screenshots showed the bot sending the same greeting/onboarding
+prompt 4-6 times, and an employee's stored name captured as "он лежал на
+столе рабочем" (a stray phrase, not a name). Root cause: with
+`drop_pending_updates=False`, every process restart (frequent on Render's
+free tier — redeploys + inactivity SIGTERM) re-fetched and re-processed
+the same backlog of updates, so each restart replayed the same messages
+(duplicate replies) and could feed a replayed non-name message into the
+onboarding "как вас зовут" step. Dropping the backlog on boot stops both.
+Also added a `/name <имя>` command (`app/handlers/owner.py`, usable by
+anyone, registered before shift.py's catch-all) so a wrongly-captured
+name can be corrected without a DB edit.
+
+Reason:
+
+Owner-reported via screenshots: duplicate messages and a garbled employee
+name.
+
+Impact:
+
+Trade-off acknowledged: `drop_pending_updates=True` means messages sent
+while the bot is asleep/restarting are dropped rather than processed late
+— but that's far better than replaying them as duplicates. The real fix
+for both remains stable (non-sleeping) hosting. Verified `/name` against a
+real local Postgres: it overwrites a bad stored name and isn't swallowed
+by the shift catch-all. Full test suite (39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

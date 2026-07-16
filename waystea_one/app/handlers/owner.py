@@ -5,6 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from app.config import settings
 from app.db import get_session
+from app.services.identity import create_employee, get_employee
 from app.services.knowledge import create_knowledge_entry
 from app.services.reports import build_daily_report
 
@@ -34,6 +35,29 @@ async def on_start_command(message) -> None:
         "выполнение задач, закупки, выручку. А сюда, в личные сообщения, "
         "я буду присылать подтверждения и список задач."
     )
+
+
+@router.message(Command("name"))
+async def on_name_command(message) -> None:
+    """Let anyone set/correct their stored name — e.g. if onboarding
+    captured the wrong text as a name. Usage: `/name Ваше имя`. Registered
+    before shift.py's catch-all so it isn't swallowed there.
+    """
+    parts = (message.text or "").split(maxsplit=1)
+    new_name = parts[1].strip()[:100] if len(parts) > 1 else ""
+    if not new_name:
+        await message.answer("Напишите так: /name Ваше имя")
+        return
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        if employee is None:
+            await create_employee(session, message.from_user.id, new_name)
+        else:
+            employee.name = new_name
+            await session.commit()
+
+    await message.answer(f"Записал ваше имя: {new_name} 👍")
 
 
 @router.message(Command("report"))

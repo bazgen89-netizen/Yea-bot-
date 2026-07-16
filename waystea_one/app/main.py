@@ -43,14 +43,15 @@ async def main() -> None:
                 "Synced %d open task(s) to their current template settings", synced
             )
 
-    # drop_pending_updates=False on purpose: on Render's free tier the
-    # service is SIGTERM'd after ~15 min of no inbound HTTP (and on every
-    # redeploy), so messages employees send while it's asleep/restarting
-    # would be silently discarded if we dropped pending updates on boot.
-    # Telegram retains updates ~24h, so keeping them means a "на месте"
-    # sent during a short downtime is still processed once the bot wakes,
-    # instead of the bot appearing to ignore it.
-    await bot.delete_webhook(drop_pending_updates=False)
+    # drop_pending_updates=True: on Render's free tier the process restarts
+    # often (redeploys, inactivity SIGTERM). Keeping pending updates caused
+    # the bot to RE-PROCESS the same backlog on every restart, sending the
+    # same greeting/onboarding prompt several times over (and scrambling
+    # onboarding — a replayed message got captured as an employee's name).
+    # Dropping the backlog on boot trades "messages sent during downtime are
+    # lost" for "no duplicate/rescrambled processing", which is the better
+    # deal here until the bot is on stable (non-sleeping) hosting.
+    await bot.delete_webhook(drop_pending_updates=True)
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(

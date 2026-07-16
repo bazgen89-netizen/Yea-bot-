@@ -1563,6 +1563,42 @@ capped at 3, cycling through all three tip texts in order. Full test suite
 
 ---
 
+## Decision 42
+
+Date: 2026-07-15
+
+Decision:
+
+Two related fixes to "the bot messages everyone":
+
+1. **Reminders leaked across days (the real "пишет каждому").**
+   `check_reminders` selected open tasks with no date filter, so an
+   employee who left tasks open on a past shift kept getting private
+   reminders on days they weren't working. Added `Task.date == today` — a
+   reminder now only reaches whoever's actually on shift today. (The other
+   three scheduled jobs — upsell, music, revenue reminders — were already
+   gated by `ShiftLog.date == today`; only this one wasn't.)
+2. **No more group posts at all.** `app/services/messaging.py` used to
+   fall back to a public group reply when a private send failed (employee
+   hasn't opened a DM). Per owner ("писать не всем в чате"), it now tells
+   the owner privately instead — once per employee per day (in-memory
+   dedupe) so a shift's worth of failed sends doesn't flood the owner —
+   and never writes in the group.
+
+Reason:
+
+Owner reported the bot privately messaging every employee rather than
+only the one on shift, and separately not wanting public bot messages in
+the work chat.
+
+Impact:
+
+Verified against a real local Postgres: an employee with a today task
+gets the reminder, an employee whose only open task is from yesterday does
+not. Full test suite (39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

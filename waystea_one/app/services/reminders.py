@@ -21,11 +21,21 @@ async def check_reminders(bot, session_factory) -> None:
     first_cutoff = now - datetime.timedelta(minutes=settings.first_reminder_minutes)
     second_cutoff = now - datetime.timedelta(minutes=settings.second_reminder_minutes)
 
+    today = datetime.date.today()
+
     async with session_factory() as session:
+        # Only today's tasks — otherwise an employee who left tasks open on a
+        # previous shift keeps getting reminders on days they're not even
+        # working, which reads as "the bot messages everyone". Reminders
+        # should only reach whoever's actually on shift today.
         result = await session.execute(
             select(Task, Employee)
             .join(Employee, Task.employee_id == Employee.id)
-            .where(Task.status.in_(OPEN_STATUSES), Task.sent_at.is_not(None))
+            .where(
+                Task.date == today,
+                Task.status.in_(OPEN_STATUSES),
+                Task.sent_at.is_not(None),
+            )
         )
         rows = result.all()
 

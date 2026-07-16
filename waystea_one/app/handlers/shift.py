@@ -41,7 +41,7 @@ from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
 from app.models import Employee, ProofType, Store
 from app.services.ai import (
-    FALLBACK_EMPTY_KB,
+    ASK_OWNER_MARKER,
     FALLBACK_ERROR,
     FALLBACK_NO_KEY,
     answer_employee_question,
@@ -352,16 +352,17 @@ async def _try_handle_question_reply(message: Message, employee: Employee) -> bo
 
     is_owner = message.from_user.id == settings.owner_telegram_id
     answer = await answer_employee_question(text, knowledge_base, include_debug=is_owner)
+
+    # The model marks a WAYSTEA-specific question it couldn't answer from the
+    # knowledge base with ASK_OWNER_MARKER. Strip it from the employee reply
+    # and forward the question to the owner so the promise is actually kept.
+    needs_owner = ASK_OWNER_MARKER in answer
+    if needs_owner:
+        answer = answer.replace(ASK_OWNER_MARKER, "").strip()
+
     await notify_employee(message.bot, employee, answer, message)
 
-    # The answer itself tells the employee "I'll check with the owner and
-    # get back to you" for a factual question the knowledge base doesn't
-    # cover — that has to actually happen, not just be a line of text.
-    if (
-        answer.startswith(FALLBACK_NO_KEY)
-        or answer.startswith(FALLBACK_EMPTY_KB)
-        or answer.startswith(FALLBACK_ERROR)
-    ):
+    if needs_owner or answer.startswith(FALLBACK_NO_KEY) or answer.startswith(FALLBACK_ERROR):
         await _notify_owner_of_unanswered_question(message.bot, employee, text)
     return True
 

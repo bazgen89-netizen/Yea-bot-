@@ -1715,6 +1715,47 @@ forwarded to the owner. Full test suite (39) passes.
 
 ---
 
+## Decision 46
+
+Date: 2026-07-16
+
+Decision:
+
+Gave the bot genuine tea expertise. Rewrote `ai.py::SYSTEM_PROMPT` to
+position WAYSTEA ONE as a Chinese-tea expert: it answers questions about
+tea varieties, processing, terroir, gongfu brewing, flavor profiles,
+ageing, storage, ceremony and history confidently from the model's own
+knowledge (which is built on exactly the Chinese tea sources the owner
+asked about) — no knowledge base needed for those. WAYSTEA-specific facts
+(assortment, prices, stock, internal rules) still come strictly from the
+`KnowledgeEntry` base and are never invented. Removed the empty-KB
+short-circuit in `answer_employee_question` so tea questions work even
+before any KB entries exist. Added `ASK_OWNER_MARKER`: the model appends
+it when a WAYSTEA-specific question isn't covered by the KB;
+`_try_handle_question_reply` strips it from the employee reply and
+forwards the question to the owner (replacing the old
+FALLBACK_EMPTY_KB-based escalation).
+
+Reason:
+
+Owner asked to add tea expertise "на основе сайта waystea.ru + китайских
+источников". waystea.ru returns HTTP 403 to automated fetches, so its
+content can't be auto-ingested from here — but the Chinese-source
+expertise is delivered directly by the model, and WAYSTEA-site specifics
+can be added by the owner via `/addknowledge`.
+
+Impact:
+
+Verified with the real `app.bot` dispatcher (AI mocked, no key available
+locally): a general tea question gets an expert answer with no owner
+escalation; a WAYSTEA-price question gets the marker stripped from the
+employee reply and forwarded to the owner. Full test suite (39) passes.
+Next step for full waystea.ru grounding: owner pastes key site content
+(assortment, prices, house brewing recommendations) via `/addknowledge`,
+or provides it for a bulk seed.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

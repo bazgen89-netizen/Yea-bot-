@@ -2,7 +2,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.db import get_session
-from app.models import Employee, ProofType, Store, Task
+from app.models import Employee, ProofType, Store, Task, TaskStatus
 from app.services.identity import get_employee
 from app.services.messaging import notify_employee
 from app.services.reports import notify_owner_batch_progress
@@ -75,6 +75,14 @@ async def on_task_done(callback: CallbackQuery) -> None:
         task = await get_task(session, task_id)
         if task is None:
             await callback.answer("Задача не найдена.")
+            return
+
+        # Old checklist buttons stay tappable in the chat forever. Tapping an
+        # already-completed one must be a no-op — otherwise it re-runs the
+        # batch-completion check and re-sends the "block done" report to the
+        # owner (and the wrap-up to the employee) every time.
+        if task.status == TaskStatus.COMPLETED.value:
+            await callback.answer("Эта задача уже отмечена ✅")
             return
 
         proof_needed = await start_completion(session, task)

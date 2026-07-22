@@ -39,13 +39,24 @@ async def check_reminders(bot, session_factory) -> None:
         )
         rows = result.all()
 
+        # The "employee isn't responding" escalation is per-EMPLOYEE, not
+        # per-task: an employee ignoring 5 tasks should produce ONE owner
+        # message, not five. Track which employees already got (or are about
+        # to get) that message today so later overdue tasks are marked
+        # notified silently instead of re-pinging the owner.
+        owner_notified_employees = {
+            emp.id for task, emp in rows if task.owner_notified_at is not None
+        }
+
         for task, employee in rows:
             sent_at = task.sent_at
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=datetime.timezone.utc)
 
             if task.second_reminder_sent_at is not None and task.owner_notified_at is None:
-                await _notify_owner(bot, task, employee)
+                if employee.id not in owner_notified_employees:
+                    await _notify_owner(bot, task, employee)
+                    owner_notified_employees.add(employee.id)
                 task.owner_notified_at = now
                 await session.commit()
                 continue

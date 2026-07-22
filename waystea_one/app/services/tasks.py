@@ -150,8 +150,11 @@ async def advance_to_next_batch(
     session: AsyncSession, employee_id: int, date: datetime.date | None = None
 ) -> tuple[list[Task], list[Task]]:
     """Call after completing a task. Returns `(completed_batch, revealed_batch)`:
-    - `completed_batch` is the currently-visible batch, but only once every
-      task in it is COMPLETED — otherwise `[]` (the batch isn't done yet).
+    - `completed_batch` is only the batch that JUST closed — the highest
+      currently-visible batch, once every one of its tasks is COMPLETED —
+      not every visible task. Returning all visible tasks would re-report
+      (and mislabel) already-closed earlier batches on every subsequent
+      batch completion. `[]` if the current batch isn't fully done yet.
     - `revealed_batch` is the next batch just revealed (`sent_at` stamped),
       picked as the lowest batch number among tasks still `sent_at is None`
       — `[]` if the completed batch was the last one, or if nothing's done.
@@ -166,8 +169,15 @@ async def advance_to_next_batch(
         )
     )
     visible_tasks = list(visible_result.scalars())
+    if not visible_tasks:
+        return [], []
     if any(t.status != TaskStatus.COMPLETED.value for t in visible_tasks):
         return [], []
+
+    # Only the just-closed batch (the highest revealed one), not every
+    # completed task from earlier batches too.
+    just_closed_batch = max(t.batch for t in visible_tasks)
+    completed_batch = [t for t in visible_tasks if t.batch == just_closed_batch]
 
     hidden_result = await session.execute(
         select(Task).where(
@@ -178,7 +188,7 @@ async def advance_to_next_batch(
     )
     hidden_tasks = list(hidden_result.scalars())
     if not hidden_tasks:
-        return visible_tasks, []
+        return completed_batch, []
 
     next_batch = min(t.batch for t in hidden_tasks)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -188,7 +198,7 @@ async def advance_to_next_batch(
     await session.commit()
     for task in to_reveal:
         await session.refresh(task)
-    return visible_tasks, to_reveal
+    return completed_batch, to_reveal
 
 
 async def has_tasks_for_today(

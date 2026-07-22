@@ -1756,6 +1756,46 @@ or provides it for a bulk seed.
 
 ---
 
+## Decision 47
+
+Date: 2026-07-16
+
+Decision:
+
+Fixed two duplicate-notification bugs the owner reported:
+
+1. **"Выполнил блок 1" sent several times.** `advance_to_next_batch`
+   returned ALL currently-visible (sent) tasks as the "completed batch",
+   and `notify_owner_batch_progress` labelled it by
+   `completed_batch[0].batch`. Once batch 2+ closed, the visible set
+   included the already-closed earlier batches too, so every later batch
+   completion re-reported them and mislabelled the batch number (usually
+   as "блок 1"). Now it returns only the just-closed batch (the highest
+   visible batch number). Also guarded `on_task_done`: tapping an
+   already-COMPLETED checklist button (they stay tappable in the chat
+   forever) is now a no-op instead of re-running the batch check and
+   re-sending the report + wrap-up.
+2. **"Сотрудник не реагирует" sent several times.** `check_reminders`
+   escalated to the owner once per overdue TASK, so an employee ignoring N
+   tasks produced N identical owner messages. Now it's deduped to one
+   escalation per employee per day (later overdue tasks are marked
+   notified silently).
+
+Reason:
+
+Owner-reported: repeated batch-completion reports and repeated
+"not responding" messages.
+
+Impact:
+
+Verified against a real local Postgres with the real dispatcher: a full
+run through all six batches produces exactly one report per block with the
+correct number 1-6, re-tapping a completed button produces no new report,
+and an employee with five overdue tasks produces exactly one owner
+"не реагирует" message. Full test suite (39) passes.
+
+---
+
 # Current Next Steps
 
 1. Finish deploying to Render (Postgres + Web Service created this

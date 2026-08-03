@@ -1,4 +1,12 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import type { SqlDriver } from '../db/driver';
@@ -22,15 +30,27 @@ const DatabaseContext = createContext<DatabaseContextValue | null>(null);
  * запросы у нас синхронные и дешёвые, а данные меняются только по действию
  * пользователя — этого достаточно и не требует стороннего стейт-менеджера.
  */
+type State = { status: 'loading' } | { db: SqlDriver } | { error: Error };
+
 export function DatabaseProvider({ children }: { children: ReactNode }) {
-  const [state] = useState<{ db: SqlDriver } | { error: Error }>(() => {
-    try {
-      return { db: openDatabase() };
-    } catch (error) {
-      return { error: error as Error };
-    }
-  });
+  const [state, setState] = useState<State>({ status: 'loading' });
   const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    openDatabase()
+      .then((db) => {
+        if (!cancelled) setState({ db });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState({ error: error as Error });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
 

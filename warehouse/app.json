@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Склад",
+    "slug": "warehouse",
+    "scheme": "warehouse",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.waystea.warehouse",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Камера нужна, чтобы сканировать штрихкоды товаров.",
+        "NSPhotoLibraryUsageDescription": "Доступ к фото нужен, чтобы добавить изображение товара."
+      }
+    },
+    "android": {
+      "package": "com.waystea.warehouse",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Камера нужна, чтобы сканировать штрихкоды товаров."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Доступ к фото нужен, чтобы добавить изображение товара."
+        }
+      ]
+    ]
+  }
+}

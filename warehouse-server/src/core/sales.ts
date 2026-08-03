@@ -94,10 +94,18 @@ export async function createSale(
     // Второй раз списывать остаток нельзя.
     if (existing) return existing;
 
-    const shortages = await findShortages(tx, orgId, input.location_id, input.lines);
+    const { shortages, costByProduct } = await checkStock(tx, orgId, input.location_id, input.lines);
     if (shortages.length > 0) throw new OutOfStockError(shortages);
 
-    const totals = saleTotals(input.lines, input.discount ?? 0);
+    // Себестоимость берём из карточки товара, а не из того, что прислал клиент:
+    // устройство продавца её вообще не видит, а доверять присланной цифре
+    // нельзя — от неё считается прибыль.
+    const lines = input.lines.map((line) => ({
+      ...line,
+      cost_price: costByProduct.get(line.product_id) ?? 0,
+    }));
+
+    const totals = saleTotals(lines, input.discount ?? 0);
     const seqs = await reserveSeq(tx, orgId, 1 + input.lines.length * 2);
     let cursor = 0;
 
@@ -120,7 +128,7 @@ export async function createSale(
       ],
     );
 
-    for (const line of input.lines) {
+    for (const line of lines) {
       await tx.query(
         `INSERT INTO sale_items (id, org_id, sale_id, product_id, qty, price, cost_price, seq)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -155,19 +163,19 @@ export async function createSale(
 }
 
 /**
- * Одним запросом проверяет все позиции чека. Отдельный запрос на позицию
- * означал бы N обращений к базе на каждую продажу.
+ * Одним запросом проверяет все позиции чека и заодно достаёт закупочные цены.
+ * Отдельный запрос на позицию означал бы N обращений к базе на каждую продажу.
  */
-async function findShortages(
+async function checkStock(
   db: SqlDb,
   orgId: string,
   locationId: string,
   lines: SaleLineInput[],
-): Promise<Shortage[]> {
+): Promise<{ shortages: Shortage[]; costByProduct: Map<string, number> }> {
   const ids = lines.map((line) => line.product_id);
 
-  const rows = await db.query<{ id: string; name: string; stock: number }>(
-    `SELECT p.id, p.name,
+  const rows = await db.query<{ id: string; name: string; cost_price: number; stock: number }>(
+    `SELECT p.id, p.name, p.cost_price,
             COALESCE((
               SELECT SUM(m.qty_delta) FROM stock_moves m
               WHERE m.product_id = p.id AND m.location_id = $3
@@ -179,6 +187,7 @@ async function findShortages(
 
   const stockById = new Map(rows.map((row) => [row.id, Number(row.stock)]));
   const nameById = new Map(rows.map((row) => [row.id, row.name]));
+  const costByProduct = new Map(rows.map((row) => [row.id, Number(row.cost_price)]));
 
   const shortages: Shortage[] = [];
 
@@ -203,7 +212,7 @@ async function findShortages(
     }
   }
 
-  return shortages;
+  return { shortages, costByProduct };
 }
 
 /**

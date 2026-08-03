@@ -16,8 +16,13 @@ export function lineTotal(pricePerUnit: number, qty: number): number {
 export interface SaleLineInput {
   product_id: string;
   qty: number;
+  /** Цена продажи за единицу, копейки. */
   price: number;
-  cost_price: number;
+  /**
+   * Себестоимость за единицу, копейки. Клиент может её не знать (продавцу она
+   * не видна) — при проведении продажи сервер подставляет цену из карточки.
+   */
+  cost_price?: number;
 }
 
 export interface Totals {
@@ -35,7 +40,7 @@ export function saleTotals(lines: SaleLineInput[], discount = 0): Totals {
 
   for (const line of lines) {
     subtotal += lineTotal(line.price, line.qty);
-    costTotal += lineTotal(line.cost_price, line.qty);
+    costTotal += lineTotal(line.cost_price ?? 0, line.qty);
   }
 
   const applied = Math.min(Math.max(discount, 0), subtotal);

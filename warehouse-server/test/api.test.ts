@@ -7,6 +7,9 @@ import type { SqlDb } from '../src/db/driver.ts';
 import { buildServer } from '../src/server.ts';
 import { createTestDb } from './helpers.ts';
 
+/** Ответ API в тестах разбирается вручную — заранее описывать его формы незачем. */
+type JsonObject = Record<string, any>;
+
 let db: SqlDb;
 let app: FastifyInstance;
 
@@ -26,7 +29,7 @@ async function call(
     headers: options.token ? { authorization: `Bearer ${options.token}` } : {},
     payload: options.body as object | undefined,
   });
-  return { status: response.statusCode, body: response.json() as Record<string, never> };
+  return { status: response.statusCode, body: response.json() as JsonObject };
 }
 
 before(async () => {

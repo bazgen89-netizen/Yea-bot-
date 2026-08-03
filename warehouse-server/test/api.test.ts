@@ -448,3 +448,48 @@ describe('проверка входных данных', () => {
     assert.equal(response.status, 400);
   });
 });
+
+describe('документация API', () => {
+  it('openapi.json отдаётся без токена', async () => {
+    const response = await call('GET', '/api/v1/openapi.json');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.openapi, '3.1.0');
+    assert.ok(Object.keys(response.body.paths).length > 20);
+  });
+
+  it('не описывает эндпоинтов, которых нет', async () => {
+    const spec = (await call('GET', '/api/v1/openapi.json')).body;
+
+    const missing: string[] = [];
+    for (const [path, methods] of Object.entries(spec.paths as Record<string, object>)) {
+      // В OpenAPI параметры пути в фигурных скобках, у Fastify — с двоеточием.
+      const url = path.replace(/\{(\w+)\}/g, ':$1');
+
+      for (const method of Object.keys(methods)) {
+        if (!app.hasRoute({ method: method.toUpperCase() as 'GET', url })) {
+          missing.push(`${method.toUpperCase()} ${path}`);
+        }
+      }
+    }
+
+    assert.deepEqual(missing, [], `описаны, но не реализованы: ${missing.join(', ')}`);
+  });
+
+  it('страница документации открывается и перечисляет разделы', async () => {
+    const response = await app.inject({ method: 'GET', url: '/docs' });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'] as string, /text\/html/);
+    assert.match(response.body, /API склада/);
+    assert.match(response.body, /Синхронизация/);
+    assert.match(response.body, /\/api\/v1\/sales/);
+  });
+
+  it('не ломается на символах, которые нужно экранировать', async () => {
+    const response = await app.inject({ method: 'GET', url: '/docs' });
+    // Описание содержит `<токен>` — он должен превратиться в текст, а не в тег.
+    assert.ok(!response.body.includes('<токен>'));
+    assert.match(response.body, /&lt;токен&gt;/);
+  });
+});

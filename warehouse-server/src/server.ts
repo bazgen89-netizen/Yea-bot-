@@ -7,6 +7,7 @@ import { ApiError } from './core/errors.ts';
 import { OutOfStockError } from './core/sales.ts';
 import { authenticate } from './http/principal.ts';
 import { authRoutes } from './http/routes/auth.ts';
+import { docsRoutes } from './http/routes/docs.ts';
 import { syncRoutes } from './http/routes/sync.ts';
 import { warehouseRoutes } from './http/routes/warehouse.ts';
 
@@ -20,6 +21,8 @@ export interface ServerOptions {
 /** Пути, доступные без токена. */
 const PUBLIC_PATHS = new Set([
   '/health',
+  '/docs',
+  '/api/v1/openapi.json',
   '/api/v1/auth/register',
   '/api/v1/auth/login',
 ]);
@@ -86,6 +89,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   authRoutes(app, db, options.allowRegistration ?? true);
   warehouseRoutes(app, db);
   syncRoutes(app, db);
+  docsRoutes(app);
 
   return app;
 }

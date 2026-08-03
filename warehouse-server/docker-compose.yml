@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: warehouse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: warehouse
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Сюда складываются резервные копии, см. scripts/backup.sh
+      - ./backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U warehouse']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Порт наружу не публикуется: база доступна только серверу приложения.
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://warehouse:${POSTGRES_PASSWORD}@db:5432/warehouse
+      PGSSLMODE: disable
+      PORT: 3000
+      # Закройте регистрацию после того, как заведёте свою организацию:
+      # иначе адрес сервера позволит любому создать у вас аккаунт.
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+    ports:
+      - '${PORT:-3000}:3000'
+
+volumes:
+  db-data:

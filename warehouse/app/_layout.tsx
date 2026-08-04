@@ -13,16 +13,22 @@ export default function RootLayout() {
       <DatabaseProvider>
         <CartProvider>
           <ScannerProvider>
-            <StatusBar style="dark" />
+            <StatusBar style="light" />
             <Stack
               screenOptions={{
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
+                headerStyle: { backgroundColor: colors.primary },
+                headerTintColor: colors.primaryText,
                 headerTitleStyle: { fontWeight: '600' },
                 contentStyle: { backgroundColor: colors.bg },
               }}
             >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="new"
+                options={{ headerShown: false, presentation: 'modal' }}
+              />
+              <Stack.Screen name="sale/new" options={{ headerShown: false }} />
+              <Stack.Screen name="reports/index" options={{ title: 'Отчёты' }} />
               <Stack.Screen name="product/[id]" options={{ title: 'Товар' }} />
               <Stack.Screen name="doc/new" options={{ title: 'Документ' }} />
               <Stack.Screen name="sale/[id]" options={{ title: 'Чек' }} />

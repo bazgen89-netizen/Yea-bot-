@@ -18,6 +18,7 @@ import { formatMoney, formatMoneyWithSign } from '../../src/domain/money';
 import { formatQtyWithUnit } from '../../src/domain/qty';
 import { pluralize } from '../../src/domain/plural';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
+import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Card, Empty, Row, Stat } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 

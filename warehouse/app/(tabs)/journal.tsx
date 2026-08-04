@@ -7,6 +7,7 @@ import { listSales, type SaleSummary } from '../../src/db/sales';
 import { formatMoneyWithSign } from '../../src/domain/money';
 import { pluralize } from '../../src/domain/plural';
 import { useQuery } from '../../src/state/DatabaseProvider';
+import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Empty, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 
@@ -27,6 +28,8 @@ export default function DocsScreen() {
 
   return (
     <View style={styles.screen}>
+      <AppHeader title="Журнал" subtitle="Документы и продажи" />
+
       <View style={styles.tabs}>
         <TabChip label="Склад" active={tab === 'docs'} onPress={() => setTab('docs')} />
         <TabChip label="Продажи" active={tab === 'sales'} onPress={() => setTab('sales')} />

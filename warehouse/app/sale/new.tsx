@@ -20,6 +20,7 @@ import type { CartLine, PaymentMethod, ProductWithStock } from '../../src/domain
 import { useCart } from '../../src/state/CartProvider';
 import { useDatabase } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
+import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Empty, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 
@@ -75,6 +76,8 @@ export default function SellScreen() {
 
   return (
     <View style={styles.screen}>
+      <AppHeader title="Продажа" subtitle="Оформление чека" />
+
       <FlatList
         data={cart.lines}
         keyExtractor={(item) => String(item.product_id)}

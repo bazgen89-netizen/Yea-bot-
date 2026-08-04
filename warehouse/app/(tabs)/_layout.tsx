@@ -1,57 +1,109 @@
-import { Tabs } from 'expo-router';
-import { ColorValue, Text } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useCart } from '../../src/state/CartProvider';
-import { colors } from '../../src/ui/theme';
+import { colors, radius, shadow, spacing } from '../../src/ui/theme';
 
-function TabIcon({ symbol, color }: { symbol: string; color: ColorValue }) {
-  return <Text style={{ fontSize: 20, color }}>{symbol}</Text>;
+function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
+  return <Text style={[styles.icon, focused && styles.iconActive]}>{symbol}</Text>;
+}
+
+/**
+ * Круглая кнопка создания в центре нижней панели. Это не вкладка: она не
+ * открывает экран, а поднимает шторку с выбором документа, поэтому вкладка
+ * под ней сделана заглушкой, а нажатие перехвачено.
+ */
+function CreateButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Создать"
+      onPress={onPress}
+      style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85 }]}
+    >
+      <Text style={styles.fabPlus}>+</Text>
+    </Pressable>
+  );
 }
 
 export default function TabsLayout() {
-  const { lines } = useCart();
+  const router = useRouter();
 
   return (
     <Tabs
       screenOptions={{
+        headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: '600' },
+        tabBarInactiveTintColor: colors.tabInactive,
+        tabBarStyle: styles.bar,
+        tabBarLabelStyle: styles.label,
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Товары',
-          tabBarIcon: ({ color }) => <TabIcon symbol="📦" color={color} />,
+          title: 'Главная',
+          tabBarIcon: ({ focused }) => <TabIcon symbol="🏠" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="sell"
+        name="catalog"
         options={{
-          title: 'Касса',
-          tabBarIcon: ({ color }) => <TabIcon symbol="🧾" color={color} />,
-          // Счётчик позиций в корзине — видно, что чек не пустой, с любой вкладки.
-          tabBarBadge: lines.length > 0 ? lines.length : undefined,
+          title: 'Каталог',
+          tabBarIcon: ({ focused }) => <TabIcon symbol="🗄️" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="docs"
+        name="create"
         options={{
-          title: 'Документы',
-          tabBarIcon: ({ color }) => <TabIcon symbol="📥" color={color} />,
+          title: '',
+          tabBarButton: () => (
+            <View style={styles.fabSlot}>
+              <CreateButton onPress={() => router.push('/new')} />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
-        name="reports"
+        name="journal"
         options={{
-          title: 'Отчёты',
-          tabBarIcon: ({ color }) => <TabIcon symbol="📊" color={color} />,
+          title: 'Журнал',
+          tabBarIcon: ({ focused }) => <TabIcon symbol="📄" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="menu"
+        options={{
+          title: 'Меню',
+          tabBarIcon: ({ focused }) => <TabIcon symbol="☰" focused={focused} />,
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  bar: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 0,
+    height: 88,
+    paddingTop: spacing.sm,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    ...shadow,
+  },
+  label: { fontSize: 11, marginTop: 2 },
+  icon: { fontSize: 22, opacity: 0.55 },
+  iconActive: { opacity: 1 },
+  fabSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fab: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.pill,
+    backgroundColor: colors.fab,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -6,
+  },
+  fabPlus: { color: '#FFFFFF', fontSize: 30, lineHeight: 34, fontWeight: '500' },
+});

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 
 import type { SqlDb } from '../src/db/driver.ts';
-import { migrate } from '../src/db/schema.ts';
+import { MIGRATIONS, migrate } from '../src/db/schema.ts';
 import { hashPassword, validatePassword, verifyPassword } from '../src/auth/passwords.ts';
 import {
   API_KEY_PREFIX,
@@ -81,7 +81,9 @@ describe('база и сессии', () => {
   it('миграции применяются повторно без ошибок', async () => {
     await migrate(db);
     const row = await db.one<{ version: number }>('SELECT version FROM schema_version');
-    assert.equal(row?.version, 1);
+    // Привязка к длине списка, а не к числу: иначе тест падает от каждой
+    // новой миграции, ничего при этом не проверяя.
+    assert.equal(row?.version, MIGRATIONS.length);
   });
 
   it('выданный токен опознаёт пользователя', async () => {

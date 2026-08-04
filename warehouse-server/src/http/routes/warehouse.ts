@@ -60,6 +60,7 @@ const docBody = z.object({
   location_id: uuid,
   to_location_id: uuid.nullish(),
   counterparty: z.string().max(300).nullish(),
+  supplier_id: uuid.nullish(),
   note: z.string().max(1000).nullish(),
   created_at: z.string().datetime().optional(),
   lines: z
@@ -83,8 +84,9 @@ const adjustBody = z.object({
 const saleBody = z.object({
   id: uuid.optional(),
   location_id: uuid,
+  customer_id: uuid.nullish(),
   discount: amount.min(0).optional(),
-  payment: z.enum(['cash', 'card', 'transfer']).optional(),
+  payment: z.enum(['cash', 'card', 'transfer', 'credit']).optional(),
   created_at: z.string().datetime().optional(),
   lines: z
     .array(
@@ -92,7 +94,9 @@ const saleBody = z.object({
         product_id: uuid,
         qty: amount.positive(),
         price: amount.min(0),
-        cost_price: amount.min(0),
+        // Себестоимость принимается для совместимости, но игнорируется:
+        // сервер берёт её из карточки товара.
+        cost_price: amount.min(0).optional(),
       }),
     )
     .min(1),

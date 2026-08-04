@@ -493,3 +493,159 @@ describe('документация API', () => {
     assert.match(response.body, /&lt;токен&gt;/);
   });
 });
+
+describe('клиенты и поставщики', () => {
+  it('заводит клиента и считает долг по продаже в кредит', async () => {
+    const client = await call('POST', '/api/v1/counterparties', {
+      token: ownerToken,
+      body: { kind: 'customer', name: 'Иван', phone: '+79990000000' },
+    });
+    assert.equal(client.status, 201);
+
+    const id = await makeProduct();
+    await receive(id, 5000);
+
+    await call('POST', '/api/v1/sales', {
+      token: ownerToken,
+      body: {
+        location_id: locationId,
+        customer_id: client.body.id,
+        payment: 'credit',
+        lines: [{ product_id: id, qty: 1000, price: 500_000 }],
+      },
+    });
+
+    const withDebt = await call('GET', `/api/v1/counterparties/${client.body.id}`, {
+      token: ownerToken,
+    });
+    assert.equal(Number(withDebt.body.balance), 500_000);
+  });
+
+  it('платёж уменьшает долг', async () => {
+    const client = await call('POST', '/api/v1/counterparties', {
+      token: ownerToken,
+      body: { kind: 'customer', name: 'Пётр' },
+    });
+
+    const id = await makeProduct();
+    await receive(id, 5000);
+    await call('POST', '/api/v1/sales', {
+      token: ownerToken,
+      body: {
+        location_id: locationId,
+        customer_id: client.body.id,
+        payment: 'credit',
+        lines: [{ product_id: id, qty: 1000, price: 500_000 }],
+      },
+    });
+
+    await call('POST', `/api/v1/counterparties/${client.body.id}/payments`, {
+      token: ownerToken,
+      body: { amount: 200_000, note: 'частично наличными' },
+    });
+
+    const after = await call('GET', `/api/v1/counterparties/${client.body.id}`, {
+      token: ownerToken,
+    });
+    assert.equal(Number(after.body.balance), 300_000);
+  });
+
+  it('продажа в долг без покупателя не проводится', async () => {
+    const id = await makeProduct();
+    await receive(id, 5000);
+
+    const response = await call('POST', '/api/v1/sales', {
+      token: ownerToken,
+      body: {
+        location_id: locationId,
+        payment: 'credit',
+        lines: [{ product_id: id, qty: 1000, price: 500_000 }],
+      },
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(String(response.body.error.message), /покупател/i);
+  });
+
+  it('поставка в долг даёт отрицательный баланс — должны мы', async () => {
+    const supplier = await call('POST', '/api/v1/counterparties', {
+      token: ownerToken,
+      body: { kind: 'supplier', name: 'ООО Чайный путь' },
+    });
+
+    const id = await makeProduct();
+    await call('POST', '/api/v1/docs', {
+      token: ownerToken,
+      body: {
+        type: 'receipt',
+        location_id: locationId,
+        supplier_id: supplier.body.id,
+        lines: [{ product_id: id, qty: 10_000, price: 200_000 }],
+      },
+    });
+
+    const debt = await call('GET', `/api/v1/counterparties/${supplier.body.id}`, {
+      token: ownerToken,
+    });
+    // 10 кг × 2000,00 ₽ — столько мы должны поставщику.
+    assert.equal(Number(debt.body.balance), -2_000_000);
+  });
+
+  it('запись «и клиент, и поставщик» попадает в оба списка', async () => {
+    await call('POST', '/api/v1/counterparties', {
+      token: ownerToken,
+      body: { kind: 'both', name: 'Сосед по рынку' },
+    });
+
+    const asCustomer = await call('GET', '/api/v1/counterparties?kind=customer', { token: ownerToken });
+    const asSupplier = await call('GET', '/api/v1/counterparties?kind=supplier', { token: ownerToken });
+
+    const names = (rows: unknown) => (rows as { name: string }[]).map((r) => r.name);
+    assert.ok(names(asCustomer.body).includes('Сосед по рынку'));
+    assert.ok(names(asSupplier.body).includes('Сосед по рынку'));
+  });
+
+  it('история контрагента собирает продажи и платежи', async () => {
+    const client = await call('POST', '/api/v1/counterparties', {
+      token: ownerToken,
+      body: { kind: 'customer', name: 'Мария' },
+    });
+
+    const id = await makeProduct();
+    await receive(id, 5000);
+    await call('POST', '/api/v1/sales', {
+      token: ownerToken,
+      body: {
+        location_id: locationId,
+        customer_id: client.body.id,
+        payment: 'credit',
+        lines: [{ product_id: id, qty: 1000, price: 500_000 }],
+      },
+    });
+    await call('POST', `/api/v1/counterparties/${client.body.id}/payments`, {
+      token: ownerToken,
+      body: { amount: 100_000 },
+    });
+
+    const history = await call('GET', `/api/v1/counterparties/${client.body.id}/history`, {
+      token: ownerToken,
+    });
+    const kinds = (history.body as unknown as { kind: string }[]).map((e) => e.kind);
+    assert.ok(kinds.includes('sale'));
+    assert.ok(kinds.includes('payment'));
+  });
+
+  it('продавец не правит справочник, но может завести клиента на кассе', async () => {
+    const created = await call('POST', '/api/v1/counterparties', {
+      token: sellerToken,
+      body: { kind: 'customer', name: 'Новый покупатель' },
+    });
+    assert.equal(created.status, 201);
+
+    const edited = await call('PATCH', `/api/v1/counterparties/${created.body.id}`, {
+      token: sellerToken,
+      body: { name: 'Переименован' },
+    });
+    assert.equal(edited.status, 403);
+  });
+});

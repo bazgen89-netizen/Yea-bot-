@@ -23,6 +23,8 @@ export interface DocInput {
   /** Только для перемещения — точка назначения. */
   to_location_id?: string | null;
   counterparty?: string | null;
+  /** Поставщик из справочника. Название в counterparty остаётся для разовых. */
+  supplier_id?: string | null;
   note?: string | null;
   lines: DocLineInput[];
   created_at?: string;
@@ -35,6 +37,7 @@ export interface Doc {
   type: DocType;
   to_location_id: string | null;
   counterparty: string | null;
+  supplier_id: string | null;
   note: string | null;
   created_by: string | null;
   created_at: string;
@@ -82,8 +85,8 @@ export async function postDoc(
 
     const doc = await tx.one<Doc>(
       `INSERT INTO docs (id, org_id, location_id, type, to_location_id,
-                         counterparty, note, created_by, created_at, seq)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                         counterparty, supplier_id, note, created_by, created_at, seq)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         input.id ?? randomUUID(),
@@ -92,6 +95,7 @@ export async function postDoc(
         input.type,
         input.to_location_id ?? null,
         input.counterparty?.trim() || null,
+        input.supplier_id ?? null,
         input.note?.trim() || null,
         userId,
         createdAt,

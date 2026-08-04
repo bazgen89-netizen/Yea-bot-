@@ -191,6 +191,54 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX idx_moves_stock    ON stock_moves(org_id, product_id, location_id);
   CREATE INDEX idx_moves_created  ON stock_moves(org_id, created_at);
   `,
+
+  // 2 — клиенты и поставщики
+  `
+  CREATE TABLE counterparties (
+    id         UUID PRIMARY KEY,
+    org_id     UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    -- Один и тот же человек бывает и покупателем, и поставщиком, поэтому
+    -- справочник общий, а роль — признак записи.
+    kind       TEXT        NOT NULL CHECK (kind IN ('customer','supplier','both')),
+    name       TEXT        NOT NULL,
+    phone      TEXT,
+    email      TEXT,
+    note       TEXT,
+    archived   BOOLEAN     NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    seq        BIGINT      NOT NULL
+  );
+
+  CREATE INDEX idx_counterparties_sync ON counterparties(org_id, seq);
+  CREATE INDEX idx_counterparties_name ON counterparties(org_id, lower(name));
+
+  -- Платежи по долгу: клиент вернул часть суммы, мы заплатили поставщику.
+  -- Долг нигде не хранится числом — он считается из чеков, документов
+  -- и этих платежей, ровно как остаток считается из движений.
+  CREATE TABLE counterparty_payments (
+    id              UUID PRIMARY KEY,
+    org_id          UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    counterparty_id UUID        NOT NULL REFERENCES counterparties(id) ON DELETE CASCADE,
+    -- Копейки. Плюс — долг уменьшился, минус — вырос (исправление ошибки).
+    amount          BIGINT      NOT NULL,
+    note            TEXT,
+    created_by      UUID        REFERENCES users(id),
+    created_at      TIMESTAMPTZ NOT NULL,
+    seq             BIGINT      NOT NULL
+  );
+
+  CREATE INDEX idx_payments_sync ON counterparty_payments(org_id, seq);
+  CREATE INDEX idx_payments_party ON counterparty_payments(counterparty_id);
+
+  ALTER TABLE sales ADD COLUMN customer_id UUID REFERENCES counterparties(id);
+  ALTER TABLE docs  ADD COLUMN supplier_id UUID REFERENCES counterparties(id);
+
+  -- Продажа в долг: деньги за товар ещё не получены.
+  ALTER TABLE sales DROP CONSTRAINT sales_payment_check;
+  ALTER TABLE sales ADD CONSTRAINT sales_payment_check
+    CHECK (payment IN ('cash','card','transfer','credit'));
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

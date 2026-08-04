@@ -7,6 +7,7 @@ import { ApiError } from './core/errors.ts';
 import { OutOfStockError } from './core/sales.ts';
 import { authenticate } from './http/principal.ts';
 import { authRoutes } from './http/routes/auth.ts';
+import { counterpartyRoutes } from './http/routes/counterparties.ts';
 import { docsRoutes } from './http/routes/docs.ts';
 import { syncRoutes } from './http/routes/sync.ts';
 import { warehouseRoutes } from './http/routes/warehouse.ts';
@@ -88,6 +89,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 
   authRoutes(app, db, options.allowRegistration ?? true);
   warehouseRoutes(app, db);
+  counterpartyRoutes(app, db);
   syncRoutes(app, db);
   docsRoutes(app);
 

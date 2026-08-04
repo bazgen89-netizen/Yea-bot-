@@ -7,11 +7,13 @@ import { badRequest, conflict, notFound } from './errors.ts';
 import { insertMove } from './stock.ts';
 import { reserveSeq } from './seq.ts';
 
-export type PaymentMethod = 'cash' | 'card' | 'transfer';
+export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'credit';
 
 export interface SaleInput {
   id?: string;
   location_id: string;
+  /** Покупатель. Обязателен для продажи в долг — иначе долг не за кем числить. */
+  customer_id?: string | null;
   lines: SaleLineInput[];
   /** Скидка на весь чек, копейки. */
   discount?: number;
@@ -27,6 +29,7 @@ export interface Sale {
   total: number;
   cost_total: number;
   payment: PaymentMethod;
+  customer_id: string | null;
   created_by: string | null;
   created_at: string;
   refunded_at: string | null;
@@ -80,6 +83,10 @@ export async function createSale(
     }
   }
 
+  if (input.payment === 'credit' && !input.customer_id) {
+    throw badRequest('Для продажи в долг нужно выбрать покупателя');
+  }
+
   await assertLocation(db, orgId, input.location_id);
 
   const saleId = input.id ?? randomUUID();
@@ -111,8 +118,8 @@ export async function createSale(
 
     const sale = await tx.one<Sale>(
       `INSERT INTO sales (id, org_id, location_id, discount, total, cost_total,
-                          payment, created_by, created_at, seq)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                          payment, customer_id, created_by, created_at, seq)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         saleId,
@@ -122,6 +129,7 @@ export async function createSale(
         totals.total,
         totals.costTotal,
         input.payment ?? 'cash',
+        input.customer_id ?? null,
         userId,
         createdAt,
         seqs[cursor++],

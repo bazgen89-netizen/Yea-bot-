@@ -239,6 +239,72 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sales ADD CONSTRAINT sales_payment_check
     CHECK (payment IN ('cash','card','transfer','credit'));
   `,
+
+  // 3 — карточка товара как в привычных программах учёта
+  `
+  -- Группы товаров — дерево. Категория остаётся отдельным, плоским признаком:
+  -- в CloudShop это разные поля, и объединять их нельзя.
+  CREATE TABLE product_groups (
+    id         UUID PRIMARY KEY,
+    org_id     UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    parent_id  UUID        REFERENCES product_groups(id) ON DELETE SET NULL,
+    name       TEXT        NOT NULL,
+    deleted    BOOLEAN     NOT NULL DEFAULT false,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    seq        BIGINT      NOT NULL
+  );
+
+  CREATE INDEX idx_groups_sync ON product_groups(org_id, seq);
+
+  ALTER TABLE products
+    -- Короткий человекочитаемый номер, свой в каждой организации. Артикул
+    -- задаёт пользователь и может не заполнить — а сослаться на товар надо.
+    ADD COLUMN code            INTEGER,
+    ADD COLUMN group_id        UUID REFERENCES product_groups(id) ON DELETE SET NULL,
+    ADD COLUMN kind            TEXT NOT NULL DEFAULT 'product'
+                               CHECK (kind IN ('product','service','bundle')),
+    ADD COLUMN country         TEXT,
+    ADD COLUMN description     TEXT,
+    -- Плановая цена закупки: то, почём договорились с поставщиком.
+    ADD COLUMN purchase_price  BIGINT NOT NULL DEFAULT 0,
+    -- Скидка на товар, сотые доли процента: 1250 = 12,50 %.
+    ADD COLUMN discount_bp     INTEGER NOT NULL DEFAULT 0,
+    -- Цена вводится при продаже (услуги, развес под заказ).
+    ADD COLUMN free_price      BOOLEAN NOT NULL DEFAULT false,
+    -- Продаётся на вес: количество вводится дробным.
+    ADD COLUMN weighted        BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN shelf_life_days INTEGER,
+    -- Ставка НДС в сотых процента: 2000 = 20 %.
+    ADD COLUMN tax_bp          INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN tax_exempt      BOOLEAN NOT NULL DEFAULT false;
+
+  CREATE UNIQUE INDEX idx_products_code ON products(org_id, code) WHERE code IS NOT NULL;
+
+  -- Номер товара выдаётся по организации, а не глобально.
+  CREATE TABLE product_code_counters (
+    org_id UUID PRIMARY KEY REFERENCES orgs(id) ON DELETE CASCADE,
+    last   INTEGER NOT NULL DEFAULT 0
+  );
+
+  -- Своя цена продажи в отдельной точке. Пусто — действует цена из карточки.
+  CREATE TABLE product_prices (
+    id          UUID PRIMARY KEY,
+    org_id      UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    product_id  UUID        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    location_id UUID        NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    sale_price  BIGINT      NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    seq         BIGINT      NOT NULL,
+    UNIQUE (product_id, location_id)
+  );
+
+  CREATE INDEX idx_product_prices_sync ON product_prices(org_id, seq);
+
+  -- Остаток после операции: в истории товара видно, сколько осталось на тот
+  -- момент. Считать это на лету означало бы суммировать все прошлые движения
+  -- на каждую строку списка.
+  ALTER TABLE stock_moves ADD COLUMN balance_after BIGINT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

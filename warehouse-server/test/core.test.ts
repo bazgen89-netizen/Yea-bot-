@@ -503,3 +503,70 @@ describe('отчёты', () => {
     assert.equal(days[0].receipts, 2);
   });
 });
+
+describe('себестоимость и история', () => {
+  it('себестоимость усредняется по приходам, а не прыгает за последней ценой', async () => {
+    const id = await addProduct({ cost_price: 0 });
+
+    // 100 кг по 200,00 ₽, затем 1 кг по 500,00 ₽.
+    await receive(id, 100_000, shopId, 20_000);
+    await receive(id, 1_000, shopId, 50_000);
+
+    const product = await getProduct(db, orgId, id);
+    // (100 × 200 + 1 × 500) / 101 ≈ 202,97 ₽ — а не 500 ₽.
+    assert.equal(Number(product.cost_price), 20_297);
+  });
+
+  it('первый приход задаёт себестоимость целиком', async () => {
+    const id = await addProduct({ cost_price: 0 });
+    await receive(id, 5_000, shopId, 33_000);
+
+    assert.equal(Number((await getProduct(db, orgId, id)).cost_price), 33_000);
+  });
+
+  it('цена закупки — всегда последняя, в отличие от себестоимости', async () => {
+    const id = await addProduct({ cost_price: 0 });
+    await receive(id, 100_000, shopId, 20_000);
+    await receive(id, 1_000, shopId, 50_000);
+
+    const row = await db.one<{ purchase_price: number; cost_price: number }>(
+      'SELECT purchase_price, cost_price FROM products WHERE id = $1',
+      [id],
+    );
+    assert.equal(Number(row?.purchase_price), 50_000);
+    assert.notEqual(Number(row?.cost_price), 50_000);
+  });
+
+  it('в истории у каждой операции есть остаток после неё', async () => {
+    const id = await addProduct();
+    await receive(id, 10_000);
+    await createSale(db, orgId, null, {
+      location_id: shopId,
+      lines: [{ product_id: id, qty: 3_000, price: 500_000 }],
+    });
+    await postDoc(db, orgId, null, {
+      type: 'writeoff',
+      location_id: shopId,
+      lines: [{ product_id: id, qty: 1_000 }],
+    });
+
+    const moves = await listMoves(db, orgId, { productId: id });
+    // Свежие сверху: списание 6 000, продажа 7 000, приход 10 000.
+    assert.deepEqual(
+      moves.map((m) => Number(m.balance_after)),
+      [6_000, 7_000, 10_000],
+    );
+  });
+
+  it('остаток после операции считается по своей точке', async () => {
+    const id = await addProduct();
+    await receive(id, 4_000, shopId);
+    await receive(id, 9_000, storageId);
+
+    const shopMoves = await listMoves(db, orgId, { productId: id, locationId: shopId });
+    assert.equal(Number(shopMoves[0].balance_after), 4_000);
+
+    const storageMoves = await listMoves(db, orgId, { productId: id, locationId: storageId });
+    assert.equal(Number(storageMoves[0].balance_after), 9_000);
+  });
+});

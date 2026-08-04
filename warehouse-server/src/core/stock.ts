@@ -135,19 +135,54 @@ export async function postDoc(
         });
       }
 
-      // Приход по новой цене обновляет закупочную цену товара: прибыль должна
-      // считаться по тому, что реально заплачено поставщику.
       if (input.type === 'receipt' && price > 0) {
-        const seqForProduct = await reserveSeq(tx, orgId, 1);
-        await tx.query(
-          'UPDATE products SET cost_price = $3, updated_at = now(), seq = $4 WHERE id = $1 AND org_id = $2',
-          [line.product_id, orgId, price, seqForProduct[0]],
-        );
+        await applyWeightedCost(tx, orgId, line.product_id, line.qty, price);
       }
     }
 
     return doc!;
   });
+}
+
+/**
+ * Пересчитывает себестоимость товара как средневзвешенную по приходам.
+ *
+ * Просто записать цену последнего прихода нельзя: если 100 кг лежит по 200 ₽,
+ * а пришёл 1 кг по 500 ₽, себестоимость всего остатка не становится 500 ₽ —
+ * и прибыль по прошлым продажам поехала бы вслед за одной поставкой.
+ *
+ * Цена закупки (purchase_price) при этом обновляется всегда: это то, почём
+ * договорились в последний раз.
+ */
+async function applyWeightedCost(
+  db: SqlDb,
+  orgId: string,
+  productId: string,
+  incomingQty: number,
+  incomingPrice: number,
+): Promise<void> {
+  const product = await db.one<{ cost_price: number }>(
+    'SELECT cost_price FROM products WHERE id = $1 AND org_id = $2',
+    [productId, orgId],
+  );
+  if (!product) throw notFound('Товар не найден');
+
+  // Остаток до этого прихода — по всем точкам: себестоимость у товара одна.
+  const previousQty = (await getStock(db, orgId, productId)) - incomingQty;
+  const previousCost = Number(product.cost_price);
+
+  const cost =
+    previousQty > 0
+      ? Math.round((previousQty * previousCost + incomingQty * incomingPrice) /
+          (previousQty + incomingQty))
+      : incomingPrice;
+
+  const [seq] = await reserveSeq(db, orgId, 1);
+  await db.query(
+    `UPDATE products SET cost_price = $3, purchase_price = $4, updated_at = now(), seq = $5
+     WHERE id = $1 AND org_id = $2`,
+    [productId, orgId, cost, incomingPrice, seq],
+  );
 }
 
 interface MoveInsert {
@@ -166,11 +201,16 @@ interface MoveInsert {
 }
 
 async function insertMove(db: SqlDb, move: MoveInsert): Promise<void> {
+  // Остаток после операции сохраняется рядом с движением: иначе в истории
+  // товара пришлось бы досуммировать все прошлые движения на каждую строку.
+  const balanceAfter =
+    (await getStock(db, move.orgId, move.productId, move.locationId)) + move.qtyDelta;
+
   await db.query(
     `INSERT INTO stock_moves
        (id, org_id, location_id, product_id, qty_delta, reason, doc_id, sale_id,
-        price, created_by, created_at, seq)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        price, created_by, created_at, seq, balance_after)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       move.id ?? randomUUID(),
       move.orgId,
@@ -184,6 +224,7 @@ async function insertMove(db: SqlDb, move: MoveInsert): Promise<void> {
       move.userId,
       move.createdAt,
       move.seq,
+      balanceAfter,
     ],
   );
 }
@@ -294,6 +335,8 @@ export interface MoveWithContext {
   qty_delta: number;
   reason: MoveReason;
   price: number;
+  /** Остаток на точке сразу после этой операции, тысячные. */
+  balance_after: number | null;
   created_at: string;
   counterparty: string | null;
   user_name: string | null;
@@ -321,7 +364,7 @@ export async function listMoves(
   return db.query<MoveWithContext>(
     `SELECT m.id, m.product_id, p.name AS product_name, p.unit,
             m.location_id, l.name AS location_name,
-            m.qty_delta, m.reason, m.price, m.created_at,
+            m.qty_delta, m.reason, m.price, m.balance_after, m.created_at,
             d.counterparty, u.name AS user_name
      FROM stock_moves m
      JOIN products p  ON p.id = m.product_id

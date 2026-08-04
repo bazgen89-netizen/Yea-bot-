@@ -28,11 +28,14 @@ flowchart LR
         WH[webapp.py<br/>aiohttp-сервер] --> H[handlers/<br/>команды, сообщения, кнопки]
         H --> S[services/search.py<br/>SerperClient]
         H --> A[services/ai.py<br/>GroqClient]
+        H --> ST[stores/<br/>StoresService]
         S --> C[(cache.py<br/>TTLCache, 5 мин)]
+        ST --> C
     end
 
     S -->|поиск cn + ru| SERPER[Serper API<br/>google.serper.dev]
     A -->|chat completions| GROQ[Groq API<br/>Llama 3.3 70B]
+    ST -->|карточки, отзывы| MAPS[Яндекс Карты · 2ГИС · Google]
 ```
 
 Бот работает в **webhook-режиме**: Telegram сам доставляет обновления HTTP-запросом на `/webhook`, поэтому не нужен постоянный long-polling и приложение хорошо подходит для платформ типа Render.
@@ -91,13 +94,24 @@ Yea-bot-/
 │   ├── services/
 │   │   ├── search.py       # SerperClient — поиск (cn + ru параллельно) + кэш
 │   │   └── ai.py           # GroqClient — chat completions + health_check
+│   ├── stores/             # магазины на картах (Яндекс, 2ГИС, Google)
+│   │   ├── models.py       # Store, PlatformRef, StoreCard, Review
+│   │   ├── registry.py     # StoreRegistry — чтение stores.json
+│   │   ├── service.py      # StoresService — карточки/отзывы со всех площадок
+│   │   ├── formatting.py   # HTML-разметка карточек и отзывов для Telegram
+│   │   ├── monitor.py      # ReviewMonitor — новые отзывы + уведомления
+│   │   └── providers/      # по файлу на площадку: yandex, twogis, google
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
+│   │   ├── stores.py       # /stores, /reviews, /reply
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
+├── stores.example.json     # шаблон реестра точек
+├── scripts/google_oauth.py # получение refresh token для Google Business Profile
+├── docs/STORES.md          # как подключить магазины на трёх площадках
 ├── tests/                  # unit-тесты (без сети)
 └── .github/workflows/main.yml  # ⚠️ см. «Известные проблемы»
 ```
@@ -128,6 +142,7 @@ flowchart TD
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |
 | `teabot/services/ai.py` | Генерация ответов Groq (Llama 3.3 70B), обработка 429/401/таймаутов | `GroqClient.ask()`, `.health_check()` |
+| `teabot/stores/` | Магазины на Яндекс Картах, 2ГИС и Google: карточки, отзывы, ответы владельца, мониторинг новых отзывов | `StoreRegistry.from_file()`, `StoresService.all_cards()`, `.all_reviews()`, `ReviewMonitor.check()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
@@ -143,7 +158,15 @@ flowchart TD
 | **Telegram Bot API** | Приём/отправка сообщений | Webhook (входящие) + HTTPS (исходящие), библиотека `python-telegram-bot` |
 | **Groq API** | LLM-генерация ответов (`llama-3.3-70b-versatile`) | OpenAI-совместимый REST, тайм-аут 30 с |
 | **Serper API** | Поиск Google (zh-cn и ru локали) | REST, тайм-аут 8 с, результаты кэшируются на 5 мин |
+| **Яндекс Карты Places API** | Карточка организации: адрес, телефон, график | REST, ключ `YANDEX_MAPS_KEY` |
+| **2ГИС Catalog + Reviews API** | Карточка филиала, рейтинг, тексты отзывов | REST, ключи `TWOGIS_KEY`, `TWOGIS_REVIEWS_KEY` |
+| **Google Places API (New)** | Карточка, рейтинг, до 5 отзывов | REST, ключ `GOOGLE_PLACES_KEY` |
+| **Google Business Profile API** | Полный список отзывов и ответы владельца | REST + OAuth refresh token |
 | **Render** | Хостинг, даёт `RENDER_EXTERNAL_URL` и `PORT` | — |
+
+Возможности площадок различаются: у Яндекса и 2ГИС нет публичного API для
+ответов на отзывы и правки карточки — эти действия остаются в кабинетах
+Яндекс Бизнеса и 2ГИС. Подробности и получение ключей — в [docs/STORES.md](docs/STORES.md).
 
 ## Переменные окружения
 
@@ -154,6 +177,10 @@ flowchart TD
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |
+| `YANDEX_MAPS_KEY`, `TWOGIS_KEY`, `TWOGIS_REVIEWS_KEY`, `GOOGLE_PLACES_KEY` | нет | Ключи площадок; без них соответствующая карточка не заполняется |
+| `GOOGLE_GBP_CLIENT_ID`, `GOOGLE_GBP_CLIENT_SECRET`, `GOOGLE_GBP_REFRESH_TOKEN` | нет | Доступ владельца Google Business Profile — нужен для ответов на отзывы |
+| `STORES_FILE`, `REVIEWS_STATE_FILE` | нет | Пути к реестру точек и состоянию мониторинга отзывов |
+| `ADMIN_CHAT_ID`, `REVIEWS_POLL_INTERVAL` | нет | Чат для уведомлений о новых отзывах и период опроса (сек.) |
 
 ## Деплой
 
@@ -180,6 +207,7 @@ flowchart TD
 
 ## Известные проблемы
 
+- **Состояние мониторинга отзывов лежит в файле** (`REVIEWS_STATE_FILE`), а диск Render эфемерен: после передеплоя список виденных отзывов теряется и ближайшая проверка снова становится прогревочной (уведомлений нет, история запоминается заново). Лечится диском Render или выносом состояния в Redis вместе с кэшем.
 - **`.github/workflows/main.yml` («Daily Tea Digest») не работает по назначению**: по расписанию он запускает `python bot.py`, т.е. поднимает webhook-сервер прямо на CI-раннере, который висит до принудительного завершения задачи. Никакого «дайджеста» в коде нет. Кроме того, workflow передаёт секрет `FIREWORKS_KEY`, который нигде не используется (актуальный ключ — `GROQ_API_KEY`). Workflow либо нужно удалить, либо написать для него отдельный скрипт рассылки дайджеста.
 
 ## Дорожная карта масштабирования

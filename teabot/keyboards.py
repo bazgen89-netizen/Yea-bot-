@@ -13,6 +13,9 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🚢 Поставки РФ", callback_data="ship"),
             InlineKeyboardButton("💰 Цены", callback_data="price")
+        ],
+        [
+            InlineKeyboardButton("📍 Наши магазины", callback_data="stores")
         ]
     ])
 

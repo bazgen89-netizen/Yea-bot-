@@ -14,7 +14,11 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     search = get_search(ctx)
     ai = get_ai(ctx)
 
-    if d == "brew":
+    if d == "stores":
+        from .stores import show_stores
+        await show_stores(m, ctx)
+
+    elif d == "brew":
         await m.reply_text("⏳ Ищу в китайских источниках...")
         data = await search.search_china("如何泡中国茶 盖碗 温度 时间")  # китайский запрос
         answer = await ai.ask(

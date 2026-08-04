@@ -2,7 +2,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from . import get_ai, get_search
+from . import get_ai, get_search, get_stores
 from ..keyboards import main_menu_kb
 
 
@@ -33,5 +33,12 @@ async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     lines.append("\n🔍 <b>Поиск Serper:</b>")
     lines.append(f"  {await search.health_check()}")
+
+    stores = get_stores(ctx)
+    lines.append("\n🗺 <b>Магазины на картах:</b>")
+    if stores is None:
+        lines.append("  ⚠️ не настроены (см. docs/STORES.md)")
+    else:
+        lines.extend(await stores.health_check())
 
     await update.message.reply_text("\n".join(lines), parse_mode='HTML')

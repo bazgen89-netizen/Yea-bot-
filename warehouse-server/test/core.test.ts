@@ -312,16 +312,32 @@ describe('продажи', () => {
     assert.equal(Number(sale.cost_total), 100_000);
   });
 
-  it('не даёт продать больше, чем есть на этой точке', async () => {
+  it('по умолчанию продаёт даже когда товара не хватает', async () => {
     const id = await stocked(1000, storageId);
+
+    await createSale(db, orgId, null, { location_id: shopId, lines: [line(id)] });
+
+    // Товар отдан и деньги взяты — чек проведён, а остаток ушёл в минус.
+    assert.equal(await getStock(db, orgId, id, shopId), -1000);
+    assert.equal((await listSales(db, orgId)).length, 1);
+  });
+
+  it('строгий режим не даёт продать больше, чем есть', async () => {
+    await db.query('UPDATE orgs SET allow_negative_stock = false WHERE id = $1', [orgId]);
+    const id = await stocked(1000, storageId);
+
     await assert.rejects(
       () => createSale(db, orgId, null, { location_id: shopId, lines: [line(id)] }),
       OutOfStockError,
     );
+    assert.equal(await getStock(db, orgId, id, shopId), 0);
   });
 
-  it('складывает количество одного товара в двух строках', async () => {
+  it('в строгом режиме складывает количество одного товара в двух строках', async () => {
+    await db.query('UPDATE orgs SET allow_negative_stock = false WHERE id = $1', [orgId]);
     const id = await stocked(1500);
+
+    // По отдельности каждая строка проходит, вместе — нет.
     await assert.rejects(
       () =>
         createSale(db, orgId, null, {
@@ -345,7 +361,8 @@ describe('продажи', () => {
     assert.equal((await listSales(db, orgId)).length, 1);
   });
 
-  it('чек из нескольких позиций проводится целиком или никак', async () => {
+  it('в строгом режиме чек проводится целиком или никак', async () => {
+    await db.query('UPDATE orgs SET allow_negative_stock = false WHERE id = $1', [orgId]);
     const enough = await stocked(10_000);
     const short = await stocked(100);
 

@@ -133,7 +133,9 @@ export async function stockValue(
        FROM products p
        WHERE p.org_id = $1 AND p.archived = false
      ) rows
-     WHERE stock > 0`,
+     -- Отрицательные остатки тоже учитываются: если товар ушёл в минус,
+     -- оценка склада должна это показывать, а не делать вид, что его ноль.
+     WHERE stock <> 0`,
     params,
   );
 

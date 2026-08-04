@@ -102,7 +102,18 @@ export async function createSale(
     if (existing) return existing;
 
     const { shortages, costByProduct } = await checkStock(tx, orgId, input.location_id, input.lines);
-    if (shortages.length > 0) throw new OutOfStockError(shortages);
+
+    // Нехватка товара останавливает продажу только если организация это включила.
+    // По умолчанию не останавливает: в рознице товар часто отдают раньше, чем
+    // оформляют приход, и отказ провести чек означал бы потерянную выручку.
+    // Ушедший в минус остаток виден в отчётах и правится инвентаризацией.
+    if (shortages.length > 0) {
+      const org = await tx.one<{ allow_negative_stock: boolean }>(
+        'SELECT allow_negative_stock FROM orgs WHERE id = $1',
+        [orgId],
+      );
+      if (!org?.allow_negative_stock) throw new OutOfStockError(shortages);
+    }
 
     // Себестоимость берём из карточки товара, а не из того, что прислал клиент:
     // устройство продавца её вообще не видит, а доверять присланной цифре

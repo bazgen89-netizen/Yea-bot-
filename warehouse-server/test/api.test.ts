@@ -300,7 +300,7 @@ describe('товары и склад', () => {
 });
 
 describe('продажи', () => {
-  it('возвращает 409 и список нехватки', async () => {
+  it('проводит чек, даже когда товара не хватает', async () => {
     const id = await makeProduct();
     await receive(id, 1000);
 
@@ -308,7 +308,27 @@ describe('продажи', () => {
       token: ownerToken,
       body: {
         location_id: locationId,
-        lines: [{ product_id: id, qty: 5000, price: 500_000, cost_price: 200_000 }],
+        lines: [{ product_id: id, qty: 5000, price: 500_000 }],
+      },
+    });
+
+    assert.equal(response.status, 201);
+
+    const product = await call('GET', `/api/v1/products/${id}`, { token: ownerToken });
+    assert.equal(Number(product.body.stock), -4000);
+  });
+
+  it('в строгом режиме возвращает 409 и список нехватки', async () => {
+    await db.query('UPDATE orgs SET allow_negative_stock = false');
+
+    const id = await makeProduct();
+    await receive(id, 1000);
+
+    const response = await call('POST', '/api/v1/sales', {
+      token: ownerToken,
+      body: {
+        location_id: locationId,
+        lines: [{ product_id: id, qty: 5000, price: 500_000 }],
       },
     });
 
@@ -316,6 +336,8 @@ describe('продажи', () => {
     const error = response.body.error as unknown as { code: string; details: unknown[] };
     assert.equal(error.code, 'out_of_stock');
     assert.equal(error.details.length, 1);
+
+    await db.query('UPDATE orgs SET allow_negative_stock = true');
   });
 
   it('оформляет возврат один раз', async () => {

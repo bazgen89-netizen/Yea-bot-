@@ -241,9 +241,15 @@ export async function adjustStock(
   orgId: string,
   userId: string | null,
   input: { product_id: string; location_id: string; actual_qty: number; note?: string },
+  options: { allowNegative?: boolean } = {},
 ): Promise<{ delta: number; doc: Doc | null }> {
-  if (!Number.isInteger(input.actual_qty) || input.actual_qty < 0) {
-    throw badRequest('Фактический остаток должен быть целым числом не меньше нуля');
+  if (!Number.isInteger(input.actual_qty)) {
+    throw badRequest('Фактический остаток должен быть целым числом');
+  }
+  // Человек, который пересчитывает товар руками, не может насчитать минус.
+  // Перенос из другой программы — может: там остатки нередко отрицательные.
+  if (input.actual_qty < 0 && !options.allowNegative) {
+    throw badRequest('Фактический остаток не может быть меньше нуля');
   }
   await assertLocation(db, orgId, input.location_id);
 

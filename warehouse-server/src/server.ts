@@ -9,6 +9,7 @@ import { authenticate } from './http/principal.ts';
 import { authRoutes } from './http/routes/auth.ts';
 import { counterpartyRoutes } from './http/routes/counterparties.ts';
 import { docsRoutes } from './http/routes/docs.ts';
+import { importRoutes } from './http/routes/import.ts';
 import { syncRoutes } from './http/routes/sync.ts';
 import { warehouseRoutes } from './http/routes/warehouse.ts';
 
@@ -30,7 +31,9 @@ const PUBLIC_PATHS = new Set([
 
 export function buildServer(options: ServerOptions): FastifyInstance {
   const { db } = options;
-  const app = Fastify({ logger: options.logger ?? false });
+  // Загрузка каталога приходит одним запросом: 5 МБ хватает на несколько
+  // тысяч позиций с остатками по всем точкам.
+  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
 
   // Приложение и сторонние интеграции живут на других доменах.
   app.register(cors, { origin: true });
@@ -90,6 +93,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   authRoutes(app, db, options.allowRegistration ?? true);
   warehouseRoutes(app, db);
   counterpartyRoutes(app, db);
+  importRoutes(app, db);
   syncRoutes(app, db);
   docsRoutes(app);
 

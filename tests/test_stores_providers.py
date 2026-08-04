@@ -42,6 +42,10 @@ class FakeSession:
         self.requests.append((url, kwargs))
         return FakeResponse(self.payload, self.status)
 
+    def patch(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        return FakeResponse(self.payload, self.status)
+
 
 def store(platform, **platform_data):
     reg = StoreRegistry.from_dict({"stores": [{
@@ -247,3 +251,78 @@ async def test_google_access_token_cached():
 def test_star_rating_words():
     assert _star_rating("FIVE") == 5.0
     assert _star_rating("STAR_RATING_UNSPECIFIED") is None
+
+
+# --- Google: правка карточки и фото -----------------------------------------
+
+
+def owner_provider(session):
+    return GoogleBusinessProvider(
+        "key", session, client_id="c", client_secret="s", refresh_token="r"
+    )
+
+
+def owner_store():
+    return store(GOOGLE, id="ChIJ1", owner_id="accounts/1/locations/2")
+
+
+@pytest.mark.asyncio
+async def test_google_upload_photo_sends_source_url():
+    session = FakeSession({"access_token": "tok", "expires_in": 3600, "name": "media/1"})
+    provider = owner_provider(session)
+
+    await provider.upload_photo(owner_store(), "https://cdn/фото.jpg", "INTERIOR")
+
+    url, kwargs = session.requests[-1]
+    assert url.endswith("accounts/1/locations/2/media")
+    assert kwargs["json"]["sourceUrl"] == "https://cdn/фото.jpg"
+    assert kwargs["json"]["locationAssociation"] == {"category": "INTERIOR"}
+
+
+@pytest.mark.asyncio
+async def test_google_update_info_builds_mask_and_body():
+    session = FakeSession({"access_token": "tok", "expires_in": 3600})
+    provider = owner_provider(session)
+
+    await provider.update_info(owner_store(), {"description": "Чайная лавка",
+                                               "phone": "+7 900 000-00-00"})
+
+    url, kwargs = session.requests[-1]
+    assert url.endswith("/v1/locations/2")  # Business Information API адресует иначе
+    mask = kwargs["params"]["updateMask"].split(",")
+    assert set(mask) == {"profile.description", "phoneNumbers.primaryPhone"}
+    assert kwargs["json"]["profile"]["description"] == "Чайная лавка"
+    assert kwargs["json"]["phoneNumbers"]["primaryPhone"] == "+7 900 000-00-00"
+
+
+@pytest.mark.asyncio
+async def test_google_update_info_rejects_unknown_field():
+    provider = owner_provider(FakeSession({"access_token": "t", "expires_in": 3600}))
+
+    with pytest.raises(ValueError):
+        await provider.update_info(owner_store(), {"часы": "10-20"})
+
+
+@pytest.mark.asyncio
+async def test_google_editing_requires_owner_id():
+    from teabot.stores.providers.base import ActionNotSupported
+
+    provider = owner_provider(FakeSession({"access_token": "t", "expires_in": 3600}))
+
+    with pytest.raises(ActionNotSupported):
+        await provider.upload_photo(store(GOOGLE, id="ChIJ1"), "https://cdn/a.jpg")
+
+
+@pytest.mark.asyncio
+async def test_yandex_and_twogis_editing_not_supported():
+    from teabot.stores.providers.base import ActionNotSupported
+
+    for provider, platform in (
+        (YandexMapsProvider("k", FakeSession({})), YANDEX),
+        (TwoGisProvider("k", FakeSession({})), TWOGIS),
+    ):
+        with pytest.raises(ActionNotSupported):
+            await provider.upload_photo(store(platform, id="1"), "https://cdn/a.jpg")
+        with pytest.raises(ActionNotSupported):
+            await provider.update_info(store(platform, id="1"), {"description": "x"})
+        assert not provider.supports_editing

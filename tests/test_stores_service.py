@@ -152,3 +152,59 @@ async def test_store_without_platform_ref_gets_no_card():
 
 def test_store_title_without_city():
     assert Store(slug="s", name="Waystea").title == "Waystea"
+
+
+# --- подстановка данных из реестра -------------------------------------------
+
+REGISTRY_WITH_INFO = StoreRegistry.from_dict({
+    "stores": [{
+        "slug": "msk", "name": "Waystea", "city": "Москва",
+        "address": "ул. Примерная, 1",
+        "info": {"phone": "+7 900 000-00-00", "hours": "ежедневно 10:00–20:00"},
+        "platforms": {"yandex": {"id": "111"}},
+    }]
+})
+
+
+@pytest.mark.asyncio
+async def test_registry_info_replaces_failed_card():
+    """Яндекс без платного API организаций: карточка живёт на данных реестра."""
+    service = StoresService(
+        REGISTRY_WITH_INFO, [FakeProvider(YANDEX, fail=True)], TTLCache()
+    )
+
+    card = (await service.cards_for(REGISTRY_WITH_INFO.get("msk")))[0]
+
+    assert card.ok and card.from_registry
+    assert card.phone == "+7 900 000-00-00"
+    assert card.hours == "ежедневно 10:00–20:00"
+    assert card.url == "https://yandex.ru/maps/org/111/"
+
+
+@pytest.mark.asyncio
+async def test_registry_info_not_used_when_platform_answers():
+    service = StoresService(REGISTRY_WITH_INFO, [FakeProvider(YANDEX)], TTLCache())
+
+    card = (await service.cards_for(REGISTRY_WITH_INFO.get("msk")))[0]
+
+    assert not card.from_registry and card.rating == 4.8
+
+
+@pytest.mark.asyncio
+async def test_error_kept_when_registry_has_nothing_to_show():
+    registry = StoreRegistry.from_dict(
+        {"stores": [{"slug": "msk", "name": "Waystea", "platforms": {"yandex": {"id": "1"}}}]}
+    )
+    service = StoresService(registry, [FakeProvider(YANDEX, fail=True)], TTLCache())
+
+    card = (await service.cards_for(registry.get("msk")))[0]
+
+    assert not card.ok
+
+
+def test_editable_platforms_lists_only_writable():
+    писатель = FakeProvider(TWOGIS)
+    писатель.supports_editing = True
+    service = build([FakeProvider(YANDEX), писатель])
+
+    assert service.editable_platforms() == [TWOGIS]

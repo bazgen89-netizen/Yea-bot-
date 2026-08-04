@@ -19,7 +19,7 @@ import aiohttp
 
 from ...config import STORES_TIMEOUT
 from ..models import GOOGLE, Review, Store, StoreCard
-from .base import MapsProvider, ReplyNotSupported
+from .base import ActionNotSupported, MapsProvider, ReplyNotSupported
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,16 @@ PLACES_FIELD_MASK = ",".join([
 ])
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 GBP_URL = "https://mybusiness.googleapis.com/v4"
+BUSINESS_INFO_URL = "https://mybusinessbusinessinformation.googleapis.com/v1"
 OWNER_CONSOLE = "https://business.google.com/locations"
+
+# Какие поля карточки умеем править и куда они кладутся в Business Information API
+EDITABLE_FIELDS = {
+    "description": ("profile.description", lambda v: {"profile": {"description": v}}),
+    "website": ("websiteUri", lambda v: {"websiteUri": v}),
+    "phone": ("phoneNumbers.primaryPhone",
+              lambda v: {"phoneNumbers": {"primaryPhone": v}}),
+}
 
 # Запас, чтобы не использовать токен на грани истечения
 TOKEN_LEEWAY = 60
@@ -63,6 +72,10 @@ class GoogleBusinessProvider(MapsProvider):
 
     @property
     def supports_replies(self) -> bool:  # type: ignore[override]
+        return self.owner_access
+
+    @property
+    def supports_editing(self) -> bool:  # type: ignore[override]
         return self.owner_access
 
     # --- публичный уровень: Places API -------------------------------------
@@ -210,6 +223,63 @@ class GoogleBusinessProvider(MapsProvider):
             if r.status != 200:
                 raise RuntimeError(f"ответ на отзыв: HTTP {r.status} {await r.text()}"[:200])
 
+    def _owner_id(self, store: Store, action: str) -> str:
+        ref = store.ref(self.platform)
+        if not self.owner_access or ref is None or not ref.owner_id:
+            raise ActionNotSupported(
+                f"Google: {action} требует доступа Business Profile "
+                f"(OAuth и owner_id точки). Кабинет: {OWNER_CONSOLE}"
+            )
+        return ref.owner_id
+
+    async def upload_photo(self, store: Store, image_url: str,
+                           category: str = "ADDITIONAL") -> None:
+        """Добавляет фото в карточку по публичной ссылке на изображение."""
+        owner_id = self._owner_id(store, "загрузка фото")
+        token = await self._access_token()
+        async with self.session.post(
+            f"{GBP_URL}/{owner_id}/media",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "mediaFormat": "PHOTO",
+                "locationAssociation": {"category": category},
+                "sourceUrl": image_url,
+            },
+            timeout=aiohttp.ClientTimeout(total=STORES_TIMEOUT),
+        ) as r:
+            if r.status not in (200, 201):
+                raise RuntimeError(f"загрузка фото: HTTP {r.status} {await r.text()}"[:200])
+
+    async def update_info(self, store: Store, fields: dict[str, str]) -> None:
+        """Правит описание, сайт и телефон точки (Business Information API)."""
+        owner_id = self._owner_id(store, "правка карточки")
+        unknown = set(fields) - set(EDITABLE_FIELDS)
+        if unknown:
+            raise ValueError(
+                f"неизвестные поля: {', '.join(sorted(unknown))}. "
+                f"Доступны: {', '.join(EDITABLE_FIELDS)}"
+            )
+
+        body: dict = {}
+        mask: list[str] = []
+        for key, value in fields.items():
+            path, builder = EDITABLE_FIELDS[key]
+            mask.append(path)
+            _deep_merge(body, builder(value))
+
+        # Business Information API адресует точку как «locations/{id}»
+        location_name = "locations/" + owner_id.rsplit("/", 1)[-1]
+        token = await self._access_token()
+        async with self.session.patch(
+            f"{BUSINESS_INFO_URL}/{location_name}",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"updateMask": ",".join(mask)},
+            json=body,
+            timeout=aiohttp.ClientTimeout(total=STORES_TIMEOUT),
+        ) as r:
+            if r.status != 200:
+                raise RuntimeError(f"правка карточки: HTTP {r.status} {await r.text()}"[:200])
+
     async def health_check(self) -> str:
         parts = []
         if self.places_key:
@@ -231,6 +301,15 @@ class GoogleBusinessProvider(MapsProvider):
         else:
             parts.append("⚠️ Business Profile не подключён")
         return "; ".join(parts)
+
+
+def _deep_merge(target: dict, extra: dict) -> None:
+    """Складывает вложенные словари полей: profile.description + phoneNumbers."""
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
 
 
 def _star_rating(value: str) -> Optional[float]:

@@ -14,8 +14,12 @@ from ..models import Review, Store, StoreCard
 logger = logging.getLogger(__name__)
 
 
-class ReplyNotSupported(RuntimeError):
-    """Площадка не даёт публичного API для ответа на отзывы."""
+class ActionNotSupported(RuntimeError):
+    """Площадка не даёт публичного API для этого действия."""
+
+
+class ReplyNotSupported(ActionNotSupported):
+    """Частный случай: нельзя ответить на отзыв через API."""
 
 
 class MapsProvider(ABC):
@@ -27,6 +31,8 @@ class MapsProvider(ABC):
     supports_reviews: bool = False
     #: можно ли отвечать на отзывы через API (нужен доступ владельца)
     supports_replies: bool = False
+    #: можно ли править карточку и загружать фото через API
+    supports_editing: bool = False
     #: ссылка на кабинет владельца — для действий, которых нет в API
     owner_console_url: str = ""
 
@@ -50,6 +56,21 @@ class MapsProvider(ABC):
         raise ReplyNotSupported(
             f"{self.title}: публичного API для ответа на отзывы нет — "
             f"ответьте в кабинете: {self.owner_console_url}"
+        )
+
+    async def upload_photo(self, store: Store, image_url: str,
+                           category: str = "ADDITIONAL") -> None:
+        """Добавление фото в карточку."""
+        raise ActionNotSupported(
+            f"{self.title}: загрузка фото через API недоступна — "
+            f"добавьте в кабинете: {self.owner_console_url}"
+        )
+
+    async def update_info(self, store: Store, fields: dict[str, str]) -> None:
+        """Правка данных карточки (описание, телефон, сайт)."""
+        raise ActionNotSupported(
+            f"{self.title}: правка карточки через API недоступна — "
+            f"измените в кабинете: {self.owner_console_url}"
         )
 
     @abstractmethod

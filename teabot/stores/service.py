@@ -9,7 +9,7 @@ from typing import Iterable, Optional
 
 from ..cache import TTLCache
 from .models import PLATFORM_TITLES, Review, Store, StoreCard
-from .providers import MapsProvider, ReplyNotSupported
+from .providers import ActionNotSupported, MapsProvider, ReplyNotSupported
 from .registry import StoreRegistry
 
 logger = logging.getLogger(__name__)
@@ -59,16 +59,37 @@ class StoresService:
         for provider, card in zip(targets, cards):
             if isinstance(card, BaseException):
                 logger.warning(f"{provider.title}, {store.slug}: {card}")
-                result.append(StoreCard(
+                card = StoreCard(
                     platform=provider.platform, store_slug=store.slug,
                     name=store.name, error=str(card)[:80],
-                ))
-            else:
-                result.append(card)
+                )
+            result.append(card if card.ok else self._from_registry(store, card))
 
         if any(c.ok for c in result):
             self.cache.set(cache_key, result)
         return result
+
+    @staticmethod
+    def _from_registry(store: Store, card: StoreCard) -> StoreCard:
+        """Подставляет данные из stores.json, когда площадка их не отдала.
+
+        Так карточка Яндекса остаётся полезной без платного API организаций:
+        адрес и график берутся из реестра, ссылка ведёт на настоящую карточку.
+        """
+        address = store.info.get("address") or store.address
+        if not (address or store.info):
+            return card  # подставлять нечего — оставляем ошибку как есть
+        ref = store.ref(card.platform)
+        return StoreCard(
+            platform=card.platform,
+            store_slug=store.slug,
+            name=store.name,
+            address=address,
+            url=ref.public_url() if ref else "",
+            phone=store.info.get("phone", ""),
+            hours=store.info.get("hours", ""),
+            from_registry=True,
+        )
 
     async def all_cards(self) -> list[tuple[Store, list[StoreCard]]]:
         """Карточки всех точек."""
@@ -106,16 +127,41 @@ class StoresService:
         )
         return [r for batch in batches for r in batch]
 
-    async def reply_to_review(self, store_slug: str, platform: str,
-                              review_id: str, text: str) -> None:
-        """Ответ владельца на отзыв (там, где площадка это позволяет)."""
+    def _resolve(self, store_slug: str, platform: str) -> tuple[Store, MapsProvider]:
         store = self.store(store_slug)
         if store is None:
             raise ValueError(f"магазин «{store_slug}» не найден в реестре")
         provider = self.provider(platform)
         if provider is None:
             raise ValueError(f"площадка «{platform}» не подключена")
+        return store, provider
+
+    async def reply_to_review(self, store_slug: str, platform: str,
+                              review_id: str, text: str) -> None:
+        """Ответ владельца на отзыв (там, где площадка это позволяет)."""
+        store, provider = self._resolve(store_slug, platform)
         await provider.reply_to_review(store, review_id, text)
+
+    # --- правка карточки ---------------------------------------------------
+
+    async def upload_photo(self, store_slug: str, platform: str, image_url: str,
+                           category: str = "ADDITIONAL") -> None:
+        """Добавляет фото в карточку точки."""
+        store, provider = self._resolve(store_slug, platform)
+        await provider.upload_photo(store, image_url, category)
+
+    async def update_info(self, store_slug: str, platform: str,
+                          fields: dict[str, str]) -> None:
+        """Правит описание/сайт/телефон в карточке точки."""
+        store, provider = self._resolve(store_slug, platform)
+        await provider.update_info(store, fields)
+
+    def editable_platforms(self) -> list[str]:
+        """Площадки, где правка карточки доступна через API прямо сейчас."""
+        return [
+            p.platform for p in self.providers.values()
+            if p.supports_editing and p.configured()
+        ]
 
     # --- диагностика -------------------------------------------------------
 
@@ -136,4 +182,4 @@ class StoresService:
         return lines
 
 
-__all__ = ["StoresService", "ReplyNotSupported"]
+__all__ = ["StoresService", "ReplyNotSupported", "ActionNotSupported"]

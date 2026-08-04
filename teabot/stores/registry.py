@@ -76,6 +76,7 @@ class StoreRegistry:
                 city=item.get("city", ""),
                 address=item.get("address", ""),
                 refs=refs,
+                info={k: str(v) for k, v in (item.get("info") or {}).items()},
             ))
         logger.info(f"Реестр магазинов: загружено {len(stores)} точек")
         return cls(stores)

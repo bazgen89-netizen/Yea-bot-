@@ -45,12 +45,19 @@ class PlatformRef:
 
 @dataclass(frozen=True)
 class Store:
-    """Один магазин (точка) со всеми его карточками на площадках."""
+    """Один магазин (точка) со всеми его карточками на площадках.
+
+    info — данные из реестра (телефон, график): подставляются, когда площадка
+    не отдала карточку. У Яндекса, например, API организаций стоит от 195 000 ₽
+    в год, и для двух своих точек его покупать незачем — достаточно вписать
+    актуальные данные сюда.
+    """
     slug: str
     name: str
     city: str = ""
     address: str = ""
     refs: dict[str, PlatformRef] = field(default_factory=dict)
+    info: dict[str, str] = field(default_factory=dict)
 
     def ref(self, platform: str) -> Optional[PlatformRef]:
         return self.refs.get(platform)
@@ -80,6 +87,8 @@ class StoreCard:
     rating: Optional[float] = None
     reviews_count: Optional[int] = None
     error: Optional[str] = None
+    #: данные взяты из stores.json, а не с площадки
+    from_registry: bool = False
 
     @property
     def ok(self) -> bool:

@@ -39,12 +39,14 @@ def register_handlers(ptb: Application) -> None:
     from .commands import start_cmd, debug_cmd
     from .messages import on_msg
     from .callbacks import on_cb
-    from .stores import reply_cmd, reviews_cmd, stores_cmd
+    from .stores import photo_cmd, reply_cmd, reviews_cmd, setinfo_cmd, stores_cmd
 
     ptb.add_handler(CommandHandler("start", start_cmd))
     ptb.add_handler(CommandHandler("debug", debug_cmd))
     ptb.add_handler(CommandHandler("stores", stores_cmd))
     ptb.add_handler(CommandHandler("reviews", reviews_cmd))
     ptb.add_handler(CommandHandler("reply", reply_cmd))
+    ptb.add_handler(CommandHandler("photo", photo_cmd))
+    ptb.add_handler(CommandHandler("setinfo", setinfo_cmd))
     ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
     ptb.add_handler(CallbackQueryHandler(on_cb))

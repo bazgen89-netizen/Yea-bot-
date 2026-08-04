@@ -32,6 +32,8 @@ def format_card(card: StoreCard) -> str:
         lines.append(f"    🕘 {escape(card.hours)}")
     if card.url:
         lines.append(f"    🔗 <a href=\"{escape(card.url, quote=True)}\">открыть карточку</a>")
+    if card.from_registry:
+        lines.append("    <i>данные из реестра, площадка их по API не отдаёт</i>")
     return "\n".join(lines)
 
 

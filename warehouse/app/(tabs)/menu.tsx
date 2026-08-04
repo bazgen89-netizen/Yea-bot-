@@ -2,38 +2,38 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../../src/ui/AppHeader';
+import { Icon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing, text } from '../../src/ui/theme';
 
 interface MenuItem {
   label: string;
-  symbol: string;
+  icon: keyof typeof Icon;
   href: string;
-  hint?: string;
 }
 
 const SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'Справочники',
     items: [
-      { label: 'Товары', symbol: '📦', href: '/catalog' },
-      { label: 'Клиенты', symbol: '🧍', href: '/counterparties?kind=customer' },
-      { label: 'Поставщики', symbol: '🚚', href: '/counterparties?kind=supplier' },
-      { label: 'Магазины', symbol: '🏪', href: '/locations' },
+      { label: 'Товары', icon: 'box', href: '/catalog' },
+      { label: 'Клиенты', icon: 'store', href: '/counterparties?kind=customer' },
+      { label: 'Поставщики', icon: 'store', href: '/counterparties?kind=supplier' },
+      { label: 'Магазины', icon: 'store', href: '/locations' },
     ],
   },
   {
     title: 'Отчёты',
     items: [
-      { label: 'Все отчёты', symbol: '📊', href: '/reports' },
-      { label: 'Оценка склада', symbol: '🏷️', href: '/reports/stock' },
+      { label: 'Все отчёты', icon: 'journal', href: '/reports' },
+      { label: 'Оценка склада', icon: 'box', href: '/reports/stock' },
     ],
   },
   {
     title: 'Настройки',
     items: [
-      { label: 'Сотрудники', symbol: '🧑‍💼', href: '/staff' },
-      { label: 'Синхронизация', symbol: '🔄', href: '/settings/sync' },
-      { label: 'Резервная копия', symbol: '💾', href: '/settings/backup' },
+      { label: 'Сотрудники', icon: 'store', href: '/staff' },
+      { label: 'Синхронизация', icon: 'refresh', href: '/settings/sync' },
+      { label: 'Резервная копия', icon: 'journal', href: '/settings/backup' },
     ],
   },
 ];
@@ -60,9 +60,11 @@ export default function MenuScreen() {
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <Text style={styles.symbol}>{item.symbol}</Text>
+                <View style={styles.symbol}>
+                  {Icon[item.icon]({ size: 21, color: colors.textMuted })}
+                </View>
                 <Text style={styles.label}>{item.label}</Text>
-                <Text style={styles.chevron}>›</Text>
+                <Icon.chevron />
               </Pressable>
             ))}
           </View>
@@ -89,7 +91,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  symbol: { fontSize: 20, width: 28, textAlign: 'center' },
+  symbol: { width: 28, alignItems: 'center' },
   label: { flex: 1, fontSize: 16, color: colors.text },
-  chevron: { fontSize: 22, color: colors.textMuted },
 });

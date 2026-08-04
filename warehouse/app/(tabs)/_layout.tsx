@@ -1,11 +1,8 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Icon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing } from '../../src/ui/theme';
-
-function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
-  return <Text style={[styles.icon, focused && styles.iconActive]}>{symbol}</Text>;
-}
 
 /**
  * Круглая кнопка создания в центре нижней панели. Это не вкладка: она не
@@ -20,7 +17,7 @@ function CreateButton({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85 }]}
     >
-      <Text style={styles.fabPlus}>+</Text>
+      <Icon.plus color="#FFFFFF" size={32} />
     </Pressable>
   );
 }
@@ -36,6 +33,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: styles.bar,
         tabBarLabelStyle: styles.label,
+        tabBarItemStyle: styles.item,
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
@@ -43,14 +41,18 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Главная',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="🏠" focused={focused} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Icon.home color={color} filled={focused} size={24} />
+          ),
         }}
       />
       <Tabs.Screen
         name="catalog"
         options={{
           title: 'Каталог',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="🗄️" focused={focused} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Icon.catalog color={color} filled={focused} size={24} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -68,14 +70,14 @@ export default function TabsLayout() {
         name="journal"
         options={{
           title: 'Журнал',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="📄" focused={focused} />,
+          tabBarIcon: ({ color }) => <Icon.journal color={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="menu"
         options={{
           title: 'Меню',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="☰" focused={focused} />,
+          tabBarIcon: ({ color }) => <Icon.menu color={color} size={26} />,
         }}
       />
     </Tabs>
@@ -86,15 +88,14 @@ const styles = StyleSheet.create({
   bar: {
     backgroundColor: colors.surface,
     borderTopWidth: 0,
-    height: 88,
+    height: 84,
     paddingTop: spacing.sm,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     ...shadow,
   },
+  item: { paddingVertical: spacing.xs },
   label: { fontSize: 11, marginTop: 2 },
-  icon: { fontSize: 22, opacity: 0.55 },
-  iconActive: { opacity: 1 },
   fabSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fab: {
     width: 54,
@@ -103,7 +104,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fab,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -6,
+    marginTop: -4,
   },
-  fabPlus: { color: '#FFFFFF', fontSize: 30, lineHeight: 34, fontWeight: '500' },
 });

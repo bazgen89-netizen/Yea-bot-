@@ -1,6 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { findByBarcode, listProducts } from '../../src/db/products';
 import { formatMoney } from '../../src/domain/money';
@@ -9,11 +18,19 @@ import { pluralize } from '../../src/domain/plural';
 import type { ProductWithStock } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
-import { AppHeader, HeaderButton } from '../../src/ui/AppHeader';
+import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
+import { Icon } from '../../src/ui/icons';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 
 export type SortField = 'name' | 'sale_price' | 'stock' | 'updated';
 export type SortDirection = 'asc' | 'desc';
+
+const SORT_LABEL: Record<SortField, string> = {
+  name: 'Названию',
+  sale_price: 'Цене продажи',
+  stock: 'Остаткам',
+  updated: 'Дате изменения',
+};
 
 export default function CatalogScreen() {
   const router = useRouter();
@@ -24,6 +41,8 @@ export default function CatalogScreen() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [direction, setDirection] = useState<SortDirection>('asc');
+  const [showGroups, setShowGroups] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const products = useQuery(
     (database) => listProducts(database, { search, lowStockOnly }),
@@ -49,29 +68,26 @@ export default function CatalogScreen() {
       <AppHeader
         title="Каталог"
         subtitle={pluralize(products.length, 'позиция', 'позиции', 'позиций')}
-        right={
+        actions={
           <>
-            <HeaderButton
+            <HeaderAction
               label={lowStockOnly ? 'Показать все товары' : 'Только заканчивающиеся'}
-              symbol={lowStockOnly ? '🔵' : '🔽'}
               onPress={() => setLowStockOnly((value) => !value)}
-            />
-            <HeaderButton label="Сканировать штрихкод" symbol="⌗" onPress={scanAndOpen} />
-            <HeaderButton
-              label="Сортировка"
-              symbol="⋮"
-              onPress={() => {
-                // Пока меню сортировки не сделано отдельным экраном — нажатие
-                // переключает направление, самое частое действие.
-                setDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
-              }}
-            />
+            >
+              <Icon.filter color={lowStockOnly ? '#FFD166' : '#FFFFFF'} size={22} />
+            </HeaderAction>
+            <HeaderAction label="Сканировать штрихкод" onPress={scanAndOpen}>
+              <Icon.scan color="#FFFFFF" size={23} />
+            </HeaderAction>
+            <HeaderAction label="Вид и сортировка" onPress={() => setMenuOpen(true)}>
+              <Icon.more color="#FFFFFF" size={20} />
+            </HeaderAction>
           </>
         }
       />
 
       <View style={styles.searchRow}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Icon.search />
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -80,31 +96,7 @@ export default function CatalogScreen() {
           style={styles.search}
           clearButtonMode="while-editing"
         />
-      </View>
-
-      <View style={styles.sortBar}>
-        <Text style={text.muted}>
-          {SORT_LABEL[sortField]} · {direction === 'asc' ? 'по возрастанию' : 'по убыванию'}
-        </Text>
-        <View style={styles.sortChips}>
-          {(Object.keys(SORT_LABEL) as SortField[]).map((field) => (
-            <Pressable
-              key={field}
-              accessibilityRole="button"
-              accessibilityState={{ selected: sortField === field }}
-              onPress={() => setSortField(field)}
-              style={({ pressed }) => [
-                styles.chip,
-                sortField === field && styles.chipActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.chipText, sortField === field && styles.chipTextActive]}>
-                {SORT_SHORT[field]}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Icon.mic />
       </View>
 
       <FlatList
@@ -120,23 +112,103 @@ export default function CatalogScreen() {
           </View>
         }
       />
+
+      <ViewMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        showGroups={showGroups}
+        onToggleGroups={() => setShowGroups((value) => !value)}
+        sortField={sortField}
+        onSortField={setSortField}
+        direction={direction}
+        onDirection={setDirection}
+      />
     </View>
   );
 }
 
-const SORT_LABEL: Record<SortField, string> = {
-  name: 'По названию',
-  sale_price: 'По цене продажи',
-  stock: 'По остаткам',
-  updated: 'По дате изменения',
-};
+/**
+ * Меню «⋯»: показывать группы, поле сортировки и направление.
+ * Группа и направление — по одному варианту, как в привычном приложении.
+ */
+function ViewMenu({
+  visible,
+  onClose,
+  showGroups,
+  onToggleGroups,
+  sortField,
+  onSortField,
+  direction,
+  onDirection,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  showGroups: boolean;
+  onToggleGroups: () => void;
+  sortField: SortField;
+  onSortField: (field: SortField) => void;
+  direction: SortDirection;
+  onDirection: (value: SortDirection) => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Закрыть меню" />
 
-const SORT_SHORT: Record<SortField, string> = {
-  name: 'Название',
-  sale_price: 'Цена',
-  stock: 'Остаток',
-  updated: 'Дата',
-};
+      <View style={styles.sheet}>
+        <View style={styles.grabber} />
+
+        <Text style={styles.sheetTitle}>Вид</Text>
+        <MenuRow label="Показывать группы" selected={showGroups} onPress={onToggleGroups} />
+
+        <Text style={styles.sheetTitle}>Сортировать по</Text>
+        {(Object.keys(SORT_LABEL) as SortField[]).map((field) => (
+          <MenuRow
+            key={field}
+            label={SORT_LABEL[field]}
+            selected={sortField === field}
+            onPress={() => onSortField(field)}
+          />
+        ))}
+
+        <Text style={styles.sheetTitle}>Порядок</Text>
+        <MenuRow
+          label="По возрастанию"
+          selected={direction === 'asc'}
+          onPress={() => onDirection('asc')}
+        />
+        <MenuRow
+          label="По убыванию"
+          selected={direction === 'desc'}
+          onPress={() => onDirection('desc')}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function MenuRow({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={[styles.menuLabel, selected && { color: colors.accent, fontWeight: '600' }]}>
+        {label}
+      </Text>
+      {selected ? <Icon.check color={colors.accent} /> : null}
+    </Pressable>
+  );
+}
 
 /** Сортировка в памяти: список уже загружен, повторный запрос к базе не нужен. */
 export function sortProducts(
@@ -175,7 +247,7 @@ function ProductRow({ product }: { product: ProductWithStock }) {
         {product.photo_uri ? (
           <Image source={{ uri: product.photo_uri }} style={styles.thumbImage} />
         ) : (
-          <Text style={styles.thumbPlaceholder}>📦</Text>
+          <Icon.box color={colors.textMuted} size={24} />
         )}
       </View>
 
@@ -183,12 +255,16 @@ function ProductRow({ product }: { product: ProductWithStock }) {
         <Text style={styles.rowName} numberOfLines={3}>
           {product.name}
         </Text>
+
         {product.barcode || product.sku ? (
-          <Text style={styles.rowCode} numberOfLines={1}>
-            {product.barcode ? '▮▮▮ ' : '✳ '}
-            {product.barcode ?? product.sku}
-          </Text>
+          <View style={styles.rowCodeLine}>
+            {product.barcode ? <Icon.barcode /> : <Icon.asterisk />}
+            <Text style={styles.rowCode} numberOfLines={1}>
+              {product.barcode ?? product.sku}
+            </Text>
+          </View>
         ) : null}
+
         <View style={styles.rowFooter}>
           <Text style={styles.rowPrice}>{formatMoney(product.sale_price)} руб</Text>
           <Text style={[styles.rowStock, product.stock <= 0 && { color: colors.danger }]}>
@@ -204,7 +280,7 @@ function ProductRow({ product }: { product: ProductWithStock }) {
         hitSlop={8}
         style={styles.rowMore}
       >
-        <Text style={styles.rowMoreText}>⋮</Text>
+        <Icon.more />
       </Pressable>
     </Pressable>
   );
@@ -215,31 +291,13 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  searchIcon: { fontSize: 18, color: colors.textMuted },
   search: { flex: 1, fontSize: 17, color: colors.text, paddingVertical: spacing.xs },
-  sortBar: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-  sortChips: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.bg,
-  },
-  chipActive: { backgroundColor: colors.primary },
-  chipText: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
-  chipTextActive: { color: colors.primaryText },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,9 +317,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumbImage: { width: '100%', height: '100%' },
-  thumbPlaceholder: { fontSize: 22, opacity: 0.5 },
   rowBody: { flex: 1, gap: 2 },
   rowName: { fontSize: 17, fontWeight: '600', color: colors.text, lineHeight: 22 },
+  rowCodeLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   rowCode: { fontSize: 13, color: colors.textMuted },
   rowFooter: {
     flexDirection: 'row',
@@ -272,7 +330,38 @@ const styles = StyleSheet.create({
   rowPrice: { fontSize: 16, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   rowStock: { fontSize: 16, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   rowMore: { paddingHorizontal: spacing.xs },
-  rowMoreText: { fontSize: 20, color: colors.textMuted },
   empty: { padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   emptyHint: { textAlign: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  grabber: {
+    width: 44,
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginVertical: spacing.md,
+  },
+  sheetTitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  menuLabel: { fontSize: 16, color: colors.text },
 });

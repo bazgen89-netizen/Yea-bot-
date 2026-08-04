@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { listProducts } from '../../src/db/products';
-import { periodFor, salesSummary, stockValue } from '../../src/db/reports';
-import { formatMoney, formatMoneyWithSign } from '../../src/domain/money';
+import { dailySales, periodFor, salesSummary, stockValue } from '../../src/db/reports';
+import { formatMoney } from '../../src/domain/money';
 import { formatQty } from '../../src/domain/qty';
-import { pluralize } from '../../src/domain/plural';
 import { useQuery } from '../../src/state/DatabaseProvider';
-import { AppHeader } from '../../src/ui/AppHeader';
+import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
+import { Icon, ReportIcon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing, text } from '../../src/ui/theme';
 
 type PeriodKind = 'today' | 'week' | 'month' | 'year';
@@ -21,12 +21,12 @@ const PERIODS: { value: PeriodKind; label: string }[] = [
 ];
 
 const REPORTS = [
-  { key: 'daily', label: 'Продажи\nпо дням', symbol: '📅', tint: '#E3F3E7' },
-  { key: 'products', label: 'Продажи\nпо товарам', symbol: '📦', tint: '#E4ECFE' },
-  { key: 'customers', label: 'Отчёт по\nпокупателям', symbol: '👥', tint: '#FCE4EC' },
-  { key: 'moves', label: 'Отчёт\nпо движению', symbol: '🔁', tint: '#FDEBDF' },
-  { key: 'staff', label: 'Отчёт по\nсотрудникам', symbol: '🧑', tint: '#E1F1F7' },
-  { key: 'finance', label: 'Финансовый\nотчёт', symbol: '💲', tint: '#F0E7FB' },
+  { key: 'daily', label: 'Продажи\nпо дням', tint: '#DFF1E4', color: '#2E9E5B', Icon: ReportIcon.daily },
+  { key: 'products', label: 'Продажи\nпо товарам', tint: '#DEE8FD', color: '#1A66FF', Icon: ReportIcon.products },
+  { key: 'customers', label: 'Отчет по\nпокупателям', tint: '#FBDCE6', color: '#E23B72', Icon: ReportIcon.customers },
+  { key: 'moves', label: 'Отчёт\nпо движению', tint: '#FCE4D4', color: '#E4691E', Icon: ReportIcon.moves },
+  { key: 'staff', label: 'Отчет по\nсотрудникам', tint: '#D9EDF6', color: '#2A7FA8', Icon: ReportIcon.staff },
+  { key: 'finance', label: 'Финансовый\nотчёт', tint: '#EDE2FA', color: '#7B4BC9', Icon: ReportIcon.finance },
 ];
 
 export default function HomeScreen() {
@@ -36,46 +36,72 @@ export default function HomeScreen() {
   const period = periodFor(kind);
   const summary = useQuery((db) => salesSummary(db, period), [kind]);
   const stock = useQuery((db) => stockValue(db));
-  const lowStock = useQuery((db) => listProducts(db, { lowStockOnly: true }));
+  const daily = useQuery((db) => dailySales(db, period), [kind]);
   const totalQty = useQuery((db) =>
     listProducts(db).reduce((sum, product) => sum + product.stock, 0),
   );
+
+  // Насколько выручка отличается от предыдущего такого же периода.
+  const previous = useQuery((db) => salesSummary(db, previousPeriod(kind)), [kind]);
+  const change = percentChange(summary.revenue, previous.revenue);
 
   return (
     <View style={styles.screen}>
       <AppHeader
         title="WAYSTEA"
-        onPickLocation={() => router.push('/locations')}
-        onNotifications={() => router.push('/notifications')}
+        actions={
+          <>
+            <HeaderAction label="Выбрать магазин" onPress={() => router.push('/locations')}>
+              <Icon.store color="#FFFFFF" size={26} />
+            </HeaderAction>
+            <HeaderAction label="Оповещения" onPress={() => router.push('/notifications')}>
+              <Icon.bell color="#FFFFFF" size={25} />
+            </HeaderAction>
+          </>
+        }
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Card>
-          <View style={styles.periods}>
-            {PERIODS.map((option) => (
-              <Pressable
-                key={option.value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: kind === option.value }}
-                onPress={() => setKind(option.value)}
-                style={({ pressed }) => [
-                  styles.period,
-                  kind === option.value && styles.periodActive,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.periodText, kind === option.value && styles.periodTextActive]}>
-                  {option.label}
+        <View style={styles.periods}>
+          {PERIODS.map((option) => (
+            <Pressable
+              key={option.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === option.value }}
+              onPress={() => setKind(option.value)}
+              style={({ pressed }) => [
+                styles.period,
+                kind === option.value && styles.periodActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.periodText, kind === option.value && styles.periodTextActive]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Card style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <View style={styles.chartTitles}>
+              <Text style={[text.muted, styles.periodDate]}>{periodLabel(kind)}</Text>
+              {change !== null ? (
+                <Text style={[styles.change, change < 0 && { color: colors.danger }]}>
+                  {change < 0 ? '▼' : '▲'} {Math.abs(change)}%
                 </Text>
-              </Pressable>
-            ))}
+              ) : null}
+            </View>
+            <Icon.info size={22} />
           </View>
 
-          <Text style={[text.muted, styles.periodDate]}>{periodLabel(kind)}</Text>
           <Text style={text.hero}>{formatMoney(summary.revenue)}</Text>
+          <Chart points={daily} />
+        </Card>
 
+        <Card style={styles.metricsCard}>
           <View style={styles.metrics}>
-            <Metric label="Выручка" value={formatMoney(summary.revenue)} highlight />
+            <Metric label="Выручка" value={formatMoney(summary.revenue)} active />
             <Metric label="Себестоимость" value={formatMoney(summary.cost)} />
             <Metric label="Прибыль" value={formatMoney(summary.profit)} />
             <Metric label="Средний чек" value={formatMoney(summary.averageReceipt)} />
@@ -93,7 +119,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.report, pressed && { opacity: 0.6 }]}
               >
                 <View style={[styles.reportIcon, { backgroundColor: report.tint }]}>
-                  <Text style={styles.reportSymbol}>{report.symbol}</Text>
+                  <report.Icon color={report.color} />
                 </View>
                 <Text style={styles.reportLabel}>{report.label}</Text>
               </Pressable>
@@ -108,67 +134,75 @@ export default function HomeScreen() {
           <StatRow
             label="Стоимость товара"
             caption="В розничных ценах"
-            value={formatMoneyWithSign(stock.retailValue)}
+            value={`${formatMoney(stock.retailValue)}`}
           />
           <StatRow
             label="Стоимость товара"
             caption="По себестоимости"
-            value={formatMoneyWithSign(stock.costValue)}
+            value={`${formatMoney(stock.costValue)}`}
             last
           />
           <SoftButton title="Подробнее" onPress={() => router.push('/reports/stock')} />
         </Card>
 
         <Card>
-          <Text style={text.block}>Пора закупить</Text>
-          {lowStock.length === 0 ? (
-            <Text style={[text.muted, styles.empty]}>Всё в наличии</Text>
-          ) : (
-            lowStock.slice(0, 5).map((product) => (
-              <Pressable
-                key={product.id}
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({ pathname: '/product/[id]', params: { id: String(product.id) } })
-                }
-                style={({ pressed }) => [styles.lowRow, pressed && { opacity: 0.6 }]}
-              >
-                <Text style={text.body} numberOfLines={1}>
-                  {product.name}
-                </Text>
-                <Text style={[text.mono, product.stock <= 0 && { color: colors.danger }]}>
-                  {formatQty(product.stock)} {product.unit}
-                </Text>
-              </Pressable>
-            ))
-          )}
-          {lowStock.length > 0 ? (
-            <Text style={[text.muted, styles.empty]}>
-              {pluralize(lowStock.length, 'позиция', 'позиции', 'позиций')} ниже порога
-            </Text>
-          ) : null}
+          <Text style={text.block}>Открытые смены</Text>
+          <View style={styles.placeholder}>
+            <Icon.refresh />
+            <Text style={text.muted}>Не найдено</Text>
+          </View>
+          <SoftButton title="Все смены" onPress={() => router.push('/shifts')} />
         </Card>
+
+        <Card>
+          <Text style={text.block}>Предстоящие события</Text>
+          <View style={styles.placeholder}>
+            <Icon.refresh />
+            <Text style={text.muted}>Не найдено</Text>
+          </View>
+        </Card>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/settings/blocks')}
+          style={({ pressed }) => [styles.reorder, pressed && { opacity: 0.7 }]}
+        >
+          <Icon.reorder />
+          <Text style={styles.reorderText}>Изменить порядок блоков</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
-function Metric({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+/** Столбики выручки по дням. Пусто — показываем пустую область, как в оригинале. */
+function Chart({ points }: { points: { day: string; revenue: number }[] }) {
+  const max = Math.max(...points.map((point) => point.revenue), 1);
+
   return (
-    <View style={[styles.metric, highlight && styles.metricActive]}>
-      <Text style={[styles.metricValue, highlight && { color: colors.accent }]}>{value}</Text>
+    <View style={styles.chart}>
+      {points.map((point) => (
+        <View key={point.day} style={styles.chartColumn}>
+          <View
+            style={[
+              styles.chartBar,
+              { height: `${Math.max((point.revenue / max) * 100, 2)}%` },
+            ]}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Metric({ label, value, active }: { label: string; value: string; active?: boolean }) {
+  return (
+    <View style={[styles.metric, active && styles.metricActive]}>
+      <Text style={[styles.metricValue, active && { color: colors.accent }]}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
@@ -218,6 +252,25 @@ function periodLabel(kind: PeriodKind): string {
   return { week: 'Последние 7 дней', month: 'Последние 30 дней', year: 'Последний год' }[kind];
 }
 
+/** Предыдущий период той же длины — с ним сравнивается выручка. */
+function previousPeriod(kind: PeriodKind) {
+  const current = periodFor(kind);
+  const from = new Date(current.from);
+  const to = new Date(current.to);
+  const length = to.getTime() - from.getTime();
+
+  return {
+    from: new Date(from.getTime() - length).toISOString(),
+    to: current.from,
+  };
+}
+
+/** null — сравнивать не с чем: в прошлом периоде продаж не было. */
+function percentChange(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? null : 100;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
@@ -228,27 +281,43 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     ...shadow,
   },
-  periods: { flexDirection: 'row', gap: spacing.xs },
+  chartCard: { gap: spacing.sm },
+  // «вторник» из toLocaleDateString приходит с маленькой буквы.
+  periodDate: { textTransform: 'capitalize' },
+  metricsCard: { padding: 0 },
+  periods: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.xs },
   period: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   periodActive: { backgroundColor: colors.surface, ...shadow },
-  periodText: { fontSize: 15, color: colors.textMuted, fontWeight: '500' },
+  periodText: { fontSize: 16, color: colors.textMuted, fontWeight: '500' },
   periodTextActive: { color: colors.text, fontWeight: '700' },
-  periodDate: { textTransform: 'capitalize' },
-  metrics: {
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  chartTitles: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  change: { fontSize: 15, fontWeight: '700', color: colors.success },
+  chart: {
     flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
+    alignItems: 'flex-end',
+    gap: 3,
+    height: 190,
+    marginTop: spacing.sm,
   },
-  metric: { flex: 1, alignItems: 'center', paddingBottom: spacing.sm },
-  metricActive: { borderBottomWidth: 2, borderBottomColor: colors.accent },
-  metricValue: { fontSize: 15, fontWeight: '700', color: colors.text },
-  metricLabel: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  chartColumn: { flex: 1, height: '100%', justifyContent: 'flex-end' },
+  chartBar: { width: '100%', backgroundColor: colors.accent, borderRadius: 3 },
+  metrics: { flexDirection: 'row' },
+  metric: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  metricActive: { borderBottomColor: colors.accent },
+  metricValue: { fontSize: 17, fontWeight: '600', color: colors.text },
+  metricLabel: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
   reports: { flexDirection: 'row', flexWrap: 'wrap' },
   report: {
     width: '50%',
@@ -264,7 +333,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reportSymbol: { fontSize: 22 },
   reportLabel: { flex: 1, fontSize: 14, color: colors.text, lineHeight: 18 },
   statRow: {
     flexDirection: 'row',
@@ -272,10 +340,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
   },
-  statDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
+  statDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   statLabels: { flex: 1 },
   statCaption: { fontSize: 17, color: colors.text, marginTop: 2 },
   statValue: {
@@ -284,14 +349,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  lowRow: {
+  placeholder: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
     gap: spacing.md,
+    paddingVertical: spacing.xl,
   },
-  empty: { paddingVertical: spacing.sm },
   soft: {
     backgroundColor: colors.accentSoft,
     borderRadius: radius.sm,
@@ -299,4 +363,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   softText: { color: colors.accent, fontSize: 16, fontWeight: '600' },
+  reorder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+  },
+  reorderText: { color: colors.accent, fontSize: 16, fontWeight: '600' },
 });

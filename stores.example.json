@@ -1,0 +1,38 @@
+{
+  "_comment": "Скопируйте в stores.json и подставьте свои id. Инструкция — docs/STORES.md",
+  "stores": [
+    {
+      "slug": "waystea-msk",
+      "name": "Waystea",
+      "city": "Москва",
+      "address": "ул. Примерная, 1",
+      "info": {
+        "phone": "+7 900 000-00-00",
+        "hours": "ежедневно 10:00–20:00"
+      },
+      "platforms": {
+        "yandex": {
+          "id": "1234567890",
+          "query": "Waystea Москва ул. Примерная 1"
+        },
+        "2gis": {
+          "id": "70000001006123456"
+        },
+        "google": {
+          "id": "ChIJXXXXXXXXXXXXXXXXXXXXXXX",
+          "owner_id": "accounts/123456789/locations/987654321"
+        }
+      }
+    },
+    {
+      "slug": "waystea-spb",
+      "name": "Waystea",
+      "city": "Санкт-Петербург",
+      "address": "Невский пр., 2",
+      "platforms": {
+        "yandex": { "id": "9876543210" },
+        "2gis": { "id": "70000001006654321" }
+      }
+    }
+  ]
+}

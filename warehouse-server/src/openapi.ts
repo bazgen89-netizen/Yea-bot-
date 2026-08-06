@@ -28,6 +28,13 @@ function ok(schema: object, description = 'Успешно') {
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 const arrayOf = (name: string) => ({ type: 'array', items: ref(name) });
 
+const idParam = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: { type: 'string', format: 'uuid' },
+};
+
 const locationQuery = {
   name: 'location_id',
   in: 'query',
@@ -86,6 +93,8 @@ export const openapi = {
     { name: 'Склад' },
     { name: 'Продажи' },
     { name: 'Отчёты' },
+    { name: 'Контрагенты' },
+    { name: 'Загрузка данных' },
     { name: 'Синхронизация' },
   ],
   paths: {
@@ -446,6 +455,98 @@ export const openapi = {
         summary: 'Сколько денег лежит на складе',
         parameters: [locationQuery],
         responses: { 200: ok({ type: 'object' }) },
+      },
+    },
+    '/api/v1/counterparties': {
+      get: {
+        tags: ['Контрагенты'],
+        summary: 'Список клиентов и поставщиков',
+        description: 'Долг считается из первички: чеки в долг минус поставки и платежи.',
+        parameters: [
+          {
+            name: 'kind',
+            in: 'query',
+            schema: { type: 'string', enum: ['customer', 'supplier', 'both'] },
+            description: 'Записи `both` попадают и в клиентов, и в поставщиков.',
+          },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'include_archived', in: 'query', schema: { type: 'boolean' } },
+          { name: 'with_debt', in: 'query', schema: { type: 'boolean' } },
+        ],
+        responses: { 200: ok({ type: 'array', items: { type: 'object' } }) },
+      },
+      post: {
+        tags: ['Контрагенты'],
+        summary: 'Завести карточку',
+        description: 'Доступно и продавцу: нового клиента заводят прямо на кассе.',
+        requestBody: json({ type: 'object' }),
+        responses: { 201: ok({ type: 'object' }), 400: errorResponse },
+      },
+    },
+    '/api/v1/counterparties/{id}': {
+      get: {
+        tags: ['Контрагенты'],
+        summary: 'Карточка вместе с долгом',
+        parameters: [idParam],
+        responses: { 200: ok({ type: 'object' }), 404: errorResponse },
+      },
+      patch: {
+        tags: ['Контрагенты'],
+        summary: 'Изменить карточку',
+        parameters: [idParam],
+        requestBody: json({ type: 'object' }),
+        responses: { 200: ok({ type: 'object' }), 403: errorResponse, 404: errorResponse },
+      },
+    },
+    '/api/v1/counterparties/{id}/history': {
+      get: {
+        tags: ['Контрагенты'],
+        summary: 'Продажи, поставки и платежи одной лентой',
+        parameters: [idParam, { name: 'limit', in: 'query', schema: { type: 'integer' } }],
+        responses: { 200: ok({ type: 'array', items: { type: 'object' } }), 403: errorResponse },
+      },
+    },
+    '/api/v1/counterparties/{id}/payments': {
+      get: {
+        tags: ['Контрагенты'],
+        summary: 'Платежи по контрагенту',
+        parameters: [idParam],
+        responses: { 200: ok({ type: 'array', items: { type: 'object' } }), 403: errorResponse },
+      },
+      post: {
+        tags: ['Контрагенты'],
+        summary: 'Погасить долг',
+        description: 'Клиент вернул деньги или мы заплатили поставщику. Сумма в копейках.',
+        parameters: [idParam],
+        requestBody: json({ type: 'object' }),
+        responses: { 201: ok({ type: 'object' }), 400: errorResponse, 403: errorResponse },
+      },
+    },
+    '/api/v1/import/products': {
+      post: {
+        tags: ['Загрузка данных'],
+        summary: 'Загрузить каталог из выгрузки другой программы',
+        description: [
+          'Товар опознаётся по коду; кода нет — по штрихкоду, потом по артикулу.',
+          'Совпало — карточка обновляется, не совпало — заводится новая, поэтому',
+          'повторная загрузка того же файла не плодит дубли.',
+          'Остатки в `stocks` проставляются инвентаризацией — как итог, а не приход.',
+        ].join(' '),
+        requestBody: json({ type: 'object' }),
+        responses: { 200: ok({ type: 'object' }), 400: errorResponse, 403: errorResponse },
+      },
+    },
+    '/api/v1/import/counterparties': {
+      post: {
+        tags: ['Загрузка данных'],
+        summary: 'Загрузить клиентскую базу',
+        description: [
+          'Человек опознаётся по последним десяти цифрам телефона — так совпадают',
+          '«+7 999…» и «8 (999) …». Телефона нет — по имени.',
+          'Пустые поля в выгрузке не затирают заполненные в базе.',
+        ].join(' '),
+        requestBody: json({ type: 'object' }),
+        responses: { 200: ok({ type: 'object' }), 400: errorResponse, 403: errorResponse },
       },
     },
     '/api/v1/sync/push': {

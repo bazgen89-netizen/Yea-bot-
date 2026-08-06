@@ -33,6 +33,32 @@ export interface ProductWithStock extends Product {
   category_name: string | null;
 }
 
+/** Клиент, поставщик или тот и другой сразу. */
+export type PartyKind = 'customer' | 'supplier' | 'both';
+
+export interface Counterparty {
+  id: Id;
+  kind: PartyKind;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  note: string | null;
+  /** Личная скидка в сотых долях процента: 500 = 5 %. */
+  discount_bp: number;
+  archived: number;
+  created_at: string;
+}
+
+/** Контрагент вместе с итогами по чекам — то, что показывается в списке. */
+export interface CounterpartyWithTotals extends Counterparty {
+  /** Сумма всех покупок, копейки. */
+  purchases: Kopecks;
+  /** Сколько чеков пробито. */
+  receipts: number;
+  /** Дата последней покупки или null. */
+  last_sale_at: string | null;
+}
+
 export type DocType = 'receipt' | 'writeoff' | 'adjust';
 
 export interface Doc {

@@ -88,6 +88,33 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX idx_moves_product ON stock_moves(product_id);
   CREATE INDEX idx_moves_created ON stock_moves(created_at);
   `,
+
+  // 2 — контрагенты: клиенты и поставщики
+  `
+  CREATE TABLE counterparties (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- 'both' — запись, которая и покупает, и поставляет; попадает в оба списка.
+    kind        TEXT    NOT NULL CHECK (kind IN ('customer','supplier','both')),
+    name        TEXT    NOT NULL,
+    phone       TEXT,
+    email       TEXT,
+    note        TEXT,
+    -- Личная скидка в сотых долях процента: 500 = 5 %.
+    discount_bp INTEGER NOT NULL DEFAULT 0,
+    archived    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL,
+    -- Как и у товаров: имя, телефон и почта в нижнем регистре, плюс телефон
+    -- без разделителей — «+7 (999) 123-45-67» ищется и как «9991234567».
+    search_text TEXT    NOT NULL DEFAULT ''
+  );
+
+  CREATE INDEX idx_parties_kind ON counterparties(kind, archived);
+  CREATE INDEX idx_parties_name ON counterparties(name);
+
+  ALTER TABLE sales ADD COLUMN customer_id INTEGER REFERENCES counterparties(id);
+
+  CREATE INDEX idx_sales_customer ON sales(customer_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

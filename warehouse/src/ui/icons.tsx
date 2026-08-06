@@ -71,6 +71,59 @@ export const Icon = {
   check: (p: Props) => <Ionicons name="checkmark" size={p.size ?? 20} color={p.color} />,
 };
 
+/**
+ * Иконки строк меню. Отдельный набор, потому что там своя логика: контурный
+ * значок слева, одного размера у всех строк, и подбирается он по смыслу пункта.
+ */
+export const MenuIcon = {
+  gear: (p: Props) => (
+    <Ionicons name="settings-outline" size={p.size ?? 23} color={p.color ?? colors.primaryText} />
+  ),
+  company: (p: Props) => <Ionicons name="business-outline" size={p.size ?? 22} color={p.color} />,
+  loyalty: (p: Props) => <Ionicons name="heart-outline" size={p.size ?? 22} color={p.color} />,
+  billing: (p: Props) => <Ionicons name="card-outline" size={p.size ?? 22} color={p.color} />,
+
+  customers: (p: Props) => <Ionicons name="people-outline" size={p.size ?? 22} color={p.color} />,
+  suppliers: (p: Props) => (
+    <MaterialCommunityIcons name="truck-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  shops: (p: Props) => (
+    <MaterialCommunityIcons name="storefront-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  accounts: (p: Props) => <Ionicons name="wallet-outline" size={p.size ?? 22} color={p.color} />,
+  staff: (p: Props) => (
+    <MaterialCommunityIcons name="account-tie-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  trash: (p: Props) => <Ionicons name="trash-outline" size={p.size ?? 22} color={p.color} />,
+
+  register: (p: Props) => (
+    <MaterialCommunityIcons name="cash-register" size={p.size ?? 22} color={p.color} />
+  ),
+  shifts: (p: Props) => <Ionicons name="time-outline" size={p.size ?? 22} color={p.color} />,
+  money: (p: Props) => (
+    <MaterialCommunityIcons name="cash-multiple" size={p.size ?? 22} color={p.color} />
+  ),
+
+  question: (p: Props) => (
+    <Ionicons name="chatbubble-ellipses-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  knowledge: (p: Props) => <Ionicons name="book-outline" size={p.size ?? 22} color={p.color} />,
+  privacy: (p: Props) => (
+    <Ionicons name="shield-checkmark-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  license: (p: Props) => <Ionicons name="document-text-outline" size={p.size ?? 22} color={p.color} />,
+
+  /** Стрелка «откроется снаружи» у ссылок на сайт. */
+  external: (p: Props) => (
+    <Ionicons name="open-outline" size={p.size ?? 17} color={p.color ?? colors.textMuted} />
+  ),
+
+  call: (p: Props) => <Ionicons name="call-outline" size={p.size ?? 20} color={p.color} />,
+  person: (p: Props) => (
+    <Ionicons name="person-circle-outline" size={p.size ?? 22} color={p.color} />
+  ),
+};
+
 /** Иконки плиток отчётов на главной. */
 export const ReportIcon = {
   daily: (p: Props) => <Ionicons name="calendar" size={22} color={p.color} />,

@@ -31,6 +31,8 @@ export default function RootLayout() {
               <Stack.Screen name="reports/index" options={{ title: 'Отчёты' }} />
               <Stack.Screen name="product/[id]" options={{ title: 'Товар' }} />
               <Stack.Screen name="doc/new" options={{ title: 'Документ' }} />
+              <Stack.Screen name="counterparties" options={{ headerShown: false }} />
+              <Stack.Screen name="counterparty/[id]" options={{ title: 'Карточка' }} />
               <Stack.Screen name="sale/[id]" options={{ title: 'Чек' }} />
               <Stack.Screen
                 name="scan"

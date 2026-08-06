@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/driver.ts';
 import { createLocation, createProduct, listLocations, updateProduct } from './catalog.ts';
+import { createCounterparty, updateCounterparty, type PartyKind } from './counterparties.ts';
 import { badRequest } from './errors.ts';
 import { adjustStock } from './stock.ts';
 
@@ -210,4 +211,116 @@ async function ensureLocation(
 function normalize(value: string): string {
   // В выгрузках названия магазинов приходят с лишними пробелами внутри.
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// --- клиентская база ------------------------------------------------------
+
+export interface ImportPartyRow {
+  name: string;
+  kind?: PartyKind;
+  phone?: string | null;
+  email?: string | null;
+  note?: string | null;
+}
+
+export interface ImportPartyResult {
+  created: number;
+  updated: number;
+  skipped: { row: number; reason: string }[];
+}
+
+/**
+ * Загрузка клиентской базы из выгрузки другой программы.
+ *
+ * Человек опознаётся по телефону — по последним десяти цифрам, потому что один
+ * и тот же номер в выгрузках записан и как «+7 999…», и как «8 (999) …».
+ * Телефона нет — опознаём по имени. Совпало — карточка дополняется, не
+ * совпало — заводится новая, поэтому повторная загрузка не плодит дубли.
+ *
+ * Что уже есть в базе, читается один раз в память: на нескольких тысячах строк
+ * запрос на каждую превратился бы в тысячи проходов по таблице.
+ */
+export async function importCounterparties(
+  db: SqlDb,
+  orgId: string,
+  rows: ImportPartyRow[],
+): Promise<ImportPartyResult> {
+  if (rows.length === 0) throw badRequest('В файле нет строк');
+
+  const result: ImportPartyResult = { created: 0, updated: 0, skipped: [] };
+
+  const byPhone = new Map<string, string>();
+  const byName = new Map<string, string>();
+
+  const known = await db.query<{ id: string; name: string; phone: string | null }>(
+    'SELECT id, name, phone FROM counterparties WHERE org_id = $1',
+    [orgId],
+  );
+  for (const party of known) {
+    const digits = phoneDigits(party.phone);
+    if (digits && !byPhone.has(digits)) byPhone.set(digits, party.id);
+
+    const key = normalize(party.name);
+    if (!byName.has(key)) byName.set(key, party.id);
+  }
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2; // +1 за заголовок, +1 за нумерацию с единицы
+
+    if (!row.name?.trim()) {
+      result.skipped.push({ row: rowNumber, reason: 'пустое имя' });
+      continue;
+    }
+
+    try {
+      const digits = phoneDigits(row.phone);
+      // Телефон есть, но не нашёлся — это новый человек. Дальше искать по имени
+      // нельзя: полных тёзок с разными номерами в базе хватает.
+      const existing = digits ? byPhone.get(digits) : byName.get(normalize(row.name));
+
+      const fields = {
+        kind: row.kind ?? ('customer' as PartyKind),
+        name: row.name.trim(),
+        phone: blank(row.phone),
+        email: blank(row.email),
+        note: blank(row.note),
+      };
+
+      if (existing) {
+        // Пустые поля в выгрузке не должны затирать заполненные в базе:
+        // передаём только то, что заполнено.
+        await updateCounterparty(db, orgId, existing, {
+          kind: fields.kind,
+          name: fields.name,
+          ...(fields.phone ? { phone: fields.phone } : {}),
+          ...(fields.email ? { email: fields.email } : {}),
+          ...(fields.note ? { note: fields.note } : {}),
+        });
+        result.updated++;
+      } else {
+        const created = await createCounterparty(db, orgId, fields);
+        if (digits) byPhone.set(digits, created.id);
+        byName.set(normalize(fields.name), created.id);
+        result.created++;
+      }
+    } catch (error) {
+      result.skipped.push({
+        row: rowNumber,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return result;
+}
+
+/** Последние десять цифр номера — по ним разные написания совпадают. */
+export function phoneDigits(phone: string | null | undefined): string | null {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  return digits.length < 10 ? null : digits.slice(-10);
+}
+
+function blank(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }

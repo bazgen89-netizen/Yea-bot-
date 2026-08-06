@@ -45,8 +45,18 @@ const SECTIONS: { title: string; items: Action[] }[] = [
   {
     title: 'Прочее',
     items: [
-      { label: 'Клиент', symbol: '🧍', tint: '#111318', soon: true },
-      { label: 'Поставщик', symbol: '🚚', tint: '#111318', soon: true },
+      {
+        label: 'Клиент',
+        symbol: '🧍',
+        tint: '#111318',
+        href: { pathname: '/counterparty/[id]', params: { id: 'new', kind: 'customer' } },
+      },
+      {
+        label: 'Поставщик',
+        symbol: '🚚',
+        tint: '#111318',
+        href: { pathname: '/counterparty/[id]', params: { id: 'new', kind: 'supplier' } },
+      },
       { label: 'Сотрудник', symbol: '🧑‍💼', tint: '#111318', soon: true },
       { label: 'Магазин', symbol: '🏪', tint: '#111318', soon: true },
       { label: 'Касса', symbol: '🧾', tint: '#111318', soon: true },

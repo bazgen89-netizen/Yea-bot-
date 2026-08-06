@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, it } from 'node:test';
 
 import type { SqlDb } from '../src/db/driver.ts';
-import { importProducts } from '../src/core/import.ts';
+import { importCounterparties, importProducts, phoneDigits } from '../src/core/import.ts';
+import { listCounterparties } from '../src/core/counterparties.ts';
 import { listLocations, listProducts } from '../src/core/catalog.ts';
 import { getStock } from '../src/core/stock.ts';
 import { createTestDb } from './helpers.ts';
@@ -144,5 +145,94 @@ describe('опознание строк', () => {
     const products = await listProducts(db, orgId);
     assert.equal(products.length, 1);
     assert.equal(products[0].name, 'Шоу Мэй новое имя');
+  });
+});
+
+describe('загрузка клиентской базы', () => {
+  it('заводит карточки и не плодит дубли при повторной загрузке', async () => {
+    const rows = [
+      { name: 'Иван Петров', phone: '+7 (999) 123-45-67' },
+      { name: 'Ольга Смирнова', phone: '8 (901) 000-11-22' },
+    ];
+
+    const first = await importCounterparties(db, orgId, rows);
+    assert.equal(first.created, 2);
+    assert.equal(first.updated, 0);
+
+    const second = await importCounterparties(db, orgId, rows);
+    assert.equal(second.created, 0);
+    assert.equal(second.updated, 2);
+
+    assert.equal((await listCounterparties(db, orgId)).length, 2);
+  });
+
+  it('узнаёт человека по телефону, записанному иначе', async () => {
+    await importCounterparties(db, orgId, [
+      { name: 'Иван Петров', phone: '+7 (999) 123-45-67' },
+    ]);
+    await importCounterparties(db, orgId, [{ name: 'Петров И.', phone: '89991234567' }]);
+
+    const parties = await listCounterparties(db, orgId);
+    assert.equal(parties.length, 1);
+    assert.equal(parties[0].name, 'Петров И.');
+  });
+
+  it('не склеивает тёзок с разными телефонами', async () => {
+    await importCounterparties(db, orgId, [
+      { name: 'Иван Петров', phone: '+79991234567' },
+      { name: 'Иван Петров', phone: '+79997654321' },
+    ]);
+
+    assert.equal((await listCounterparties(db, orgId)).length, 2);
+  });
+
+  it('без телефона опознаёт по имени', async () => {
+    await importCounterparties(db, orgId, [{ name: 'Чайная лавка' }]);
+    const again = await importCounterparties(db, orgId, [{ name: 'чайная  лавка' }]);
+
+    assert.equal(again.updated, 1);
+    assert.equal((await listCounterparties(db, orgId)).length, 1);
+  });
+
+  it('пустое поле в выгрузке не затирает заполненное в базе', async () => {
+    await importCounterparties(db, orgId, [
+      { name: 'Иван', phone: '+79991234567', email: 'ivan@mail.ru' },
+    ]);
+    await importCounterparties(db, orgId, [{ name: 'Иван', phone: '+79991234567' }]);
+
+    const [party] = await listCounterparties(db, orgId);
+    assert.equal(party.email, 'ivan@mail.ru');
+  });
+
+  it('поставщики попадают в свой список', async () => {
+    await importCounterparties(db, orgId, [
+      { name: 'Чайный склад', kind: 'supplier', phone: '+79990001111' },
+      { name: 'Покупатель', phone: '+79990002222' },
+    ]);
+
+    assert.equal((await listCounterparties(db, orgId, { kind: 'supplier' })).length, 1);
+    assert.equal((await listCounterparties(db, orgId, { kind: 'customer' })).length, 1);
+  });
+
+  it('строка без имени пропускается с указанием номера', async () => {
+    const result = await importCounterparties(db, orgId, [
+      { name: 'Нормальный' },
+      { name: '   ', phone: '+79991234567' },
+    ]);
+
+    assert.equal(result.created, 1);
+    assert.equal(result.skipped.length, 1);
+    assert.equal(result.skipped[0].row, 3);
+  });
+
+  it('пустой файл не принимается', async () => {
+    await assert.rejects(() => importCounterparties(db, orgId, []), /нет строк/);
+  });
+
+  it('сводит разные написания телефона к десяти цифрам', () => {
+    assert.equal(phoneDigits('+7 (999) 123-45-67'), '9991234567');
+    assert.equal(phoneDigits('89991234567'), '9991234567');
+    assert.equal(phoneDigits('123'), null);
+    assert.equal(phoneDigits(null), null);
   });
 });

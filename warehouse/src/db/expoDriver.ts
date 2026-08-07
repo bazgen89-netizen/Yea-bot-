@@ -37,9 +37,12 @@ export function createExpoDriver(db: SQLite.SQLiteDatabase): SqlDriver {
 /**
  * Открывает базу и приводит её к актуальной схеме.
  *
- * Открытие асинхронное, хотя дальше работаем синхронными запросами: в браузере
- * expo-sqlite живёт в воркере, и синхронный вызов до его готовности падает
- * с «Sync operation timeout». На телефоне разницы нет.
+ * Открытие асинхронное, хотя дальше работаем синхронными запросами: нативный
+ * модуль должен успеть подняться.
+ *
+ * В браузере вместо этого файла собирается `expoDriver.web.ts` — там база на
+ * sql.js, потому что веб-версия expo-sqlite требует `SharedArrayBuffer`
+ * и по обычной ссылке не открылась бы.
  */
 export async function openDatabase(): Promise<SqlDriver> {
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);

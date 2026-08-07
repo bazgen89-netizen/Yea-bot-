@@ -27,6 +27,7 @@
     "@types/react": "~19.2.2",
     "better-sqlite3": "^13.0.2",
     "jest": "^30.4.2",
+    "sql.js": "^1.14.1",
     "ts-jest": "^29.4.12",
     "typescript": "~6.0.3"
   },
@@ -37,7 +38,7 @@
     "web": "npm run web:build && node scripts/serve-web.mjs",
     "test": "jest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "web:build": "expo export --platform web"
+    "web:build": "expo export --platform web --clear && node scripts/build-web.mjs"
   },
   "private": true
 }

@@ -1,10 +1,10 @@
 /**
  * Локальный просмотр приложения в браузере.
  *
- * Обычного статического сервера мало: SQLite в браузере работает через
- * SharedArrayBuffer, а он доступен только на странице с заголовками
- * Cross-Origin-Opener-Policy и Cross-Origin-Embedder-Policy. Dev-сервер Expo
- * их не ставит, поэтому раздаём собранную версию сами.
+ * Никаких особых заголовков не ставит — и не должен: `npm run web:build`
+ * собирает страницу в один самодостаточный файл, который открывается на любом
+ * статическом хостинге. Этот сервер нужен только чтобы посмотреть её локально,
+ * потому что dev-сервер Expo отдаёт несобранную версию.
  */
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -46,9 +46,6 @@ async function resolveFile(urlPath) {
 }
 
 const server = createServer(async (req, res) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
-
   const urlPath = new URL(req.url ?? '/', 'http://localhost').pathname;
   let file = await resolveFile(urlPath === '/' ? '/index.html' : urlPath);
 

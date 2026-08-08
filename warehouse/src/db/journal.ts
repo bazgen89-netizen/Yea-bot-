@@ -117,3 +117,73 @@ const KIND_LABEL: Record<JournalKind, string> = {
 export function entryTitle(entry: JournalEntry): string {
   return `${KIND_LABEL[entry.kind]} #${entry.id}`;
 }
+
+/**
+ * Лента движения денег: приходы и расходы по счетам.
+ *
+ * Приход рождается из чека, а не заводится отдельно: деньги в кассе появляются
+ * ровно тогда, когда пробита продажа. Отдельная таблица платежей завела бы
+ * второй источник правды, который пришлось бы сверять с чеками.
+ */
+export interface MoneyEntry {
+  id: Id;
+  created_at: string;
+  /** Поступило, копейки. */
+  income: Kopecks;
+  /** Списано, копейки. */
+  expense: Kopecks;
+  counterparty: string;
+  /** Куда легли деньги: касса магазина, терминал, счёт в банке. */
+  account: string;
+  category: string;
+}
+
+/** Способ оплаты — это и есть счёт, на который попали деньги. */
+const ACCOUNT: Record<string, string> = {
+  cash: 'Касса магазина',
+  card: 'Терминал / Счет в банке',
+  transfer: 'Счет в банке',
+};
+
+export function listMoney(db: SqlDriver, limit = 500): MoneyEntry[] {
+  const rows = db.all<MoneyEntry & { payment: string }>(
+    `SELECT s.id,
+            s.created_at,
+            s.total AS income,
+            0       AS expense,
+            COALESCE(
+              (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+              'Розничный покупатель'
+            ) AS counterparty,
+            s.payment,
+            'Оплата от клиента' AS category
+     FROM sales s
+     WHERE NOT EXISTS (
+       SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+     )
+     ORDER BY s.created_at DESC, s.id DESC
+     LIMIT ?`,
+    [limit],
+  );
+
+  return rows.map((row) => ({ ...row, account: ACCOUNT[row.payment] ?? row.payment }));
+}
+
+/** «Приход #45679» — так документ называется в движении денег. */
+export function moneyTitle(entry: MoneyEntry): string {
+  return `${entry.income > 0 ? 'Приход' : 'Расход'} #${entry.id}`;
+}
+
+/** Группировка по дням — та же, что в движении товара. */
+export function groupMoneyByDay(entries: MoneyEntry[]): { day: string; entries: MoneyEntry[] }[] {
+  const groups: { day: string; entries: MoneyEntry[] }[] = [];
+
+  for (const entry of entries) {
+    const day = entry.created_at.slice(0, 10);
+    const last = groups[groups.length - 1];
+    if (last?.day === day) last.entries.push(entry);
+    else groups.push({ day, entries: [entry] });
+  }
+
+  return groups;
+}

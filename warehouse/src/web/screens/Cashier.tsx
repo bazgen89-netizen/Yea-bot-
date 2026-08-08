@@ -1,0 +1,362 @@
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { listLocations } from '../../db/locations';
+import { listProducts } from '../../db/products';
+import { createSale } from '../../db/sales';
+import { formatMoneyWeb } from '../../domain/money';
+import { formatQty } from '../../domain/qty';
+import type { Id, ProductWithStock } from '../../domain/types';
+import { useCart } from '../../state/CartProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { Icon, WebIcon } from '../../ui/icons';
+import { pos } from '../../ui/webTheme';
+
+/**
+ * Интерфейс кассира.
+ *
+ * Отдельный экран во весь экран: у него своя палитра и свой шрифт — в исходном
+ * приложении это вообще другое приложение, собранное на Material, а не на том
+ * же, что кабинет. Слева витрина плитками, справа чек, внизу полоса продажи.
+ */
+export function Cashier() {
+  const router = useRouter();
+  const { db, refresh } = useDatabase();
+  const cart = useCart();
+
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Id | null>(null);
+
+  const products = useQuery((database) => listProducts(database, { search }), [search]);
+  const locations = useQuery((database) => listLocations(database));
+  const shop = locations[0]?.name ?? 'Магазин';
+
+  const pay = () => {
+    if (cart.lines.length === 0) return;
+    createSale(db, { discount: cart.discount, payment: 'cash', lines: cart.lines });
+    cart.clear();
+    setSelected(null);
+    refresh();
+  };
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.body}>
+        {/* Витрина */}
+        <View style={styles.left}>
+          <View style={styles.searchBar}>
+            <View style={styles.gridButton}>
+              <WebIcon.home size={22} color="#FFFFFF" />
+            </View>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Поиск по наименованию, артикулу, штрихкоду, коду и описанию"
+              placeholderTextColor="#8E8E93"
+              style={styles.searchInput}
+            />
+            <View style={styles.keyHint}>
+              <Text style={styles.keyHintText}>F</Text>
+            </View>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.tiles}>
+            {products.map((product) => (
+              <Tile
+                key={product.id}
+                product={product}
+                selected={selected === product.id}
+                onPress={() => {
+                  setSelected(product.id);
+                  cart.add(product, 1000);
+                }}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Чек */}
+        <View style={styles.right}>
+          <View style={styles.customerBar}>
+            <WebIcon.funnel size={19} color="#8E8E93" />
+            <Text style={styles.customerName}>Розничный покупатель</Text>
+            <View style={styles.keyHint}>
+              <Text style={styles.keyHintText}>C</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Добавить клиента"
+              onPress={() =>
+                router.push({ pathname: '/counterparty/[id]', params: { id: 'new', kind: 'customer' } })
+              }
+              style={styles.addCustomer}
+            >
+              <WebIcon.parties size={22} color="#FFFFFF" />
+            </Pressable>
+          </View>
+
+          <View style={styles.recommendRow}>
+            <Text style={styles.recommendLabel}>Рекомендации</Text>
+            <WebIcon.gear size={18} color="#8E8E93" />
+          </View>
+
+          {cart.lines.length === 0 ? (
+            <View style={styles.emptyReceipt}>
+              <Text style={styles.emptyReceiptText}>Выберите товары</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.receipt}>
+              {cart.lines.map((line) => (
+                <View key={line.product_id} style={styles.receiptRow}>
+                  <View style={styles.receiptBody}>
+                    <Text style={styles.receiptName} numberOfLines={2}>
+                      {line.name}
+                    </Text>
+                    <Text style={styles.receiptQty}>
+                      {formatQty(line.qty)} {line.unit} × {formatMoneyWeb(line.price)}
+                    </Text>
+                  </View>
+                  <Text style={styles.receiptSum}>
+                    {formatMoneyWeb(Math.round((line.price * line.qty) / 1000))}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Убрать из чека"
+                    onPress={() => cart.remove(line.product_id)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.receiptRemove}>✕</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+
+      {/* Нижняя полоса */}
+      <View style={styles.bottom}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Меню"
+          onPress={() => router.push('/')}
+          style={styles.bottomMenu}
+        >
+          <Icon.menu size={24} color={pos.text} />
+          <Text style={styles.bottomMenuLabel}>Меню</Text>
+        </Pressable>
+
+        <Text style={styles.bottomShop} numberOfLines={1}>
+          {shop} / Смена #1
+        </Text>
+
+        <Text style={styles.bottomClock}>{today()}</Text>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={pay}
+          style={({ pressed }) => [styles.sellBar, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={styles.sellDots}>⋮</Text>
+          <Text style={styles.sellLabel}>ПРОДАЖА</Text>
+          <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function Tile({
+  product,
+  selected,
+  onPress,
+}: {
+  product: ProductWithStock;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.tile, selected && styles.tileSelected]}
+    >
+      <Text style={styles.tileStock}>
+        {formatQty(product.stock)} {product.unit}
+      </Text>
+
+      <View style={styles.tileImage}>
+        {product.photo_uri ? (
+          <Image source={{ uri: product.photo_uri }} style={styles.tilePhoto} />
+        ) : (
+          <WebIcon.home size={34} color="#C7C7CC" />
+        )}
+      </View>
+
+      <Text style={styles.tileName} numberOfLines={2}>
+        {product.name}
+      </Text>
+      <Text style={styles.tileСode}>{product.sku ?? ''}</Text>
+
+      <View style={styles.tilePriceRow}>
+        <Text style={styles.tilePrice}>{formatMoneyWeb(product.sale_price)} руб</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+const MONTHS = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
+/** «8 августа, суббота 11:41» — как в нижней полосе исходного приложения. */
+function today(now = new Date()): string {
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return `${now.getDate()} ${MONTHS[now.getMonth()]}, ${WEEKDAYS[now.getDay()]} ${time}`;
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: pos.bg },
+  body: { flex: 1, flexDirection: 'row' },
+
+  left: { flex: 1.55, backgroundColor: pos.bg },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: pos.tile,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+    height: 62,
+    paddingRight: 16,
+  },
+  gridButton: {
+    width: 62,
+    height: 62,
+    backgroundColor: pos.bar,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 19,
+    color: pos.text,
+    paddingHorizontal: 20,
+    outlineStyle: 'none',
+  } as object,
+  keyHint: {
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderColor: '#D1D1D6',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyHintText: { fontSize: 14, color: pos.muted },
+
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 2 },
+  tile: {
+    width: '16.3%',
+    minWidth: 150,
+    backgroundColor: pos.tile,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  tileSelected: { borderColor: pos.accent },
+  tileStock: { fontSize: 13, color: pos.muted, textAlign: 'center' },
+  tileImage: {
+    height: 128,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
+    overflow: 'hidden',
+  },
+  tilePhoto: { width: '100%', height: '100%' },
+  tileName: { fontSize: 15, color: pos.text, textAlign: 'center', lineHeight: 19 },
+  tileСode: { fontSize: 13, color: pos.muted, textAlign: 'center', marginTop: 2 },
+  tilePriceRow: {
+    borderTopWidth: 1,
+    borderTopColor: pos.border,
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  tilePrice: { fontSize: 17, fontWeight: '600', color: pos.text, textAlign: 'center' },
+
+  right: { flex: 1, backgroundColor: pos.tile, borderLeftWidth: 1, borderLeftColor: pos.border },
+  customerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    height: 62,
+    paddingLeft: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+  },
+  customerName: { flex: 1, fontSize: 19, color: pos.text },
+  addCustomer: {
+    width: 62,
+    height: 62,
+    backgroundColor: pos.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recommendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  recommendLabel: { fontSize: 16, color: pos.text },
+
+  emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyReceiptText: { fontSize: 34, color: '#C7C7CC' },
+
+  receipt: { flex: 1 },
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+  },
+  receiptBody: { flex: 1, gap: 2 },
+  receiptName: { fontSize: 16, color: pos.text },
+  receiptQty: { fontSize: 14, color: pos.muted },
+  receiptSum: { fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
+  receiptRemove: { fontSize: 17, color: pos.muted },
+
+  bottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 58,
+    backgroundColor: pos.tile,
+    borderTopWidth: 1,
+    borderTopColor: pos.border,
+  },
+  bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
+  bottomMenuLabel: { fontSize: 17, color: pos.text },
+  bottomShop: { flex: 1, fontSize: 15, color: pos.muted, textAlign: 'center' },
+  bottomClock: { fontSize: 15, color: pos.muted, paddingRight: 24 },
+  sellBar: {
+    width: '42%',
+    height: 58,
+    backgroundColor: pos.bar,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 18,
+  },
+  sellDots: { fontSize: 20, color: '#FFFFFF' },
+  sellLabel: { flex: 1, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.6 },
+  sellTotal: { fontSize: 21, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+});

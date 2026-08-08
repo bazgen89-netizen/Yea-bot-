@@ -21,10 +21,9 @@ export function Shell({ children }: { children: ReactNode }) {
   // В раскладке параметры экрана видны только через глобальный хук.
   const params = useGlobalSearchParams<{ kind?: string }>();
 
-  // Экран кассира со временем займёт окно целиком и получит своё меню внизу.
-  // Пока его нет, прятать шапку и боковое меню нельзя: уйти оттуда было бы
-  // нечем — ровно тот тупик, из которого этот кабинет и вытаскивают.
-  if (!desktop) return <>{children}</>;
+  // Экран кассира занимает окно целиком: у него своя шапка и своё меню внизу,
+  // и уйти оттуда можно кнопкой «Меню».
+  if (!desktop || pathname.startsWith('/cashier')) return <>{children}</>;
 
   return (
     <View style={styles.shell}>

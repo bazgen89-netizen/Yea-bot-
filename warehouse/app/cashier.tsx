@@ -1,13 +1,12 @@
-import { Section } from '../src/web/screens/Section';
+import { Stack } from 'expo-router';
+
+import { Cashier } from '../src/web/screens/Cashier';
 
 export default function CashierScreen() {
   return (
-    <Section
-      title={'Интерфейс кассира'}
-      note={
-        'Плитки товаров с остатком и ценой, поиск по названию, артикулу и штрихкоду, ' +
-        'чек справа, выбор покупателя и оплата. Открытая смена и магазин — внизу экрана.'
-      }
-    />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Cashier />
+    </>
   );
 }

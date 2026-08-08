@@ -36,3 +36,21 @@ export function formatMoney(kopecks: Kopecks): string {
 export function formatMoneyWithSign(kopecks: Kopecks): string {
   return `${formatMoney(kopecks)}${NBSP}₽`;
 }
+
+/**
+ * 123450 -> "1,234.50" — как в веб-кабинете.
+ *
+ * Формат другой не по недосмотру: на экранах кабинета суммы записаны
+ * по-английски («1,183.62», «104,878.84»), а на телефоне — по-русски
+ * («1 183,62»). Повторяем то, что видит пользователь, поэтому функции две
+ * и каждая живёт на своей половине приложения.
+ */
+export function formatMoneyWeb(kopecks: Kopecks): string {
+  const negative = kopecks < 0;
+  const abs = Math.abs(Math.round(kopecks));
+  const rubles = Math.floor(abs / 100);
+  const cents = abs % 100;
+
+  const grouped = String(rubles).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${negative ? '-' : ''}${grouped}.${String(cents).padStart(2, '0')}`;
+}

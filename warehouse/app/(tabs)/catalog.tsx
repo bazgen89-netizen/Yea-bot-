@@ -21,6 +21,8 @@ import { useScanner } from '../../src/state/ScannerProvider';
 import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
 import { Icon } from '../../src/ui/icons';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { CatalogTable } from '../../src/web/screens/CatalogTable';
 
 export type SortField = 'name' | 'sale_price' | 'stock' | 'updated';
 export type SortDirection = 'asc' | 'desc';
@@ -33,6 +35,14 @@ const SORT_LABEL: Record<SortField, string> = {
 };
 
 export default function CatalogScreen() {
+  // На широком экране справочник показывается таблицей, как в кабинете.
+  const desktop = useDesktop();
+  if (desktop) return <CatalogTable />;
+
+  return <CatalogList />;
+}
+
+function CatalogList() {
   const router = useRouter();
   const { db } = useDatabase();
   const { scanBarcode } = useScanner();

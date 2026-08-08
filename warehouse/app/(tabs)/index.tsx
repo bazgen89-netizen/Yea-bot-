@@ -10,6 +10,8 @@ import { useQuery } from '../../src/state/DatabaseProvider';
 import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
 import { Icon, ReportIcon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing, text } from '../../src/ui/theme';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { HomeDashboard } from '../../src/web/screens/HomeDashboard';
 
 type PeriodKind = 'today' | 'week' | 'month' | 'year';
 
@@ -30,6 +32,14 @@ const REPORTS = [
 ];
 
 export default function HomeScreen() {
+  // На широком экране главная показывается как в кабинете.
+  const desktop = useDesktop();
+  if (desktop) return <HomeDashboard />;
+
+  return <HomePhone />;
+}
+
+function HomePhone() {
   const router = useRouter();
   const [kind, setKind] = useState<PeriodKind>('today');
 

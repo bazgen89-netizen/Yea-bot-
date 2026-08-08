@@ -162,3 +162,130 @@ export function periodFor(kind: 'today' | 'week' | 'month' | 'year', now = new D
 
   return { from: start.toISOString(), to: end.toISOString() };
 }
+
+/** Строка таблицы «Документы» на главной кабинета. */
+export interface DocumentTotal {
+  /** Название типа документа, как в кабинете. */
+  name: string;
+  /** Сколько документов этого типа за период. */
+  count: number;
+  /** Сумма по документам, копейки. */
+  amount: number;
+  /** Сколько товара прошло через них, тысячные. */
+  quantity: number;
+}
+
+/**
+ * Сводка по типам документов за период.
+ *
+ * Типы перечислены все, что есть в кабинете, включая те, которых приложение
+ * пока не умеет: пустая строка честнее отсутствующей — сразу видно, что
+ * оприходований за месяц не было, а не что раздел куда-то делся.
+ */
+export function documentTotals(db: SqlDriver, period: Period): DocumentTotal[] {
+  const sales = db.get<{ count: number; amount: number; quantity: number }>(
+    `SELECT COUNT(*) AS count,
+            COALESCE(SUM(s.total), 0) AS amount,
+            COALESCE((
+              SELECT SUM(ABS(m.qty_delta)) FROM stock_moves m
+              JOIN sales x ON x.id = m.sale_id
+              WHERE m.reason = 'sale' AND x.created_at >= ? AND x.created_at < ?
+            ), 0) AS quantity
+     FROM sales s
+     WHERE s.created_at >= ? AND s.created_at < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+       )`,
+    [period.from, period.to, period.from, period.to],
+  );
+
+  const refunds = db.get<{ count: number; amount: number; quantity: number }>(
+    `SELECT COUNT(DISTINCT s.id) AS count,
+            COALESCE(SUM(DISTINCT s.total), 0) AS amount,
+            COALESCE(SUM(ABS(m.qty_delta)), 0) AS quantity
+     FROM sales s
+     JOIN stock_moves m ON m.sale_id = s.id AND m.reason = 'return'
+     WHERE s.created_at >= ? AND s.created_at < ?`,
+    [period.from, period.to],
+  );
+
+  const byType = new Map<string, { count: number; amount: number; quantity: number }>();
+  for (const row of db.all<{
+    type: string;
+    count: number;
+    amount: number;
+    quantity: number;
+  }>(
+    `SELECT d.type,
+            COUNT(DISTINCT d.id) AS count,
+            CAST(ROUND(COALESCE(SUM(ABS(m.qty_delta) * m.price), 0) / 1000.0) AS INTEGER) AS amount,
+            COALESCE(SUM(ABS(m.qty_delta)), 0) AS quantity
+     FROM docs d
+     LEFT JOIN stock_moves m ON m.doc_id = d.id
+     WHERE d.created_at >= ? AND d.created_at < ?
+     GROUP BY d.type`,
+    [period.from, period.to],
+  )) {
+    byType.set(row.type, row);
+  }
+
+  const empty = { count: 0, amount: 0, quantity: 0 };
+  const doc = (type: string) => byType.get(type) ?? empty;
+
+  return [
+    { name: 'Продажа', ...(sales ?? empty) },
+    { name: 'Закупка', ...doc('receipt') },
+    { name: 'Возврат продажи', ...(refunds ?? empty) },
+    { name: 'Возврат закупки', ...empty },
+    { name: 'Корректировка', ...doc('adjust') },
+    { name: 'Инвентаризация', ...empty },
+    { name: 'Оприходование', ...empty },
+    { name: 'Списание', ...doc('writeoff') },
+    { name: 'Перемещение', ...empty },
+  ];
+}
+
+/** Блок «Оценка склада по всем магазинам». */
+export interface StockOverview {
+  /** Суммарное количество товара, тысячные. Может быть отрицательным. */
+  quantity: number;
+  retailValue: number;
+  costValue: number;
+  /** Сколько позиций без себестоимости — их оценка заведомо занижена. */
+  zeroCost: number;
+  /** Сколько позиций ушло в минус. */
+  negative: number;
+}
+
+/**
+ * Оценка склада вместе с поводами ей не доверять.
+ *
+ * Отрицательные остатки и позиции без себестоимости считаются и показываются
+ * отдельно: без них сумма выглядит достоверной, хотя на деле собрана из
+ * незаполненных карточек — ровно это и предупреждает исходное приложение.
+ *
+ * В деньги идут только положительные остатки: товара, ушедшего в минус,
+ * на полке нет, и вычитать его стоимость из оценки склада не из чего.
+ * Количество, наоборот, считается по всем — минус там и должен быть виден.
+ */
+export function stockOverview(db: SqlDriver): StockOverview {
+  const row = db.get<StockOverview>(
+    `SELECT COALESCE(SUM(stock), 0) AS quantity,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN stock > 0 THEN stock * p.sale_price END), 0)
+                 / 1000.0) AS INTEGER) AS retailValue,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN stock > 0 THEN stock * p.cost_price END), 0)
+                 / 1000.0) AS INTEGER) AS costValue,
+            COALESCE(SUM(CASE WHEN p.cost_price = 0 AND stock <> 0 THEN 1 ELSE 0 END), 0) AS zeroCost,
+            COALESCE(SUM(CASE WHEN stock < 0 THEN 1 ELSE 0 END), 0) AS negative
+     FROM (
+       SELECT p.id,
+              COALESCE((SELECT SUM(m.qty_delta) FROM stock_moves m
+                        WHERE m.product_id = p.id), 0) AS stock
+       FROM products p
+       WHERE p.archived = 0
+     ) s
+     JOIN products p ON p.id = s.id`,
+  );
+
+  return row ?? { quantity: 0, retailValue: 0, costValue: 0, zeroCost: 0, negative: 0 };
+}

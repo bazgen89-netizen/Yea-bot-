@@ -79,8 +79,37 @@ export const MENU_FOOTER: MenuEntry[] = [
   { label: 'Партнерская программа', icon: 'partners', href: '/partners' },
 ];
 
-/** Заголовок в шапке для текущего адреса. */
-export function titleFor(pathname: string, kind?: string): string {
+/** Название документа в заголовке — то же, что на кнопке в списке создания. */
+const DOC_TITLE: Record<string, string> = {
+  purchase: 'Закупка',
+  purchase_return: 'Возврат закупки',
+  stock_in: 'Оприходование',
+  writeoff: 'Списание',
+  transfer: 'Перемещение',
+  income: 'Приход',
+  expense: 'Расход',
+  transfer_money: 'Перевод',
+};
+
+/**
+ * Заголовок в шапке для текущего адреса.
+ *
+ * `kind` — параметр адреса: он же различает клиентов и поставщиков на одном
+ * экране контрагентов, и вид документа на одном экране создания.
+ */
+export function titleFor(pathname: string, kind?: string, type?: string): string {
+  // Раньше остальных: путь создания документа начинается с «/money» и без
+  // этой проверки читался бы как журнал движения денег.
+  if (pathname.startsWith('/money/new')) {
+    const label = DOC_TITLE[type === 'transfer' ? 'transfer_money' : (type ?? 'income')];
+    return `Движение денег / ${label ?? 'создание'}`;
+  }
+  if (pathname.startsWith('/doc')) {
+    return `Движение товара / ${DOC_TITLE[kind ?? 'purchase'] ?? 'создание'}`;
+  }
+  if (pathname.startsWith('/new')) return 'Создать документ';
+  if (pathname.startsWith('/sale/new')) return 'Продажа';
+
   if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
   if (pathname.startsWith('/journal')) return 'Движение товара';
   if (pathname.startsWith('/money')) return 'Движение денег';

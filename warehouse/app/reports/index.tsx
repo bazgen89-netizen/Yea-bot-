@@ -2,7 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { stockCsv } from '../../src/db/export';
 import { listProducts } from '../../src/db/products';
@@ -23,6 +23,7 @@ import { ReportsGrid } from '../../src/web/screens/ReportsGrid';
 import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Card, Empty, Row, Stat } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { say } from '../../src/ui/alert';
 
 type PeriodKind = 'today' | 'week' | 'month' | 'year';
 
@@ -62,12 +63,12 @@ function ReportsPhone() {
       file.write(stockCsv(db));
 
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Не получится поделиться', `Файл сохранён: ${file.uri}`);
+        say('Не получится поделиться', `Файл сохранён: ${file.uri}`);
         return;
       }
       await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
     } catch (error) {
-      Alert.alert('Не удалось выгрузить остатки', String(error));
+      say('Не удалось выгрузить остатки', String(error));
     }
   }
 

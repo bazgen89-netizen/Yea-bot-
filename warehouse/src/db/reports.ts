@@ -1,5 +1,6 @@
 import type { SqlDriver } from './driver';
-import type { Id } from '../domain/types';
+import { KIND_SQL, ONE_SIDE } from './stock';
+import { DOC_KIND_LABEL, type DocKind, type Id } from '../domain/types';
 
 /** Границы периода в ISO. Конец не включается: [from, to). */
 export interface Period {
@@ -236,39 +237,40 @@ export function documentTotals(db: SqlDriver, period: Period, scope: Scope = nul
     [period.from, period.to],
   );
 
-  const byType = new Map<string, { count: number; amount: number; quantity: number }>();
+  const byKind = new Map<string, { count: number; amount: number; quantity: number }>();
   for (const row of db.all<{
-    type: string;
+    kind: string;
     count: number;
     amount: number;
     quantity: number;
   }>(
-    `SELECT d.type,
+    `SELECT ${KIND_SQL} AS kind,
             COUNT(DISTINCT d.id) AS count,
             CAST(ROUND(COALESCE(SUM(ABS(m.qty_delta) * m.price), 0) / 1000.0) AS INTEGER) AS amount,
             COALESCE(SUM(ABS(m.qty_delta)), 0) AS quantity
      FROM docs d
-     LEFT JOIN stock_moves m ON m.doc_id = d.id
+     LEFT JOIN stock_moves m ON m.doc_id = d.id AND ${ONE_SIDE}
      WHERE d.created_at >= ? AND d.created_at < ?${scopeSql('d.location_id', scope)}
-     GROUP BY d.type`,
+     GROUP BY kind`,
     [period.from, period.to],
   )) {
-    byType.set(row.type, row);
+    byKind.set(row.kind, row);
   }
 
   const empty = { count: 0, amount: 0, quantity: 0 };
-  const doc = (type: string) => byType.get(type) ?? empty;
+  const doc = (kind: DocKind) => byKind.get(kind) ?? empty;
 
+  // Порядок строк — тот же, что в кабинете.
   return [
     { name: 'Продажа', ...(sales ?? empty) },
-    { name: 'Закупка', ...doc('receipt') },
+    { name: DOC_KIND_LABEL.purchase, ...doc('purchase') },
     { name: 'Возврат продажи', ...(refunds ?? empty) },
-    { name: 'Возврат закупки', ...empty },
-    { name: 'Корректировка', ...doc('adjust') },
-    { name: 'Инвентаризация', ...empty },
-    { name: 'Оприходование', ...empty },
-    { name: 'Списание', ...doc('writeoff') },
-    { name: 'Перемещение', ...empty },
+    { name: DOC_KIND_LABEL.purchase_return, ...doc('purchase_return') },
+    { name: DOC_KIND_LABEL.adjustment, ...doc('adjustment') },
+    { name: DOC_KIND_LABEL.inventory, ...doc('inventory') },
+    { name: DOC_KIND_LABEL.stock_in, ...doc('stock_in') },
+    { name: DOC_KIND_LABEL.writeoff, ...doc('writeoff') },
+    { name: DOC_KIND_LABEL.transfer, ...doc('transfer') },
   ];
 }
 

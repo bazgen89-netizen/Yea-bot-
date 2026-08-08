@@ -1,5 +1,7 @@
 import type { SqlDriver, SqlParam } from './driver';
-import type { Id } from '../domain/types';
+import { KIND_SQL, ONE_SIDE } from './stock';
+import { DOC_KIND_LABEL, type DocKind, type Id } from '../domain/types';
+import { MONEY_TYPE_LABEL, type MoneyType } from './money';
 import type { Kopecks } from '../domain/money';
 
 /**
@@ -11,7 +13,8 @@ import type { Kopecks } from '../domain/money';
  * было на первой.
  */
 
-export type JournalKind = 'sale' | 'refund' | 'receipt' | 'writeoff' | 'adjust';
+/** Чеки нумеруются и называются отдельно от складских документов. */
+export type JournalKind = 'sale' | 'refund' | DocKind;
 
 export interface JournalEntry {
   /** Идентификатор внутри своего вида — чеки и документы нумеруются отдельно. */
@@ -54,16 +57,23 @@ export function listJournal(db: SqlDriver, limit = 500): JournalEntry[] {
        UNION ALL
 
        SELECT d.id,
-              d.type,
+              ${KIND_SQL},
               d.created_at,
-              (SELECT COUNT(*) FROM stock_moves m WHERE m.doc_id = d.id),
+              (SELECT COUNT(*) FROM stock_moves m
+               WHERE m.doc_id = d.id AND ${ONE_SIDE}),
               CAST(ROUND(COALESCE((
                 SELECT SUM(ABS(m.qty_delta) * m.price) FROM stock_moves m
-                WHERE m.doc_id = d.id
+                WHERE m.doc_id = d.id AND ${ONE_SIDE}
               ), 0) / 1000.0) AS INTEGER),
               NULL,
-              d.counterparty,
-              (SELECT l.name FROM locations l WHERE l.id = d.location_id)
+              -- У перемещения отправитель и получатель — магазины, у остальных
+              -- документов слева контрагент, справа магазин.
+              CASE WHEN d.subtype = 'transfer'
+                   THEN (SELECT l.name FROM locations l WHERE l.id = d.location_id)
+                   ELSE d.counterparty END,
+              CASE WHEN d.subtype = 'transfer'
+                   THEN (SELECT l.name FROM locations l WHERE l.id = d.location_to)
+                   ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END
        FROM docs d
      )
      ORDER BY created_at DESC, id DESC
@@ -109,24 +119,26 @@ export function formatTime(iso: string): string {
 const KIND_LABEL: Record<JournalKind, string> = {
   sale: 'Продажа',
   refund: 'Возврат продажи',
-  receipt: 'Закупка',
-  writeoff: 'Списание',
-  adjust: 'Корректировка',
+  ...DOC_KIND_LABEL,
 };
 
 export function entryTitle(entry: JournalEntry): string {
-  return `${KIND_LABEL[entry.kind]} #${entry.id}`;
+  return `${KIND_LABEL[entry.kind] ?? 'Документ'} #${entry.id}`;
 }
 
 /**
  * Лента движения денег: приходы и расходы по счетам.
  *
- * Приход рождается из чека, а не заводится отдельно: деньги в кассе появляются
- * ровно тогда, когда пробита продажа. Отдельная таблица платежей завела бы
- * второй источник правды, который пришлось бы сверять с чеками.
+ * Приход по продаже отдельным документом не заводится — он берётся из самого
+ * чека: деньги в кассе появляются ровно тогда, когда пробита продажа, и вторая
+ * запись об этом событии стала бы вторым источником правды. А аренда, зарплата
+ * и перевод между счетами чеком не сопровождаются — они приходят из `money_docs`.
  */
 export interface MoneyEntry {
   id: Id;
+  /** Из чего строка: из чека или из заведённого руками документа. */
+  source: 'sale' | 'doc';
+  type: MoneyType;
   created_at: string;
   /** Поступило, копейки. */
   income: Kopecks;
@@ -146,32 +158,62 @@ const ACCOUNT: Record<string, string> = {
 };
 
 export function listMoney(db: SqlDriver, limit = 500): MoneyEntry[] {
-  const rows = db.all<MoneyEntry & { payment: string }>(
-    `SELECT s.id,
-            s.created_at,
-            s.total AS income,
-            0       AS expense,
-            COALESCE(
-              (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
-              'Розничный покупатель'
-            ) AS counterparty,
-            s.payment,
-            'Оплата от клиента' AS category
-     FROM sales s
-     WHERE NOT EXISTS (
-       SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+  const rows = db.all<MoneyEntry & { payment: string | null }>(
+    `SELECT * FROM (
+       SELECT s.id                    AS id,
+              'sale'                  AS source,
+              'income'                AS type,
+              s.created_at            AS created_at,
+              s.total                 AS income,
+              0                       AS expense,
+              COALESCE(
+                (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+                'Розничный покупатель'
+              )                       AS counterparty,
+              s.payment               AS payment,
+              ''                      AS account,
+              'Оплата от клиента'     AS category
+       FROM sales s
+       WHERE NOT EXISTS (
+         SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+       )
+
+       UNION ALL
+
+       SELECT d.id,
+              'doc',
+              d.type,
+              d.created_at,
+              CASE WHEN d.type = 'expense' THEN 0 ELSE d.amount END,
+              CASE WHEN d.type = 'income'  THEN 0 ELSE d.amount END,
+              COALESCE(
+                d.counterparty,
+                (SELECT c.name FROM counterparties c WHERE c.id = d.counterparty_id),
+                ''
+              ),
+              NULL,
+              -- Перевод показывается одной строкой «откуда → куда»: две строки
+              -- об одном переводе выглядели бы как два разных движения.
+              CASE WHEN d.type = 'transfer'
+                   THEN d.account || ' → ' || COALESCE(d.account_to, '')
+                   ELSE d.account END,
+              COALESCE(d.category, '')
+       FROM money_docs d
      )
-     ORDER BY s.created_at DESC, s.id DESC
+     ORDER BY created_at DESC, id DESC
      LIMIT ?`,
     [limit],
   );
 
-  return rows.map((row) => ({ ...row, account: ACCOUNT[row.payment] ?? row.payment }));
+  return rows.map((row) => ({
+    ...row,
+    account: row.payment === null ? row.account : (ACCOUNT[row.payment] ?? row.payment),
+  }));
 }
 
 /** «Приход #45679» — так документ называется в движении денег. */
 export function moneyTitle(entry: MoneyEntry): string {
-  return `${entry.income > 0 ? 'Приход' : 'Расход'} #${entry.id}`;
+  return `${MONEY_TYPE_LABEL[entry.type]} #${entry.id}`;
 }
 
 /** Группировка по дням — та же, что в движении товара. */

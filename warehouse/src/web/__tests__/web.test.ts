@@ -54,6 +54,17 @@ describe('заголовок раздела', () => {
     expect(titleFor('/counterparties', 'customer')).toBe('Клиенты');
     expect(titleFor('/counterparties', 'supplier')).toBe('Поставщики');
   });
+
+  it('называет создаваемый документ', () => {
+    expect(titleFor('/doc/new', 'transfer')).toBe('Движение товара / Перемещение');
+    expect(titleFor('/doc/new', 'stock_in')).toBe('Движение товара / Оприходование');
+  });
+
+  it('не путает создание денежного документа с журналом денег', () => {
+    expect(titleFor('/money/new', undefined, 'expense')).toBe('Движение денег / Расход');
+    expect(titleFor('/money/new', undefined, 'transfer')).toBe('Движение денег / Перевод');
+    expect(titleFor('/money')).toBe('Движение денег');
+  });
 });
 
 describe('журнал движения товара', () => {
@@ -79,6 +90,10 @@ describe('журнал движения товара', () => {
   it('называет документ так же, как в исходном приложении', () => {
     const base = { created_at: '', positions: 0, amount: 0, paid: null, sender: null, receiver: null };
     expect(entryTitle({ ...base, id: 4784, kind: 'sale' })).toBe('Продажа #4784');
-    expect(entryTitle({ ...base, id: 3303, kind: 'adjust' })).toBe('Корректировка #3303');
+    expect(entryTitle({ ...base, id: 3303, kind: 'adjustment' })).toBe('Корректировка #3303');
+    expect(entryTitle({ ...base, id: 12, kind: 'purchase' })).toBe('Закупка #12');
+    expect(entryTitle({ ...base, id: 13, kind: 'purchase_return' })).toBe('Возврат закупки #13');
+    expect(entryTitle({ ...base, id: 14, kind: 'stock_in' })).toBe('Оприходование #14');
+    expect(entryTitle({ ...base, id: 15, kind: 'transfer' })).toBe('Перемещение #15');
   });
 });

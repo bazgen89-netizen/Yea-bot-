@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { getSale, refundSale, saleSubtotal } from '../../src/db/sales';
 import { formatMoneyWithSign } from '../../src/domain/money';
@@ -8,6 +8,7 @@ import type { PaymentMethod } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { Badge, Button, Card, Empty, Row } from '../../src/ui/components';
 import { colors, spacing, text } from '../../src/ui/theme';
+import { confirm, say } from '../../src/ui/alert';
 
 const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   cash: 'Наличные',
@@ -31,24 +32,18 @@ export default function SaleScreen() {
   const profit = sale.total - sale.cost_total;
 
   function confirmRefund() {
-    Alert.alert(
+    confirm(
       'Оформить возврат?',
       'Товар вернётся на склад, а чек перестанет учитываться в выручке.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Вернуть',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              refundSale(db, saleId);
-              refresh();
-            } catch (error) {
-              Alert.alert('Не удалось оформить возврат', String(error));
-            }
-          },
-        },
-      ],
+      'Вернуть',
+      () => {
+        try {
+          refundSale(db, saleId);
+          refresh();
+        } catch (error) {
+          say('Не удалось оформить возврат', String(error));
+        }
+      },
     );
   }
 

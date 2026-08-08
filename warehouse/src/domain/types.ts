@@ -66,14 +66,73 @@ export interface CounterpartyWithTotals extends Counterparty {
   last_sale_at: string | null;
 }
 
+/** Что документ делает со складом: приходует, списывает или выравнивает. */
 export type DocType = 'receipt' | 'writeoff' | 'adjust';
+
+/**
+ * Чем документ является для пользователя.
+ *
+ * Отделено от `DocType` потому, что складское действие и название документа —
+ * разные вещи: закупка и оприходование одинаково приходуют товар, но у первой
+ * есть поставщик и цена, а вторая объясняет, откуда товар взялся без закупки.
+ */
+export type DocKind =
+  | 'purchase'
+  | 'purchase_return'
+  | 'stock_in'
+  | 'writeoff'
+  | 'transfer'
+  | 'inventory'
+  | 'adjustment';
+
+/** Название документа так, как оно написано в кабинете. */
+export const DOC_KIND_LABEL: Record<DocKind, string> = {
+  purchase: 'Закупка',
+  purchase_return: 'Возврат закупки',
+  stock_in: 'Оприходование',
+  writeoff: 'Списание',
+  transfer: 'Перемещение',
+  inventory: 'Инвентаризация',
+  adjustment: 'Корректировка',
+};
+
+/** Как вид документа двигает склад. */
+export const DOC_KIND_TYPE: Record<DocKind, DocType> = {
+  purchase: 'receipt',
+  purchase_return: 'writeoff',
+  stock_in: 'receipt',
+  writeoff: 'writeoff',
+  // Перемещение списывает в одном магазине и приходует в другом; ведущей
+  // считаем расходную сторону, чтобы документ не удваивался в сводках.
+  transfer: 'writeoff',
+  inventory: 'adjust',
+  adjustment: 'adjust',
+};
+
+/**
+ * Вид документа по тому, что записано в базе.
+ *
+ * У документов, заведённых до появления видов, `subtype` пуст — тогда вид
+ * восстанавливается по складскому действию.
+ */
+export function docKind(doc: { type: DocType; subtype?: string | null }): DocKind {
+  if (doc.subtype && doc.subtype in DOC_KIND_LABEL) return doc.subtype as DocKind;
+  if (doc.type === 'receipt') return 'purchase';
+  if (doc.type === 'writeoff') return 'writeoff';
+  return 'adjustment';
+}
 
 export interface Doc {
   id: Id;
   type: DocType;
+  /** Вид документа; пусто у документов, заведённых до появления видов. */
+  subtype: DocKind | null;
   counterparty: string | null;
   note: string | null;
   created_at: string;
+  location_id: Id | null;
+  /** Магазин-получатель у перемещения. */
+  location_to: Id | null;
 }
 
 export type MoveReason = 'receipt' | 'writeoff' | 'sale' | 'adjust' | 'return';

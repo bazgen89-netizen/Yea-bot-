@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   archiveCounterparty,
@@ -17,6 +17,7 @@ import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { Button, Card, Field, Stat } from '../../src/ui/components';
 import { MenuIcon } from '../../src/ui/icons';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { confirm, say } from '../../src/ui/alert';
 
 const KIND_LABEL: Record<PartyKind, string> = {
   customer: 'Клиент',
@@ -50,7 +51,7 @@ export default function CounterpartyScreen() {
 
   function save() {
     if (!name.trim()) {
-      Alert.alert('Нужно имя', 'Без имени карточку не сохранить.');
+      say('Нужно имя', 'Без имени карточку не сохранить.');
       return;
     }
 
@@ -58,7 +59,7 @@ export default function CounterpartyScreen() {
     // чтобы «12,5 %» не превращалось в число с плавающей точкой.
     const percent = discount.trim() ? Number(discount.replace(',', '.')) : 0;
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      Alert.alert('Проверьте скидку', 'Скидка — число от 0 до 100.');
+      say('Проверьте скидку', 'Скидка — число от 0 до 100.');
       return;
     }
 
@@ -81,21 +82,15 @@ export default function CounterpartyScreen() {
   function remove() {
     if (!partyId) return;
 
-    Alert.alert(
+    confirm(
       'Убрать из справочника?',
       'Карточка скроется из списка. История покупок сохранится.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Убрать',
-          style: 'destructive',
-          onPress: () => {
-            archiveCounterparty(db, partyId);
-            refresh();
-            router.back();
-          },
-        },
-      ],
+      'Убрать',
+      () => {
+        archiveCounterparty(db, partyId);
+        refresh();
+        router.back();
+      },
     );
   }
 

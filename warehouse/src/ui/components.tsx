@@ -148,6 +148,52 @@ export function Badge({
   );
 }
 
+/**
+ * Выбор одного значения из нескольких — магазин, счёт, статья платежа.
+ *
+ * Не выпадающим списком: вариантов у магазина два-три, и раскрывающийся
+ * список ради двух строк — лишнее нажатие на каждый документ.
+ */
+export function Choice<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={text.muted}>{label}</Text>
+      <View style={styles.choices}>
+        {options.map((option) => {
+          const picked = option.value === value;
+          return (
+            <Pressable
+              key={String(option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: picked }}
+              onPress={() => onChange(option.value)}
+              style={({ pressed }) => [
+                styles.choice,
+                picked && styles.choicePicked,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.choiceText, picked && styles.choiceTextPicked]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 /** Пара «подпись — значение» для сводок в отчётах. */
 export function Stat({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
   return (
@@ -183,6 +229,18 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.45 },
   buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
   field: { gap: spacing.xs, marginBottom: spacing.md },
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  choice: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+  },
+  choicePicked: { borderColor: colors.primary, backgroundColor: colors.successBg },
+  choiceText: { fontSize: 15, color: colors.text },
+  choiceTextPicked: { color: colors.primary, fontWeight: '600' },
   input: {
     minHeight: 48,
     borderWidth: 1,

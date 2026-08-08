@@ -27,13 +27,17 @@ const COLUMNS: Column[] = [
   { key: 'author', title: 'Автор', width: 180 },
 ];
 
-/** Цвет полоски слева: продажи зелёные, складские документы фиолетовые. */
+/** Цвет полоски слева: продажи зелёные, возвраты красные, документы фиолетовые. */
 const STRIPE: Record<JournalEntry['kind'], string> = {
   sale: web.stripeSale,
   refund: web.danger,
-  receipt: web.stripeDoc,
+  purchase_return: web.danger,
+  purchase: web.stripeDoc,
+  stock_in: web.stripeDoc,
   writeoff: web.stripeDoc,
-  adjust: web.stripeDoc,
+  transfer: web.stripeDoc,
+  inventory: web.stripeDoc,
+  adjustment: web.stripeDoc,
 };
 
 /** «Движение товара» — журнал кабинета. */

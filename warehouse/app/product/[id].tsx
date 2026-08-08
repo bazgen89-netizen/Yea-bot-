@@ -1,16 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View,  } from 'react-native';
 
 import {
   archiveProduct,
@@ -30,6 +21,7 @@ import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
 import { Badge, Button, Card, Field, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { confirm, say } from '../../src/ui/alert';
 
 const REASON_LABEL: Record<MoveReason, string> = {
   receipt: 'Приход',
@@ -70,7 +62,7 @@ export default function ProductScreen() {
 
   function save() {
     if (!name.trim()) {
-      Alert.alert('Нужно название', 'Без названия товар не сохранить.');
+      say('Нужно название', 'Без названия товар не сохранить.');
       return;
     }
 
@@ -79,7 +71,7 @@ export default function ProductScreen() {
     const min = minQty.trim() ? parseQty(minQty) : 0;
 
     if (cost === null || sale === null || min === null) {
-      Alert.alert('Проверьте числа', 'Цены и минимальный остаток должны быть числами.');
+      say('Проверьте числа', 'Цены и минимальный остаток должны быть числами.');
       return;
     }
 
@@ -106,7 +98,7 @@ export default function ProductScreen() {
     } catch (error) {
       const message = String(error);
       // Единственное ограничение уникальности в таблице — штрихкод.
-      Alert.alert(
+      say(
         'Не удалось сохранить',
         message.includes('UNIQUE')
           ? 'Такой штрихкод уже есть у другого товара.'
@@ -118,7 +110,7 @@ export default function ProductScreen() {
   async function pickPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нет доступа к фото', 'Разрешите доступ к галерее в настройках.');
+      say('Нет доступа к фото', 'Разрешите доступ к галерее в настройках.');
       return;
     }
 
@@ -247,21 +239,15 @@ export default function ProductScreen() {
               refresh();
               return;
             }
-            Alert.alert(
+            confirm(
               'Убрать товар в архив?',
               'Товар исчезнет из списков и кассы, но останется в истории продаж.',
-              [
-                { text: 'Отмена', style: 'cancel' },
-                {
-                  text: 'В архив',
-                  style: 'destructive',
-                  onPress: () => {
-                    archiveProduct(db, product.id);
-                    refresh();
-                    router.back();
-                  },
-                },
-              ],
+              'В архив',
+              () => {
+                archiveProduct(db, product.id);
+                refresh();
+                router.back();
+              },
             );
           }}
         />
@@ -281,7 +267,7 @@ function StockCard({ productId }: { productId: number }) {
   function applyInventory() {
     const parsed = parseQty(actual);
     if (parsed === null || parsed < 0) {
-      Alert.alert('Проверьте количество', 'Фактический остаток должен быть числом не меньше нуля.');
+      say('Проверьте количество', 'Фактический остаток должен быть числом не меньше нуля.');
       return;
     }
 
@@ -289,7 +275,7 @@ function StockCard({ productId }: { productId: number }) {
     refresh();
     setActual('');
 
-    Alert.alert(
+    say(
       'Остаток обновлён',
       delta === 0
         ? 'Расхождения не было.'

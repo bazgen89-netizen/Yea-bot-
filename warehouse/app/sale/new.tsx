@@ -1,15 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View,  } from 'react-native';
 
 import { findByBarcode, listProducts } from '../../src/db/products';
 import { OutOfStockError, createSale } from '../../src/db/sales';
@@ -23,6 +14,7 @@ import { useScanner } from '../../src/state/ScannerProvider';
 import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Empty, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { say } from '../../src/ui/alert';
 
 const PAYMENTS: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Наличные' },
@@ -45,7 +37,7 @@ export default function SellScreen() {
 
     const product = findByBarcode(db, code);
     if (!product) {
-      Alert.alert('Товар не найден', `Штрихкод ${code} не привязан ни к одному товару.`);
+      say('Товар не найден', `Штрихкод ${code} не привязан ни к одному товару.`);
       return;
     }
     cart.add(product);
@@ -63,10 +55,10 @@ export default function SellScreen() {
       router.push({ pathname: '/sale/[id]', params: { id: String(saleId) } });
     } catch (error) {
       if (error instanceof OutOfStockError) {
-        Alert.alert('Не хватает товара', error.message);
+        say('Не хватает товара', error.message);
         return;
       }
-      Alert.alert('Не удалось провести чек', String(error));
+      say('Не удалось провести чек', String(error));
     }
   }
 
@@ -346,7 +338,7 @@ function ProductPicker({ onClose }: { onClose: () => void }) {
 
   function pick(product: ProductWithStock) {
     if (product.stock <= 0) {
-      Alert.alert('Нет на складе', `«${product.name}» закончился. Сначала оформите приход.`);
+      say('Нет на складе', `«${product.name}» закончился. Сначала оформите приход.`);
       return;
     }
     cart.add(product);

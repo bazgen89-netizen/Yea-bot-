@@ -80,17 +80,25 @@ export function MoneyTable() {
   );
 }
 
+/** Полоска слева: приход зелёный, расход красный, перевод синий. */
+const STRIPE: Record<MoneyEntry['type'], string> = {
+  income: web.stripeMoney,
+  expense: web.danger,
+  transfer: web.link,
+};
+
 function MoneyRow({ entry }: { entry: MoneyEntry }) {
   const [order, time, income, expense, party, account, category, author] = COLUMNS;
+  const stripe = STRIPE[entry.type];
 
   return (
     <View style={styles.rowWrap}>
-      <View style={styles.stripe} />
+      <View style={[styles.stripe, { backgroundColor: stripe }]} />
 
       <View style={styles.rowInner}>
         <Row>
           <View style={styles.status}>
-            <WebIcon.done color={web.stripeMoney} />
+            <WebIcon.done color={stripe} />
           </View>
 
           <Text style={[webText.link, { width: order.width }]} numberOfLines={1}>
@@ -128,7 +136,7 @@ const styles = StyleSheet.create({
   statusHead: { width: 46 },
   day: { fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row' },
-  stripe: { width: 4, backgroundColor: web.stripeMoney },
+  stripe: { width: 4 },
   rowInner: { flex: 1 },
   status: { width: 42, alignItems: 'center' },
   empty: { padding: 40, fontSize: 15, color: web.textMuted },

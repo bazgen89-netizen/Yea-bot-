@@ -150,6 +150,43 @@ export const MIGRATIONS: string[] = [
   -- а не ссылка: своих сотрудников в базе ещё нет, и связывать пока не с чем.
   ALTER TABLE counterparties ADD COLUMN created_by  TEXT;
   `,
+
+  // 5 — виды документов кабинета
+  `
+  -- type остаётся про склад: плюс или минус. Но закупка и оприходование
+  -- приходуют товар одинаково, а называются и заполняются по-разному —
+  -- смысл документа хранится отдельно.
+  --
+  -- Отдельной колонкой, а не расширением CHECK у type: перебрать значения
+  -- в CHECK можно только пересборкой таблицы, а на неё завязаны движения
+  -- с ON DELETE CASCADE — сборка стоила бы риска потерять их.
+  ALTER TABLE docs ADD COLUMN subtype TEXT;
+
+  -- Куда перемещаем. У всех документов, кроме перемещения, пусто.
+  ALTER TABLE docs ADD COLUMN location_to INTEGER REFERENCES locations(id);
+  `,
+
+  // 6 — деньги, не рождённые чеком: приход, расход, перевод между счетами
+  `
+  CREATE TABLE money_docs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    type            TEXT    NOT NULL CHECK (type IN ('income','expense','transfer')),
+    -- Всегда положительная: знак задаёт тип, а не сумма. Иначе расход на
+    -- «минус пятьсот» означал бы приход, и это никак не поймать.
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    account         TEXT    NOT NULL,
+    -- Куда переводим. У прихода и расхода пусто.
+    account_to      TEXT,
+    counterparty_id INTEGER REFERENCES counterparties(id),
+    counterparty    TEXT,
+    category        TEXT,
+    note            TEXT,
+    location_id     INTEGER REFERENCES locations(id),
+    created_at      TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_money_docs_created ON money_docs(created_at);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

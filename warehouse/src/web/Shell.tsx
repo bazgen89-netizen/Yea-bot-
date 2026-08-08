@@ -19,7 +19,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const desktop = useDesktop();
   const pathname = usePathname();
   // В раскладке параметры экрана видны только через глобальный хук.
-  const params = useGlobalSearchParams<{ kind?: string }>();
+  const params = useGlobalSearchParams<{ kind?: string; type?: string }>();
 
   // Экран кассира занимает окно целиком: у него своя шапка и своё меню внизу,
   // и уйти оттуда можно кнопкой «Меню».
@@ -27,7 +27,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <View style={styles.shell}>
-      <Header title={titleFor(pathname, params.kind)} />
+      <Header title={titleFor(pathname, params.kind, params.type)} />
       <View style={styles.body}>
         <Sidebar />
         <View style={styles.content}>{children}</View>

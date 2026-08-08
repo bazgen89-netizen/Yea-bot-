@@ -1,16 +1,18 @@
 import type { SqlDriver } from './driver';
 import { ensureLocation } from './locations';
+import CLIENTS from './seed/clients.json';
 import CATALOG from './seed/products.json';
 
 /**
- * Первичное наполнение базы каталогом WAYSTEA.
+ * Первичное наполнение базы данными WAYSTEA.
  *
- * Чтобы приложение было на чём проверять, оно приходит с настоящим каталогом:
- * 661 позиция и остатки по трём магазинам — та же выгрузка, что и в рабочей
- * программе. Загружается один раз: отметка в `app_state` не даёт повторить
- * загрузку при следующем запуске и затереть то, что успели наработать.
+ * Чтобы приложение было на чём проверять, оно приходит с настоящими данными:
+ * 661 позиция каталога с остатками по трём магазинам и 3184 карточки клиентов —
+ * те же выгрузки, что делает рабочая программа. Каждая загружается один раз:
+ * отметка в `app_state` не даёт повторить её при следующем запуске и затереть
+ * то, что успели наработать.
  *
- * Числа в файле уже приведены к внутренним единицам: цены — копейки,
+ * Числа в файлах уже приведены к внутренним единицам: цены — копейки,
  * количества — тысячные. Так разбор не повторяется на каждом запуске телефона.
  */
 
@@ -31,9 +33,32 @@ interface SeedProduct {
   q: Record<string, number>;
 }
 
-const DONE_KEY = 'catalog_seeded';
+interface SeedClient {
+  /** Наименование — так колонка называется в выгрузке. */
+  n: string;
+  /** Телефон. */
+  p: string | null;
+  e: string | null;
+  /** День рождения строкой, как в выгрузке: «13/07/2006». */
+  b: string | null;
+  /** Пол: «Мужской» / «Женский». */
+  g: string | null;
+  /** Описание. */
+  d: string | null;
+  /** Адрес. */
+  a: string | null;
+  /** Кто завёл карточку. */
+  by: string | null;
+}
 
+/** Загружает всё, что ещё не загружено. Безопасно звать при каждом запуске. */
 export function seedCatalog(db: SqlDriver): void {
+  seedProducts(db);
+  seedClients(db);
+}
+
+function seedProducts(db: SqlDriver): void {
+  const DONE_KEY = 'catalog_seeded';
   const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
   if (done) return;
 
@@ -83,5 +108,55 @@ export function seedCatalog(db: SqlDriver): void {
   });
 }
 
-/** Сколько позиций в поставляемом каталоге — для сообщений и тестов. */
-export const SEED_SIZE = (CATALOG as SeedProduct[]).length;
+/**
+ * Клиентская база.
+ *
+ * Данные переносятся как есть, даже когда они странные: в выгрузке хватает
+ * карточек, где в имени записан телефон, а в телефоне имя. Это ошибки ввода,
+ * но чинить их за пользователя нельзя — он ищет клиента ровно по тому, что
+ * когда-то набрал, и «исправленная» карточка просто перестанет находиться.
+ */
+function seedClients(db: SqlDriver): void {
+  const DONE_KEY = 'clients_seeded';
+  const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
+  if (done) return;
+
+  const clients = CLIENTS as SeedClient[];
+  const now = new Date().toISOString();
+
+  db.tx(() => {
+    for (const client of clients) {
+      const digits = (client.p ?? '').replace(/\D/g, '');
+      const search = [client.n, client.p, client.e]
+        .filter((v): v is string => Boolean(v?.trim()))
+        .map((v) => v.trim().toLowerCase())
+        .concat(digits.length >= 10 ? [digits.slice(-10)] : [])
+        .join(' ');
+
+      db.run(
+        `INSERT INTO counterparties
+           (kind, name, phone, email, note, discount_bp, created_at, search_text,
+            birthday, gender, address, created_by)
+         VALUES ('customer', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+        [
+          client.n,
+          client.p,
+          client.e,
+          client.d,
+          now,
+          search,
+          client.b,
+          client.g,
+          client.a,
+          client.by,
+        ],
+      );
+    }
+
+    db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
+  });
+}
+
+/** Сколько позиций и карточек в поставляемых данных — для сообщений и тестов. */
+export const SEED_PRODUCTS = (CATALOG as SeedProduct[]).length;
+export const SEED_CLIENTS = (CLIENTS as SeedClient[]).length;

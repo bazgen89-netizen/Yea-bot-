@@ -10,15 +10,26 @@ import { useQuery } from '../src/state/DatabaseProvider';
 import { AppHeader, HeaderAction } from '../src/ui/AppHeader';
 import { Icon } from '../src/ui/icons';
 import { colors, radius, spacing, text } from '../src/ui/theme';
+import { useDesktop } from '../src/ui/useDesktop';
+import { PartiesTable } from '../src/web/screens/PartiesTable';
 
 /**
  * Справочник контрагентов. Один экран на клиентов и поставщиков — списки
  * устроены одинаково, отличаются только заголовком и тем, кого показываем.
  */
 export default function CounterpartiesScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams<{ kind?: string }>();
   const kind: PartyKind = params.kind === 'supplier' ? 'supplier' : 'customer';
+
+  // На широком экране справочник показывается таблицей, как в кабинете.
+  const desktop = useDesktop();
+  if (desktop) return <PartiesTable kind={kind} />;
+
+  return <PartiesList kind={kind} />;
+}
+
+function PartiesList({ kind }: { kind: PartyKind }) {
+  const router = useRouter();
 
   const [search, setSearch] = useState('');
 

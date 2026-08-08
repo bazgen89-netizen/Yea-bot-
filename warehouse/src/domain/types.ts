@@ -45,6 +45,13 @@ export interface Counterparty {
   note: string | null;
   /** Личная скидка в сотых долях процента: 500 = 5 %. */
   discount_bp: number;
+  /** День рождения строкой, как в выгрузке: «13/07/2006». */
+  birthday: string | null;
+  /** «Мужской» / «Женский». */
+  gender: string | null;
+  address: string | null;
+  /** Кто завёл карточку — имя сотрудника или магазина строкой. */
+  created_by: string | null;
   archived: number;
   created_at: string;
 }

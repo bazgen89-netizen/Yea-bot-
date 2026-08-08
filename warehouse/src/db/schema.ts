@@ -140,6 +140,16 @@ export const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+
+  // 4 — поля карточки клиента из выгрузки
+  `
+  ALTER TABLE counterparties ADD COLUMN birthday    TEXT;
+  ALTER TABLE counterparties ADD COLUMN gender      TEXT;
+  ALTER TABLE counterparties ADD COLUMN address     TEXT;
+  -- Кто завёл карточку. В выгрузке это имя сотрудника или магазина строкой,
+  -- а не ссылка: своих сотрудников в базе ещё нет, и связывать пока не с чем.
+  ALTER TABLE counterparties ADD COLUMN created_by  TEXT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

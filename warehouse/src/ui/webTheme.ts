@@ -9,9 +9,12 @@ import { StyleSheet } from 'react-native';
  * и «поправил синий» в одном месте молча испортило бы другое.
  */
 export const web = {
-  /** Шапка: слева темнее, справа светлее. */
-  headerFrom: '#0F6FBF',
-  headerTo: '#2E93DA',
+  /**
+   * Шапка. В оригинале `linear-gradient(310deg, #01579b, #0288d1)` — значения
+   * взяты из его же таблицы стилей, а не подобраны на глаз по скриншоту.
+   */
+  headerFrom: '#01579B',
+  headerTo: '#0288D1',
   headerText: '#FFFFFF',
 
   /** Кнопка «Интерфейс кассира» в шапке. */
@@ -43,12 +46,13 @@ export const web = {
   columnHead: '#7A7F85',
 
   /** Ссылки в таблицах: названия товаров, номера документов, магазины. */
-  link: '#1E7BD0',
+  link: '#2185D0',
 
-  green: '#4CAF50',
-  greenText: '#3D9140',
-  orange: '#F5871F',
-  danger: '#E5252A',
+  // Semantic UI, на котором собран оригинал: те же значения, что у него.
+  green: '#21BA45',
+  greenText: '#1EA83C',
+  orange: '#F2711C',
+  danger: '#DB2828',
 
   /** Полоска слева у строки журнала. */
   stripeSale: '#00BFA5',
@@ -59,6 +63,12 @@ export const web = {
   warningBg: '#FFF8E1',
   warningText: '#8A6D3B',
 };
+
+/**
+ * Шрифт кабинета — тот же, что в оригинале.
+ * Со шрифтом, отличным от Roboto, не сойдутся ни ширины колонок, ни высоты строк.
+ */
+export const WEB_FONT = 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif';
 
 /** Ширина, с которой показываем кабинет вместо телефонной вёрстки. */
 export const DESKTOP_WIDTH = 1000;

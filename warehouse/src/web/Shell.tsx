@@ -1,4 +1,4 @@
-import { usePathname, useLocalSearchParams } from 'expo-router';
+import { usePathname, useGlobalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -18,9 +18,13 @@ import { web } from '../ui/webTheme';
 export function Shell({ children }: { children: ReactNode }) {
   const desktop = useDesktop();
   const pathname = usePathname();
-  const params = useLocalSearchParams<{ kind?: string }>();
+  // В раскладке параметры экрана видны только через глобальный хук.
+  const params = useGlobalSearchParams<{ kind?: string }>();
 
-  if (!desktop || pathname.startsWith('/cashier')) return <>{children}</>;
+  // Экран кассира со временем займёт окно целиком и получит своё меню внизу.
+  // Пока его нет, прятать шапку и боковое меню нельзя: уйти оттуда было бы
+  // нечем — ровно тот тупик, из которого этот кабинет и вытаскивают.
+  if (!desktop) return <>{children}</>;
 
   return (
     <View style={styles.shell}>

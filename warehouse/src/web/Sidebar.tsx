@@ -11,17 +11,20 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Раскрытым держим тот раздел, внутри которого сейчас находимся.
-  const [open, setOpen] = useState<string | null>(() => {
-    const active = MENU.find((entry) =>
-      entry.children?.some((child) => child.href && hrefPath(child.href) === pathname),
-    );
-    return active?.label ?? null;
-  });
+  // Раздел, открытый вручную. Пока его нет, раскрытым считается тот,
+  // внутри которого мы сейчас находимся: перешли в «Клиенты» — «Контрагенты»
+  // остаются раскрытыми, а не схлопываются, спрятав соседний пункт.
+  const [picked, setPicked] = useState<string | null>(null);
 
-  const go = (href: Href | undefined, soon: boolean | undefined) => {
-    if (soon || !href) return;
-    router.push(href);
+  const containing = MENU.find((entry) =>
+    entry.children?.some((child) => hrefPath(child.href) === pathname),
+  )?.label;
+
+  // Пустая строка означает «свернул руками» — не то же самое, что «не трогал».
+  const open = picked === null ? (containing ?? null) : picked || null;
+
+  const go = (href: Href | undefined) => {
+    if (href) router.push(href);
   };
 
   return (
@@ -41,7 +44,7 @@ export function Sidebar() {
             entry={entry}
             pathname={pathname}
             open={open === entry.label}
-            onToggle={() => setOpen(open === entry.label ? null : entry.label)}
+            onToggle={() => setPicked(open === entry.label ? '' : entry.label)}
             onGo={go}
           />
         ))}
@@ -49,9 +52,13 @@ export function Sidebar() {
 
       <View style={styles.footer}>
         {MENU_FOOTER.map((entry) => (
-          <Row key={entry.label} entry={entry} active={false} onPress={() => {}} badge={
-            entry.label === 'Что нового' ? 3 : undefined
-          } />
+          <Row
+            key={entry.label}
+            entry={entry}
+            active={false}
+            onPress={() => go(entry.href)}
+            badge={entry.label === 'Что нового' ? 3 : undefined}
+          />
         ))}
       </View>
     </View>
@@ -69,7 +76,7 @@ function Section({
   pathname: string;
   open: boolean;
   onToggle: () => void;
-  onGo: (href: Href | undefined, soon: boolean | undefined) => void;
+  onGo: (href: Href | undefined) => void;
 }) {
   const active = entry.href ? hrefPath(entry.href) === pathname : false;
 
@@ -80,7 +87,7 @@ function Section({
         active={active}
         expandable={Boolean(entry.children)}
         expanded={open}
-        onPress={() => (entry.children ? onToggle() : onGo(entry.href, entry.soon))}
+        onPress={() => (entry.children ? onToggle() : onGo(entry.href))}
       />
 
       {open &&
@@ -88,8 +95,8 @@ function Section({
           <ChildRow
             key={child.label}
             child={child}
-            active={child.href ? hrefPath(child.href) === pathname : false}
-            onPress={() => onGo(child.href, child.soon)}
+            active={hrefPath(child.href) === pathname}
+            onPress={() => onGo(child.href)}
           />
         ))}
     </View>
@@ -111,7 +118,7 @@ function Row({
   onPress: () => void;
   badge?: number;
 }) {
-  const tint = entry.dim || entry.soon ? web.sidebarDisabled : web.sidebarIcon;
+  const tint = entry.dim ? web.sidebarDisabled : web.sidebarIcon;
 
   return (
     <Pressable
@@ -134,7 +141,7 @@ function Row({
       </View>
 
       <Text
-        style={[styles.rowLabel, (entry.dim || entry.soon) && { color: web.sidebarDisabled }]}
+        style={[styles.rowLabel, entry.dim && { color: web.sidebarDisabled }]}
         numberOfLines={1}
       >
         {entry.label}

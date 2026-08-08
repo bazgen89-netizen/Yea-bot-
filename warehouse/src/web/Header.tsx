@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web } from '../ui/webTheme';
@@ -11,6 +13,8 @@ import { HEADER_HEIGHT, web } from '../ui/webTheme';
  * одной полоски отдельную библиотеку не стоит.
  */
 export function Header({ title, unread = 15 }: { title: string; unread?: number }) {
+  const router = useRouter();
+
   return (
     <View style={styles.header}>
       <View style={[styles.band, styles.bandLeft]} />
@@ -23,39 +27,73 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
       </Text>
 
       <View style={styles.right}>
-        {/* Экран кассира ещё не сделан — кнопка на месте, но пока не ведёт. */}
-        <View style={styles.cashier}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Интерфейс кассира"
+          onPress={() => router.push('/cashier')}
+          style={({ pressed }) => [styles.cashier, pressed && { opacity: 0.85 }]}
+        >
           <Text style={styles.cashierLabel}>Интерфейс кассира</Text>
-        </View>
+        </Pressable>
 
-        <View style={styles.language}>
+        <HeaderButton label="Язык" onPress={() => router.push('/company')}>
           <WebIcon.language color={web.headerText} />
           <Text style={styles.languageLabel}>Русский</Text>
-        </View>
+        </HeaderButton>
 
-        <WebIcon.barcode color={web.headerText} />
-        <WebIcon.calendar color={web.headerText} />
+        <HeaderButton label="Сканировать штрихкод" onPress={() => router.push('/scan')}>
+          <WebIcon.barcode color={web.headerText} />
+        </HeaderButton>
 
-        <View>
+        <HeaderButton label="Смены" onPress={() => router.push('/shifts')}>
+          <WebIcon.calendar color={web.headerText} />
+        </HeaderButton>
+
+        <HeaderButton label="Уведомления" onPress={() => router.push('/lab')}>
           <WebIcon.bell color={web.headerText} />
           {unread > 0 ? (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{unread}</Text>
             </View>
           ) : null}
-        </View>
+        </HeaderButton>
 
-        <View style={styles.account}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarLetter}>W</Text>
+        <HeaderButton label="Настройки компании" onPress={() => router.push('/company')}>
+          <View style={styles.account}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarLetter}>W</Text>
+            </View>
+            <View>
+              <Text style={styles.accountName}>waystea</Text>
+              <Text style={styles.accountRole}>Владелец</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.accountName}>waystea</Text>
-            <Text style={styles.accountRole}>Владелец</Text>
-          </View>
-        </View>
+        </HeaderButton>
       </View>
     </View>
+  );
+}
+
+/** Значок в шапке. Все они нажимаются — мёртвых кнопок в шапке нет. */
+function HeaderButton({
+  label,
+  onPress,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.headerButton, pressed && { opacity: 0.7 }]}
+    >
+      {children}
+    </Pressable>
   );
 }
 
@@ -70,7 +108,7 @@ const styles = StyleSheet.create({
   },
   band: { position: 'absolute', top: 0, bottom: 0 },
   bandLeft: { left: 0, width: '34%', backgroundColor: web.headerFrom },
-  bandMiddle: { left: '34%', width: '33%', backgroundColor: '#1B80CD' },
+  bandMiddle: { left: '34%', width: '33%', backgroundColor: '#01699E' },
   bandRight: { left: '67%', right: 0, backgroundColor: web.headerTo },
   logo: { color: web.headerText, fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   title: { flex: 1, color: web.headerText, fontSize: 21, marginLeft: 24 },
@@ -84,7 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cashierLabel: { color: web.headerText, fontSize: 15 },
-  language: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   languageLabel: { color: web.headerText, fontSize: 15 },
   badge: {
     position: 'absolute',

@@ -67,6 +67,23 @@ function seedProducts(db: SqlDriver): void {
 
   db.tx(() => {
     const locations = new Map<string, number>();
+    // Документ, которым остатки попали на склад. Без него движения висели бы
+    // сами по себе, а на вопрос «откуда тут 416 грамм» ответить было бы нечем.
+    const docs = new Map<number, number>();
+
+    const documentFor = (locationId: number): number => {
+      const known = docs.get(locationId);
+      if (known !== undefined) return known;
+
+      db.run(
+        `INSERT INTO docs (type, counterparty, note, created_at, location_id)
+         VALUES ('adjust', NULL, 'Загрузка каталога', ?, ?)`,
+        [now, locationId],
+      );
+      const id = db.lastInsertId();
+      docs.set(locationId, id);
+      return id;
+    };
 
     for (const item of products) {
       const search = [item.n, item.s, item.c]
@@ -97,9 +114,10 @@ function seedProducts(db: SqlDriver): void {
         // Инвентаризация, а не приход: в выгрузке остаток уже итоговый,
         // и «сколько пришло» из неё неизвестно.
         db.run(
-          `INSERT INTO stock_moves (product_id, qty_delta, reason, price, created_at, location_id)
-           VALUES (?, ?, 'adjust', 0, ?, ?)`,
-          [productId, qty, now, locationId],
+          `INSERT INTO stock_moves
+             (product_id, qty_delta, reason, price, created_at, location_id, doc_id)
+           VALUES (?, ?, 'adjust', ?, ?, ?, ?)`,
+          [productId, qty, item.p, now, locationId, documentFor(locationId)],
         );
       }
     }

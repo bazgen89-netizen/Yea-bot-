@@ -10,6 +10,8 @@ import { useQuery } from '../../src/state/DatabaseProvider';
 import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Empty, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { JournalTable } from '../../src/web/screens/JournalTable';
 
 type Tab = 'docs' | 'sales';
 
@@ -20,6 +22,14 @@ const DOC_LABEL = {
 } as const;
 
 export default function DocsScreen() {
+  // На широком экране журнал показывается таблицей, как в кабинете.
+  const desktop = useDesktop();
+  if (desktop) return <JournalTable />;
+
+  return <JournalPhone />;
+}
+
+function JournalPhone() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('docs');
 

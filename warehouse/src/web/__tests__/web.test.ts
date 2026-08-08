@@ -1,6 +1,7 @@
 import { formatMoneyWeb } from '../../domain/money';
 import { visiblePages } from '../pagination';
 import { titleFor } from '../menu';
+import { entryTitle, formatDay, groupByDay } from '../../db/journal';
 
 describe('суммы в кабинете', () => {
   it('пишет разряды запятой, а копейки точкой', () => {
@@ -52,5 +53,32 @@ describe('заголовок раздела', () => {
   it('различает клиентов и поставщиков по параметру', () => {
     expect(titleFor('/counterparties', 'customer')).toBe('Клиенты');
     expect(titleFor('/counterparties', 'supplier')).toBe('Поставщики');
+  });
+});
+
+describe('журнал движения товара', () => {
+  it('складывает строки в группы по дням, сохраняя порядок', () => {
+    const entry = (id: number, created_at: string) =>
+      ({ id, kind: 'sale', created_at, positions: 1, amount: 0, paid: 0, sender: null, receiver: null }) as const;
+
+    const groups = groupByDay([
+      entry(3, '2026-08-08T11:27:00.000Z'),
+      entry(2, '2026-08-08T10:43:00.000Z'),
+      entry(1, '2026-08-07T20:59:00.000Z'),
+    ]);
+
+    expect(groups.map((g) => g.day)).toEqual(['2026-08-08', '2026-08-07']);
+    expect(groups[0].entries.map((e) => e.id)).toEqual([3, 2]);
+  });
+
+  it('пишет заголовок дня по-русски', () => {
+    expect(formatDay('2026-08-08')).toBe('8 августа');
+    expect(formatDay('2026-01-01')).toBe('1 января');
+  });
+
+  it('называет документ так же, как в исходном приложении', () => {
+    const base = { created_at: '', positions: 0, amount: 0, paid: null, sender: null, receiver: null };
+    expect(entryTitle({ ...base, id: 4784, kind: 'sale' })).toBe('Продажа #4784');
+    expect(entryTitle({ ...base, id: 3303, kind: 'adjust' })).toBe('Корректировка #3303');
   });
 });

@@ -1,5 +1,5 @@
-import { Section } from '../src/web/screens/Section';
+import { RegistersTable } from '../src/web/screens/RegistersTable';
 
 export default function RegistersScreen() {
-  return <Section title={'Кассовый раздел / кассы'} note={'Список касс по магазинам и их настройки.'} />;
+  return <RegistersTable />;
 }

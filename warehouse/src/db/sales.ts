@@ -1,4 +1,5 @@
 import type { SqlDriver } from './driver';
+import { openShiftAnywhere } from './shifts';
 import { cartTotals, findStockIssues } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
@@ -46,10 +47,22 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 
     const totals = cartTotals(verified, input.discount ?? 0);
 
+    // Чек привязывается к открытой смене сам: кассир открывает смену один раз
+    // за день, и заставлять его указывать её в каждом чеке — лишний повод
+    // ошибиться.
+    const shift = openShiftAnywhere(db);
+
     db.run(
-      `INSERT INTO sales (discount, total, cost_total, payment, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [totals.discount, totals.total, totals.costTotal, input.payment ?? 'cash', now],
+      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        totals.discount,
+        totals.total,
+        totals.costTotal,
+        input.payment ?? 'cash',
+        shift?.id ?? null,
+        now,
+      ],
     );
     const saleId = db.lastInsertId();
 

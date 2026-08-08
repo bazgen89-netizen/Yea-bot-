@@ -1,4 +1,5 @@
 import type { SqlDriver } from './driver';
+import { openShiftAnywhere } from './shifts';
 import type { Kopecks } from '../domain/money';
 import type { Id } from '../domain/types';
 
@@ -53,11 +54,15 @@ export function createMoneyDoc(db: SqlDriver, input: MoneyDocInput): Id {
     }
   }
 
+  // Как и чек, документ привязывается к открытой смене: без этого инкассация
+  // не попала бы в Z-отчёт, и ящик «не сошёлся» бы ровно на её сумму.
+  const shift = openShiftAnywhere(db);
+
   db.run(
     `INSERT INTO money_docs
        (type, amount, account, account_to, counterparty_id, counterparty,
-        category, note, location_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        category, note, location_id, shift_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.type,
       input.amount,
@@ -68,6 +73,7 @@ export function createMoneyDoc(db: SqlDriver, input: MoneyDocInput): Id {
       input.category?.trim() || null,
       input.note?.trim() || null,
       input.locationId ?? null,
+      shift?.id ?? null,
       new Date().toISOString(),
     ],
   );

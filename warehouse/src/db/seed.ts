@@ -1,5 +1,5 @@
 import type { SqlDriver } from './driver';
-import { ensureLocation } from './locations';
+import { ensureLocation, listLocations } from './locations';
 import CLIENTS from './seed/clients.json';
 import CATALOG from './seed/products.json';
 
@@ -55,6 +55,34 @@ interface SeedClient {
 export function seedCatalog(db: SqlDriver): void {
   seedProducts(db);
   seedClients(db);
+  seedRegisters(db);
+}
+
+/**
+ * По кассе на магазин.
+ *
+ * Заводится после товаров: магазины появляются вместе с остатками, и до
+ * этого привязывать кассу не к чему. Пустой раздел «Кассы» выглядел бы
+ * поломкой, а не свежей установкой.
+ */
+function seedRegisters(db: SqlDriver): void {
+  const DONE_KEY = 'registers_seeded';
+  const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
+  if (done) return;
+
+  const now = new Date().toISOString();
+
+  db.tx(() => {
+    for (const location of listLocations(db)) {
+      db.run('INSERT INTO registers (name, location_id, created_at) VALUES (?, ?, ?)', [
+        `Касса — ${location.name}`,
+        location.id,
+        now,
+      ]);
+    }
+
+    db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
+  });
 }
 
 function seedProducts(db: SqlDriver): void {

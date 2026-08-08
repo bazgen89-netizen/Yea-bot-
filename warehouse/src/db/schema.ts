@@ -187,6 +187,41 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_money_docs_created ON money_docs(created_at);
   `,
+
+  // 7 — кассы и смены
+  `
+  CREATE TABLE registers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    location_id INTEGER REFERENCES locations(id),
+    archived    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL
+  );
+
+  CREATE TABLE shifts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    register_id  INTEGER NOT NULL REFERENCES registers(id),
+    opened_at    TEXT    NOT NULL,
+    -- Пусто, пока смена открыта. Открытая смена — та, у которой здесь NULL,
+    -- а не та, у которой стоит какой-нибудь флаг: два способа узнать одно и
+    -- то же рано или поздно разойдутся.
+    closed_at    TEXT,
+    -- Наличные в ящике на момент открытия, копейки.
+    opening_cash INTEGER NOT NULL DEFAULT 0,
+    -- Сколько насчитали при закрытии. Расхождение с ожидаемым — это Z-отчёт.
+    closing_cash INTEGER,
+    cashier      TEXT,
+    created_at   TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_shifts_register ON shifts(register_id, closed_at);
+
+  -- Чек знает свою смену. У чеков, пробитых до появления смен, её нет.
+  ALTER TABLE sales      ADD COLUMN shift_id INTEGER REFERENCES shifts(id);
+  ALTER TABLE money_docs ADD COLUMN shift_id INTEGER REFERENCES shifts(id);
+
+  CREATE INDEX idx_sales_shift ON sales(shift_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

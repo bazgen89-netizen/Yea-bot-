@@ -10,6 +10,10 @@ if [ ! -d "$VAULT" ]; then
   exit 0
 fi
 
+# Отметка начала сессии — по ней Stop-хук поймёт, дописывались ли заметки.
+SID="$(python3 -c 'import json,sys; print((json.load(sys.stdin).get("session_id") or "nosid"))' 2>/dev/null <&0 || echo nosid)"
+: > "/tmp/second-brain-$SID.start" 2>/dev/null || true
+
 COUNT=$(find "$VAULT" -name '*.md' | wc -l | tr -d ' ')
 PROJECTS=$(find "$VAULT" -mindepth 1 -maxdepth 1 -type d -printf '%f, ' 2>/dev/null | sed 's/, $//')
 OPEN_HINT=""

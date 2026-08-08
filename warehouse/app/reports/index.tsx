@@ -18,6 +18,8 @@ import { formatMoney, formatMoneyWithSign } from '../../src/domain/money';
 import { formatQtyWithUnit } from '../../src/domain/qty';
 import { pluralize } from '../../src/domain/plural';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { ReportsGrid } from '../../src/web/screens/ReportsGrid';
 import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Card, Empty, Row, Stat } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
@@ -32,6 +34,14 @@ const PERIODS: { value: PeriodKind; label: string }[] = [
 ];
 
 export default function ReportsScreen() {
+  // На широком экране отчёты выбираются плитками, как в кабинете.
+  const desktop = useDesktop();
+  if (desktop) return <ReportsGrid />;
+
+  return <ReportsPhone />;
+}
+
+function ReportsPhone() {
   const router = useRouter();
   const { db } = useDatabase();
   const [kind, setKind] = useState<PeriodKind>('week');

@@ -17,6 +17,54 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 
+/**
+ * Своя история переходов для файла, открытого с диска (`file://`).
+ *
+ * У такой страницы браузер запрещает менять адрес: `history.pushState` бросает
+ * исключение, и переключение вкладок обрывается на середине. Просто проглотить
+ * исключение нельзя — тогда история браузера не растёт, и первый же «назад»
+ * уводит с единственной страницы в пустоту (именно так и получался белый экран).
+ *
+ * Поэтому на `file://` подменяем `window.history` целиком: переходы живут
+ * в массиве внутри страницы, `back()` возвращает на предыдущий экран, а адрес
+ * в строке браузера не трогается вовсе.
+ *
+ * Только для `file://`: на хостинге нужна настоящая история, иначе сломаются
+ * кнопка «назад» и перезагрузка страницы.
+ */
+const FILE_PROTOCOL_FIX = `
+if (location.protocol === 'file:') {
+  var entries = [{ state: null, url: location.href }];
+  var index = 0;
+  var memory = {
+    get length() { return entries.length; },
+    get state() { return entries[index].state; },
+    scrollRestoration: 'auto',
+    pushState: function (state, title, url) {
+      // Переход вперёд отсекает всё, что было «впереди», как в браузере.
+      entries.splice(index + 1);
+      entries.push({ state: state, url: url == null ? entries[index].url : String(url) });
+      index = entries.length - 1;
+    },
+    replaceState: function (state, title, url) {
+      entries[index] = { state: state, url: url == null ? entries[index].url : String(url) };
+    },
+    go: function (delta) {
+      var next = index + (delta || 0);
+      if (next < 0 || next >= entries.length) return;
+      index = next;
+      // Браузер шлёт popstate отдельным заданием — повторяем, иначе роутер
+      // получит событие посреди собственного обновления состояния.
+      setTimeout(function () {
+        dispatchEvent(new PopStateEvent('popstate', { state: entries[index].state }));
+      }, 0);
+    },
+    back: function () { this.go(-1); },
+    forward: function () { this.go(1); },
+  };
+  Object.defineProperty(window, 'history', { value: memory, configurable: true });
+}`;
+
 const html = await readFile(join(dist, 'index.html'), 'utf8');
 
 // Экспорт Expo кладёт бандл с хешем в имени — находим его по ссылке в странице.
@@ -38,7 +86,8 @@ let page = replaceOnce(
   html,
   scriptTag[0],
   [
-    // Порядок важен: sql.js должен объявить initSqlJs до запуска приложения.
+    // Порядок важен: заплатка и sql.js должны отработать до запуска приложения.
+    `<script>${FILE_PROTOCOL_FIX}</script>`,
     `<script>globalThis.__SQL_WASM_BASE64__=${JSON.stringify(wasm.toString('base64'))};</script>`,
     `<script>${sqlJs}</script>`,
     `<script>${bundle}</script>`,

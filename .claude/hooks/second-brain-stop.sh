@@ -7,6 +7,9 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 VAULT="$ROOT/knowledge"
 [ -d "$VAULT" ] || exit 0
 
+# Глобальный хук делает то же самое — не напоминаем дважды.
+[ -x "$HOME/.claude/hooks/second-brain-stop.sh" ] && exit 0
+
 PAYLOAD="$(cat)"
 SID="$(printf '%s' "$PAYLOAD" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("session_id") or "nosid")

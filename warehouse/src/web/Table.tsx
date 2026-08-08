@@ -214,6 +214,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 22,
     height: 46,
+    backgroundColor: web.tableHead,
     borderBottomWidth: 1,
     borderBottomColor: web.border,
   },

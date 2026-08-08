@@ -1,5 +1,5 @@
 import { formatMoney, formatMoneyWithSign, parseMoney } from '../money';
-import { formatQty, lineTotal, parseQty } from '../qty';
+import { formatQty, formatQtyWeb, lineTotal, parseQty } from '../qty';
 
 describe('parseMoney', () => {
   it('разбирает запятую и точку как разделитель', () => {
@@ -78,5 +78,15 @@ describe('lineTotal', () => {
 
   it('целые количества считает точно', () => {
     expect(lineTotal(19999, 3000)).toBe(59997);
+  });
+});
+
+describe('formatQtyWeb', () => {
+  it('пишет количество по-английски и всегда с тремя знаками', () => {
+    expect(formatQtyWeb(692599300)).toBe('692,599.300');
+    expect(formatQtyWeb(-692599300)).toBe('-692,599.300');
+    expect(formatQtyWeb(2000)).toBe('2.000');
+    expect(formatQtyWeb(50)).toBe('0.050');
+    expect(formatQtyWeb(0)).toBe('0.000');
   });
 });

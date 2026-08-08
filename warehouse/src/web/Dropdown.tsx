@@ -1,0 +1,164 @@
+import { useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { WebIcon } from '../ui/icons';
+import { web } from '../ui/webTheme';
+
+/**
+ * Выпадающий список кабинета.
+ *
+ * Список рисуется в `Modal`, а не рядом с кнопкой: иначе он обрезался бы
+ * прокруткой страницы, внутри которой стоит — а в кабинете эти списки
+ * попадаются и в самом низу таблиц.
+ *
+ * Прозрачная подложка на весь экран нужна не для красоты: без неё список
+ * нечем закрыть, кроме повторного нажатия на саму кнопку.
+ */
+
+export interface Option<T extends string> {
+  value: T;
+  label: string;
+}
+
+export function Dropdown<T extends string>({
+  value,
+  options,
+  onChange,
+  variant = 'chip',
+  width,
+  label,
+}: {
+  value: T;
+  options: Option<T>[];
+  onChange: (value: T) => void;
+  /** `chip` — рамка, как у «неделю»; `dotted` — пунктир внутри заголовка. */
+  variant?: 'chip' | 'dotted';
+  width?: number;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  // Куда положить список: под кнопкой, которую нажали.
+  const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0 });
+
+  const current = options.find((option) => option.value === value);
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label ?? current?.label}
+        accessibilityState={{ expanded: open }}
+        onPress={(event) => {
+          const target = event.currentTarget as unknown as {
+            measureInWindow?: (
+              callback: (x: number, y: number, width: number, height: number) => void,
+            ) => void;
+          };
+          target.measureInWindow?.((x, y, boxWidth, height) =>
+            setAnchor({ x, y: y + height + 4, width: boxWidth }),
+          );
+          setOpen(true);
+        }}
+        style={(state) => [
+          variant === 'chip' ? styles.chip : styles.dotted,
+          width ? { width } : null,
+          isHovered(state) && variant === 'chip' && styles.chipHover,
+        ]}
+      >
+        <Text style={variant === 'chip' ? styles.chipText : styles.dottedText}>
+          {current?.label ?? ''}
+        </Text>
+        <WebIcon.chevronDown
+          size={14}
+          color={variant === 'chip' ? web.textMuted : web.text}
+        />
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Закрыть список"
+          style={styles.backdrop}
+          onPress={() => setOpen(false)}
+        >
+          <View
+            style={[
+              styles.menu,
+              { left: anchor.x, top: anchor.y, minWidth: Math.max(anchor.width, 150) },
+            ]}
+          >
+            <ScrollView>
+              {options.map((option) => (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: option.value === value }}
+                  onPress={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  style={(state) => [
+                    styles.item,
+                    isHovered(state) && styles.itemHover,
+                    option.value === value && styles.itemActive,
+                  ]}
+                >
+                  <Text style={styles.itemText}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+/** См. `Sidebar`: `hovered` есть только в вебе, и в типах React Native его нет. */
+function isHovered(state: { pressed: boolean }): boolean {
+  return (state as { hovered?: boolean }).hovered === true;
+}
+
+const styles = StyleSheet.create({
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: 3,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  chipHover: { backgroundColor: web.rowHover },
+  chipText: { fontSize: 14, color: web.text },
+  dotted: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dottedText: {
+    fontSize: 30,
+    color: web.text,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+  },
+  backdrop: { flex: 1 },
+  menu: {
+    position: 'absolute',
+    maxHeight: 320,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: 3,
+    paddingVertical: 4,
+    // Тень у оригинала мягкая и почти не заметна — но без неё список
+    // сливается с таблицей под ним.
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  item: { paddingHorizontal: 16, paddingVertical: 11 },
+  itemHover: { backgroundColor: web.rowHover },
+  itemActive: { backgroundColor: web.sidebarActive },
+  itemText: { fontSize: 15, color: web.text },
+});

@@ -13,6 +13,7 @@ import { web } from '../ui/webTheme';
 export function Chart({ points, days }: { points: number[]; days: number }) {
   const values = Array.from({ length: days }, (_, i) => points[i] ?? 0);
   const peak = Math.max(...values, 1);
+  const labelStep = stepFor(days);
 
   // Подписи оси: пять ровных делений от нуля до вершины.
   const ticks = Array.from({ length: 5 }, (_, i) => Math.round((peak / 4) * (4 - i)));
@@ -45,13 +46,24 @@ export function Chart({ points, days }: { points: number[]; days: number }) {
         <View style={styles.days}>
           {values.map((_, index) => (
             <Text key={index} style={[styles.day, isMarked(index + 1) && styles.dayMarked]}>
-              {index + 1}
+              {index % labelStep === 0 ? index + 1 : ''}
             </Text>
           ))}
         </View>
       </View>
     </View>
   );
+}
+
+/**
+ * Через сколько столбцов подписывать ось.
+ *
+ * За месяц подписан каждый день — как в оригинале. За квартал и год подписи
+ * встали бы друг на друга и превратились в серую кашу, поэтому прореживаются
+ * до тех же примерно тридцати отметок.
+ */
+function stepFor(days: number): number {
+  return Math.max(1, Math.ceil(days / 31));
 }
 
 /** Числа 2, 9, 16, 23, 30 выделены — по ним в исходном приложении идёт неделя. */
@@ -67,7 +79,9 @@ const styles = StyleSheet.create({
   grid: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 26, justifyContent: 'space-between' },
   gridLine: { height: 1, backgroundColor: '#EFEFEF' },
   bars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  barSlot: { flex: 1, height: '100%', justifyContent: 'flex-end' },
+  // Ограничение ширины нужно для периода «сегодня»: один столбец на всю
+  // ширину графика выглядел бы залитой плашкой, а не данными.
+  barSlot: { flex: 1, maxWidth: 60, height: '100%', justifyContent: 'flex-end' },
   bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
   day: { flex: 1, fontSize: 11, color: web.textMuted, textAlign: 'center' },

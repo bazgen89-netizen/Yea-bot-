@@ -132,17 +132,17 @@ export const MenuIcon = {
 export const WebIcon = {
   home: (p: Props) => <MaterialCommunityIcons name="view-grid" size={p.size ?? 21} color={p.color} />,
   products: (p: Props) => (
-    <MaterialCommunityIcons name="package-variant-closed" size={p.size ?? 21} color={p.color} />
+    <MaterialCommunityIcons name="cube-outline" size={p.size ?? 21} color={p.color} />
   ),
   registers: (p: Props) => (
-    <MaterialCommunityIcons name="tray" size={p.size ?? 21} color={p.color} />
+    <MaterialCommunityIcons name="inbox" size={p.size ?? 21} color={p.color} />
   ),
-  goods: (p: Props) => <Ionicons name="sync" size={p.size ?? 21} color={p.color} />,
+  goods: (p: Props) => <Ionicons name="refresh" size={p.size ?? 22} color={p.color} />,
   money: (p: Props) => (
     <MaterialCommunityIcons name="currency-usd" size={p.size ?? 21} color={p.color} />
   ),
   reports: (p: Props) => (
-    <MaterialCommunityIcons name="chart-box" size={p.size ?? 21} color={p.color} />
+    <MaterialCommunityIcons name="chart-areaspline" size={p.size ?? 21} color={p.color} />
   ),
   parties: (p: Props) => <Ionicons name="person" size={p.size ?? 20} color={p.color} />,
   company: (p: Props) => <Ionicons name="people" size={p.size ?? 21} color={p.color} />,
@@ -158,10 +158,18 @@ export const WebIcon = {
   ),
 
   whatsNew: (p: Props) => (
-    <MaterialCommunityIcons name="book-open-variant" size={p.size ?? 21} color={p.color} />
+    <Ionicons name="newspaper-outline" size={p.size ?? 21} color={p.color} />
   ),
   help: (p: Props) => <Ionicons name="help-circle-outline" size={p.size ?? 21} color={p.color} />,
   suggest: (p: Props) => <Ionicons name="bulb-outline" size={p.size ?? 21} color={p.color} />,
+  partners: (p: Props) => (
+    <MaterialCommunityIcons name="handshake-outline" size={p.size ?? 21} color={p.color} />
+  ),
+
+  /** Нижний ряд бокового меню. */
+  rocket: (p: Props) => <Ionicons name="rocket-outline" size={p.size ?? 20} color={p.color} />,
+  android: (p: Props) => <Ionicons name="logo-android" size={p.size ?? 20} color={p.color} />,
+  apple: (p: Props) => <Ionicons name="logo-apple" size={p.size ?? 20} color={p.color} />,
 
   /** Значки в шапке. */
   language: (p: Props) => <Ionicons name="globe-outline" size={p.size ?? 22} color={p.color} />,
@@ -169,11 +177,15 @@ export const WebIcon = {
     <MaterialCommunityIcons name="barcode" size={p.size ?? 24} color={p.color} />
   ),
   calendar: (p: Props) => <Ionicons name="calendar-outline" size={p.size ?? 22} color={p.color} />,
-  bell: (p: Props) => <Ionicons name="notifications" size={p.size ?? 22} color={p.color} />,
+  // В исходном кабинете это «alarm outline», а не колокольчик уведомлений.
+  bell: (p: Props) => <Ionicons name="alarm-outline" size={p.size ?? 22} color={p.color} />,
 
   chevronDown: (p: Props) => <Ionicons name="chevron-down" size={p.size ?? 16} color={p.color} />,
   chevronUp: (p: Props) => <Ionicons name="chevron-up" size={p.size ?? 16} color={p.color} />,
   chevronLeft: (p: Props) => <Ionicons name="chevron-back" size={p.size ?? 18} color={p.color} />,
+  chevronRight: (p: Props) => (
+    <Ionicons name="chevron-forward" size={p.size ?? 18} color={p.color} />
+  ),
 
   /** Кнопки над таблицами. */
   funnel: (p: Props) => <Ionicons name="funnel-outline" size={p.size ?? 17} color={p.color} />,

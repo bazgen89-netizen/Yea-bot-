@@ -1,28 +1,94 @@
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chart } from '../Chart';
-import { documentTotals, periodFor, salesSummary, stockOverview, dailySales } from '../../db/reports';
+import { Dropdown, type Option } from '../Dropdown';
+import { listLocations } from '../../db/locations';
+import {
+  documentTotals,
+  periodFor,
+  salesSummary,
+  stockOverview,
+  dailySales,
+  type PeriodKind,
+  type Scope,
+} from '../../db/reports';
 import { formatMoneyWeb } from '../../domain/money';
-import { formatQty } from '../../domain/qty';
+import { formatQtyWeb } from '../../domain/qty';
 import { pluralize } from '../../domain/plural';
 import { useQuery } from '../../state/DatabaseProvider';
 import { web, webText } from '../../ui/webTheme';
 
-/** Главная кабинета: показатели за месяц, график, документы и оценка склада. */
-export function HomeDashboard() {
-  const period = periodFor('month');
+/** Периоды выпадающего списка — те же и в том же порядке, что в оригинале. */
+const PERIODS: Option<PeriodKind>[] = [
+  { value: 'today', label: 'сегодня' },
+  { value: 'week', label: 'неделю' },
+  { value: 'month', label: 'месяц' },
+  { value: 'quarter', label: 'квартал' },
+  { value: 'year', label: 'год' },
+];
 
-  const summary = useQuery((db) => salesSummary(db, period), [period.from]);
-  const daily = useQuery((db) => dailySales(db, period), [period.from]);
-  const documents = useQuery((db) => documentTotals(db, period), [period.from]);
-  const stock = useQuery((db) => stockOverview(db));
+/** Сколько столбиков рисует график — по длине выбранного периода. */
+const CHART_DAYS: Record<PeriodKind, number> = {
+  today: 1,
+  week: 7,
+  month: 31,
+  quarter: 90,
+  year: 365,
+};
+
+/** Главная кабинета: показатели за период, график, документы и оценка склада. */
+export function HomeDashboard() {
+  const [kind, setKind] = useState<PeriodKind>('month');
+  // «Документы» живут своим периодом: в оригинале там по умолчанию неделя,
+  // а в показателях — месяц.
+  const [docsKind, setDocsKind] = useState<PeriodKind>('week');
+  const [scope, setScope] = useState<Scope>(null);
+
+  const period = useMemo(() => periodFor(kind), [kind]);
+  const docsPeriod = useMemo(() => periodFor(docsKind), [docsKind]);
+
+  const locations = useQuery((db) => listLocations(db));
+  const byName = locations.map((location) => ({
+    value: String(location.id),
+    label: location.name,
+  }));
+  // В заголовке список стоит после предлога — «по [всем магазинам]»; отдельной
+  // кнопкой предлог нужен ей самой.
+  const stores: Option<string>[] = [{ value: 'all', label: 'всем магазинам' }, ...byName];
+  const storesChip: Option<string>[] = [{ value: 'all', label: 'по всем магазинам' }, ...byName];
+
+  const summary = useQuery((db) => salesSummary(db, period, scope), [period.from, scope]);
+  const daily = useQuery((db) => dailySales(db, period, scope), [period.from, scope]);
+  const documents = useQuery(
+    (db) => documentTotals(db, docsPeriod, scope),
+    [docsPeriod.from, scope],
+  );
+  const stock = useQuery((db) => stockOverview(db, scope), [scope]);
+
+  const pickStore = (value: string) => setScope(value === 'all' ? null : Number(value));
+  const storeValue = scope === null ? 'all' : String(scope);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={webText.pageTitle}>
-        Показатели за <Text style={styles.dotted}>месяц</Text> по{' '}
-        <Text style={styles.dotted}>всем магазинам</Text>
-      </Text>
+      <View style={styles.pageTitle}>
+        <Text style={webText.pageTitle}>Показатели за</Text>
+        <Dropdown
+          value={kind}
+          options={PERIODS}
+          onChange={setKind}
+          variant="dotted"
+          label="Период показателей"
+        />
+        <Text style={webText.pageTitle}>по</Text>
+        <Dropdown
+          value={storeValue}
+          options={stores}
+          onChange={pickStore}
+          variant="dotted"
+          label="Магазин"
+        />
+      </View>
 
       <View style={styles.top}>
         <View style={styles.metrics}>
@@ -36,7 +102,7 @@ export function HomeDashboard() {
           <View style={styles.chartLegend}>
             <Text style={styles.chartLegendText}>Выручка</Text>
           </View>
-          <Chart points={daily.map((point) => point.revenue)} days={31} />
+          <Chart points={daily.map((point) => point.revenue)} days={CHART_DAYS[kind]} />
         </View>
       </View>
 
@@ -44,14 +110,18 @@ export function HomeDashboard() {
         <View style={styles.documents}>
           <View style={styles.blockHead}>
             <Text style={webText.blockTitle}>Документы</Text>
-            <View style={styles.periodChip}>
-              <Text style={styles.periodChipText}>неделю</Text>
-            </View>
+            <Dropdown
+              value={docsKind}
+              options={PERIODS}
+              onChange={setDocsKind}
+              width={150}
+              label="Период документов"
+            />
           </View>
 
           <View style={styles.docHead}>
             <Text style={[styles.docName, styles.docHeadText]}>Наименование</Text>
-            <Text style={[styles.docNumber, styles.docHeadText]}>Кол-во</Text>
+            <Text style={[styles.docCount, styles.docHeadText]}>Кол-во</Text>
             <Text style={[styles.docNumber, styles.docHeadText]}>Сумма</Text>
             <Text style={[styles.docNumber, styles.docHeadText]}>Склад</Text>
           </View>
@@ -59,21 +129,28 @@ export function HomeDashboard() {
           {documents.map((row) => (
             <View key={row.name} style={styles.docRow}>
               <Text style={[styles.docName, webText.cell]}>{row.name}</Text>
-              <Text style={[styles.docNumber, webText.cellNumber]}>{row.count}</Text>
+              <Text style={[styles.docCount, webText.cellNumber]}>{row.count}</Text>
               <Text style={[styles.docNumber, webText.cellNumber]}>
                 {formatMoneyWeb(row.amount)}
               </Text>
               <Text style={[styles.docNumber, webText.cellNumber]}>
-                {row.quantity === 0 ? '0' : formatQty(row.quantity)}
+                {row.quantity === 0 ? '0' : formatQtyWeb(row.quantity)}
               </Text>
             </View>
           ))}
         </View>
 
         <View style={styles.stock}>
-          <Text style={webText.blockTitle}>
-            Оценка склада по <Text style={styles.dotted}>всем магазинам</Text>
-          </Text>
+          <View style={styles.blockHead}>
+            <Text style={webText.blockTitle}>Оценка склада</Text>
+            <Dropdown
+              value={storeValue}
+              options={storesChip}
+              onChange={pickStore}
+              width={220}
+              label="Магазин для оценки склада"
+            />
+          </View>
 
           {stock.zeroCost > 0 || stock.negative > 0 ? (
             <View style={styles.warning}>
@@ -98,7 +175,7 @@ export function HomeDashboard() {
           ) : null}
 
           <Text style={styles.stockLabel}>Количество товара</Text>
-          <Text style={styles.stockQty}>{formatQty(stock.quantity)} ед.</Text>
+          <Text style={styles.stockQty}>{formatQtyWeb(stock.quantity)} ед.</Text>
 
           <View style={styles.stockValues}>
             <View style={styles.stockValue}>
@@ -138,6 +215,7 @@ function Metric({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   content: { padding: 26, gap: 26 },
+  pageTitle: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   dotted: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   top: { flexDirection: 'row', gap: 26 },
   metrics: { width: 350, gap: 4 },
@@ -167,14 +245,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 18,
   },
-  periodChip: {
-    borderWidth: 1,
-    borderColor: web.border,
-    borderRadius: 3,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-  },
-  periodChipText: { fontSize: 14, color: web.text },
   docHead: {
     flexDirection: 'row',
     paddingVertical: 12,
@@ -188,8 +258,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: web.gridLine,
   },
-  docName: { flex: 1 },
-  docNumber: { width: 120, textAlign: 'right' },
+  // Доли колонок — те же, что в оригинале: 36 / 24 / 20 / 20 %.
+  docName: { width: '36%' },
+  docCount: { width: '24%', textAlign: 'right' },
+  docNumber: { width: '20%', textAlign: 'right' },
   stock: {
     flex: 1,
     borderWidth: 1,

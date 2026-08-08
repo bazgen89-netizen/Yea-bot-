@@ -1,10 +1,10 @@
 import { useRouter, usePathname, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { MENU, MENU_FOOTER, type MenuChild, type MenuEntry } from './menu';
 import { WebIcon } from '../ui/icons';
-import { SIDEBAR_WIDTH, web } from '../ui/webTheme';
+import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web } from '../ui/webTheme';
 
 /** Боковое меню кабинета. Разделы с вложенными пунктами раскрываются. */
 export function Sidebar() {
@@ -15,6 +15,9 @@ export function Sidebar() {
   // внутри которого мы сейчас находимся: перешли в «Клиенты» — «Контрагенты»
   // остаются раскрытыми, а не схлопываются, спрятав соседний пункт.
   const [picked, setPicked] = useState<string | null>(null);
+  // Узкое меню — то же, что `body_smallMenu` в исходном кабинете: остаются
+  // одни значки, а место отдаётся таблице.
+  const [small, setSmall] = useState(false);
 
   const containing = MENU.find((entry) =>
     entry.children?.some((child) => hrefPath(child.href) === pathname),
@@ -28,13 +31,14 @@ export function Sidebar() {
   };
 
   return (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, small && styles.sidebarSmall]}>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Создать документ"
         onPress={() => router.push('/new')}
-        style={({ pressed }) => [styles.create, pressed && { opacity: 0.9 }]}
+        style={({ pressed }) => [styles.create, small && styles.createSmall, pressed && { opacity: 0.9 }]}
       >
-        <Text style={styles.createLabel}>Создать документ</Text>
+        <Text style={styles.createLabel}>{small ? '+' : 'Создать документ'}</Text>
       </Pressable>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -43,6 +47,7 @@ export function Sidebar() {
             key={entry.label}
             entry={entry}
             pathname={pathname}
+            small={small}
             open={open === entry.label}
             onToggle={() => setPicked(open === entry.label ? '' : entry.label)}
             onGo={go}
@@ -56,41 +61,114 @@ export function Sidebar() {
             key={entry.label}
             entry={entry}
             active={false}
+            small={small}
             onPress={() => go(entry.href)}
             badge={entry.label === 'Что нового' ? 3 : undefined}
           />
         ))}
       </View>
+
+      <BottomBar small={small} onToggle={() => setSmall((current) => !current)} />
     </View>
+  );
+}
+
+/**
+ * Нижний ряд: ускорение работы, ссылки на приложения и сворачивание меню.
+ * Значки те же и в том же порядке, что в исходном кабинете.
+ */
+function BottomBar({ small, onToggle }: { small: boolean; onToggle: () => void }) {
+  const router = useRouter();
+
+  return (
+    <View style={[styles.bottomBar, small && styles.bottomBarSmall]}>
+      {small ? null : (
+        <>
+          <BottomButton label="Ускорить работу" onPress={() => router.push('/lab')}>
+            <WebIcon.rocket color={web.sidebarIcon} />
+          </BottomButton>
+          <BottomButton label="Приложение для Android" onPress={() => router.push('/billing')}>
+            <WebIcon.android color={web.sidebarIcon} />
+          </BottomButton>
+          <BottomButton label="Приложение для iPhone" onPress={() => router.push('/billing')}>
+            <WebIcon.apple color={web.sidebarIcon} />
+          </BottomButton>
+        </>
+      )}
+
+      <BottomButton label={small ? 'Развернуть меню' : 'Свернуть меню'} onPress={onToggle}>
+        {small ? (
+          <WebIcon.chevronRight color={web.sidebarIcon} />
+        ) : (
+          <WebIcon.chevronLeft color={web.sidebarIcon} />
+        )}
+      </BottomButton>
+    </View>
+  );
+}
+
+function BottomButton({
+  label,
+  onPress,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
+      style={(state) => [styles.bottomButton, isHovered(state) && styles.rowHover]}
+    >
+      {children}
+    </Pressable>
   );
 }
 
 function Section({
   entry,
   pathname,
+  small,
   open,
   onToggle,
   onGo,
 }: {
   entry: MenuEntry;
   pathname: string;
+  small: boolean;
   open: boolean;
   onToggle: () => void;
   onGo: (href: Href | undefined) => void;
 }) {
   const active = entry.href ? hrefPath(entry.href) === pathname : false;
 
+  // В узком меню раскрывать нечего — вложенные пункты подписаны, а подписей
+  // там нет. Нажатие на раздел ведёт в первый его пункт, чтобы значок не молчал.
+  const collapsed = small && Boolean(entry.children);
+
   return (
     <View>
       <Row
         entry={entry}
         active={active}
+        small={small}
         expandable={Boolean(entry.children)}
         expanded={open}
-        onPress={() => (entry.children ? onToggle() : onGo(entry.href))}
+        onPress={() =>
+          collapsed
+            ? onGo(entry.children?.[0].href)
+            : entry.children
+              ? onToggle()
+              : onGo(entry.href)
+        }
       />
 
       {open &&
+        !small &&
         entry.children?.map((child) => (
           <ChildRow
             key={child.label}
@@ -106,6 +184,7 @@ function Section({
 function Row({
   entry,
   active,
+  small,
   expandable,
   expanded,
   onPress,
@@ -113,6 +192,7 @@ function Row({
 }: {
   entry: MenuEntry;
   active: boolean;
+  small?: boolean;
   expandable?: boolean;
   expanded?: boolean;
   onPress: () => void;
@@ -123,10 +203,12 @@ function Row({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={entry.label}
       accessibilityState={{ expanded, selected: active }}
       onPress={onPress}
       style={(state) => [
         styles.row,
+        small && styles.rowSmall,
         active && styles.rowActive,
         isHovered(state) && !active && styles.rowHover,
       ]}
@@ -140,14 +222,16 @@ function Row({
         ) : null}
       </View>
 
-      <Text
-        style={[styles.rowLabel, entry.dim && { color: web.sidebarDisabled }]}
-        numberOfLines={1}
-      >
-        {entry.label}
-      </Text>
+      {small ? null : (
+        <Text
+          style={[styles.rowLabel, entry.dim && { color: web.sidebarDisabled }]}
+          numberOfLines={1}
+        >
+          {entry.label}
+        </Text>
+      )}
 
-      {expandable ? (
+      {expandable && !small ? (
         expanded ? (
           <WebIcon.chevronUp color={web.sidebarIcon} />
         ) : (
@@ -214,6 +298,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: web.sidebarBorder,
   },
+  sidebarSmall: { width: SIDEBAR_SMALL_WIDTH },
   create: {
     backgroundColor: web.createButton,
     margin: 16,
@@ -223,6 +308,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  createSmall: { marginHorizontal: 10 },
   createLabel: { color: '#FFFFFF', fontSize: 17 },
   row: {
     flexDirection: 'row',
@@ -232,6 +318,7 @@ const styles = StyleSheet.create({
     paddingRight: 18,
     height: 50,
   },
+  rowSmall: { paddingLeft: 0, paddingRight: 0, justifyContent: 'center' },
   rowActive: { backgroundColor: web.sidebarActive },
   rowHover: { backgroundColor: '#F7F7F7' },
   rowIcon: { width: 22, alignItems: 'center' },
@@ -252,4 +339,21 @@ const styles = StyleSheet.create({
   child: { justifyContent: 'center', paddingLeft: 66, paddingRight: 18, height: 38, flexDirection: 'row', alignItems: 'center', gap: 8 },
   childLabel: { flex: 1, fontSize: 15, color: web.sidebarChild },
   footer: { borderTopWidth: 1, borderTopColor: web.sidebarBorder, paddingVertical: 6 },
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: web.sidebarBorder,
+    paddingHorizontal: 20,
+    height: 46,
+  },
+  bottomBarSmall: { justifyContent: 'center', paddingHorizontal: 0 },
+  bottomButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

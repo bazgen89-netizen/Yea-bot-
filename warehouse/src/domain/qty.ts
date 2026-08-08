@@ -40,6 +40,23 @@ export function formatQtyWithUnit(milli: Milli, unit: string): string {
 }
 
 /**
+ * 692599300 -> "692,599.300" — как в веб-кабинете.
+ *
+ * Та же причина, что у `formatMoneyWeb`: в кабинете количества записаны
+ * по-английски и всегда с тремя знаками после точки («-692,599.300 ед.»),
+ * а на телефоне — по-русски и без хвостовых нулей.
+ */
+export function formatQtyWeb(milli: Milli): string {
+  const negative = milli < 0;
+  const abs = Math.abs(Math.round(milli));
+  const whole = Math.floor(abs / QTY_SCALE);
+  const frac = abs % QTY_SCALE;
+
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${negative ? '-' : ''}${grouped}.${String(frac).padStart(3, '0')}`;
+}
+
+/**
  * Стоимость позиции: цена за единицу × количество.
  * Округление к ближайшей копейке — иначе 0,333 кг × 100 ₽ даст дробную копейку.
  */

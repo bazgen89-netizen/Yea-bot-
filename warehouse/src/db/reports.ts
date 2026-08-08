@@ -23,10 +23,32 @@ export interface SalesSummary {
 }
 
 /**
+ * Магазин, по которому смотрят показатели. `null` — по всем сразу.
+ *
+ * Отдельного «все магазины» в базе нет и быть не должно: это не место
+ * хранения, а отсутствие условия в запросе.
+ */
+export type Scope = Id | null;
+
+/**
+ * Условие «только этот магазин» — или пустая строка, если смотрим все.
+ *
+ * Значение вклеивается в текст запроса, а не передаётся параметром: параметров
+ * у каждого запроса своё число, и подстраивать их массив под необязательное
+ * условие пришлось бы в каждом. Целочисленность проверяется здесь — строке
+ * попасть в SQL неоткуда.
+ */
+function scopeSql(column: string, scope: Scope): string {
+  if (scope === null) return '';
+  if (!Number.isInteger(scope)) throw new Error(`Магазин задаётся целым id, получено: ${scope}`);
+  return ` AND ${column} = ${scope}`;
+}
+
+/**
  * Возвращённые чеки исключаются: при возврате их суммы обнуляются, и учитывать
  * такой чек в количестве и среднем чеке было бы неверно.
  */
-export function salesSummary(db: SqlDriver, period: Period): SalesSummary {
+export function salesSummary(db: SqlDriver, period: Period, scope: Scope = null): SalesSummary {
   const row = db.get<{
     revenue: number;
     cost: number;
@@ -41,7 +63,7 @@ export function salesSummary(db: SqlDriver, period: Period): SalesSummary {
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )`,
+       )${scopeSql('s.location_id', scope)}`,
     [period.from, period.to],
   );
 
@@ -131,7 +153,7 @@ export interface DailyPoint {
 }
 
 /** Выручка по дням — для графика в отчётах. */
-export function dailySales(db: SqlDriver, period: Period): DailyPoint[] {
+export function dailySales(db: SqlDriver, period: Period, scope: Scope = null): DailyPoint[] {
   return db.all<DailyPoint>(
     `SELECT substr(s.created_at, 1, 10)               AS day,
             COALESCE(SUM(s.total), 0)                 AS revenue,
@@ -141,20 +163,24 @@ export function dailySales(db: SqlDriver, period: Period): DailyPoint[] {
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )
+       )${scopeSql('s.location_id', scope)}
      GROUP BY day
      ORDER BY day`,
     [period.from, period.to],
   );
 }
 
+/** Периоды выпадающего списка в кабинете: сегодня, неделю, месяц, квартал, год. */
+export type PeriodKind = 'today' | 'week' | 'month' | 'quarter' | 'year';
+
 /** Периоды для быстрых кнопок в отчётах. Границы — по локальному дню. */
-export function periodFor(kind: 'today' | 'week' | 'month' | 'year', now = new Date()): Period {
+export function periodFor(kind: PeriodKind, now = new Date()): Period {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
 
   if (kind === 'week') start.setDate(start.getDate() - 6);
   if (kind === 'month') start.setDate(start.getDate() - 29);
+  if (kind === 'quarter') start.setDate(start.getDate() - 89);
   if (kind === 'year') start.setFullYear(start.getFullYear() - 1);
 
   const end = new Date(now);
@@ -182,7 +208,7 @@ export interface DocumentTotal {
  * пока не умеет: пустая строка честнее отсутствующей — сразу видно, что
  * оприходований за месяц не было, а не что раздел куда-то делся.
  */
-export function documentTotals(db: SqlDriver, period: Period): DocumentTotal[] {
+export function documentTotals(db: SqlDriver, period: Period, scope: Scope = null): DocumentTotal[] {
   const sales = db.get<{ count: number; amount: number; quantity: number }>(
     `SELECT COUNT(*) AS count,
             COALESCE(SUM(s.total), 0) AS amount,
@@ -190,12 +216,13 @@ export function documentTotals(db: SqlDriver, period: Period): DocumentTotal[] {
               SELECT SUM(ABS(m.qty_delta)) FROM stock_moves m
               JOIN sales x ON x.id = m.sale_id
               WHERE m.reason = 'sale' AND x.created_at >= ? AND x.created_at < ?
+                ${scopeSql('x.location_id', scope)}
             ), 0) AS quantity
      FROM sales s
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )`,
+       )${scopeSql('s.location_id', scope)}`,
     [period.from, period.to, period.from, period.to],
   );
 
@@ -205,7 +232,7 @@ export function documentTotals(db: SqlDriver, period: Period): DocumentTotal[] {
             COALESCE(SUM(ABS(m.qty_delta)), 0) AS quantity
      FROM sales s
      JOIN stock_moves m ON m.sale_id = s.id AND m.reason = 'return'
-     WHERE s.created_at >= ? AND s.created_at < ?`,
+     WHERE s.created_at >= ? AND s.created_at < ?${scopeSql('s.location_id', scope)}`,
     [period.from, period.to],
   );
 
@@ -222,7 +249,7 @@ export function documentTotals(db: SqlDriver, period: Period): DocumentTotal[] {
             COALESCE(SUM(ABS(m.qty_delta)), 0) AS quantity
      FROM docs d
      LEFT JOIN stock_moves m ON m.doc_id = d.id
-     WHERE d.created_at >= ? AND d.created_at < ?
+     WHERE d.created_at >= ? AND d.created_at < ?${scopeSql('d.location_id', scope)}
      GROUP BY d.type`,
     [period.from, period.to],
   )) {
@@ -268,7 +295,7 @@ export interface StockOverview {
  * на полке нет, и вычитать его стоимость из оценки склада не из чего.
  * Количество, наоборот, считается по всем — минус там и должен быть виден.
  */
-export function stockOverview(db: SqlDriver): StockOverview {
+export function stockOverview(db: SqlDriver, scope: Scope = null): StockOverview {
   const row = db.get<StockOverview>(
     `SELECT COALESCE(SUM(stock), 0) AS quantity,
             CAST(ROUND(COALESCE(SUM(CASE WHEN stock > 0 THEN stock * p.sale_price END), 0)
@@ -280,7 +307,7 @@ export function stockOverview(db: SqlDriver): StockOverview {
      FROM (
        SELECT p.id,
               COALESCE((SELECT SUM(m.qty_delta) FROM stock_moves m
-                        WHERE m.product_id = p.id), 0) AS stock
+                        WHERE m.product_id = p.id${scopeSql('m.location_id', scope)}), 0) AS stock
        FROM products p
        WHERE p.archived = 0
      ) s

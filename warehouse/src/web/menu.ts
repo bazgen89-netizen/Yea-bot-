@@ -76,6 +76,7 @@ export const MENU_FOOTER: MenuEntry[] = [
   { label: 'Что нового', icon: 'whatsNew', href: '/lab' },
   { label: 'База знаний', icon: 'help', href: '/lab' },
   { label: 'Предложения', icon: 'suggest', href: '/lab' },
+  { label: 'Партнерская программа', icon: 'partners', href: '/partners' },
 ];
 
 /** Заголовок в шапке для текущего адреса. */
@@ -97,6 +98,7 @@ export function titleFor(pathname: string, kind?: string): string {
   if (pathname.startsWith('/lab')) return 'Лаборатория';
   if (pathname.startsWith('/billing')) return 'Тарифы и оплата';
   if (pathname.startsWith('/trash')) return 'Корзина';
+  if (pathname.startsWith('/partners')) return 'Партнерская программа';
   if (pathname.startsWith('/cashier')) return 'Интерфейс кассира';
   if (pathname.startsWith('/counterparties')) {
     return kind === 'supplier' ? 'Поставщики' : 'Клиенты';

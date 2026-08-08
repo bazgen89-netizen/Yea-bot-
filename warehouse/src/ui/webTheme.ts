@@ -97,6 +97,8 @@ export const WEB_FONT = 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", 
 export const DESKTOP_WIDTH = 1000;
 
 export const SIDEBAR_WIDTH = 292;
+/** Свёрнутое меню — одни значки, как `body_smallMenu` в оригинале. */
+export const SIDEBAR_SMALL_WIDTH = 64;
 export const HEADER_HEIGHT = 64;
 
 export const webText = StyleSheet.create({

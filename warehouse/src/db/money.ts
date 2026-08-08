@@ -44,6 +44,94 @@ export interface MoneyDocInput {
   locationId?: Id | null;
 }
 
+export interface AccountBalance {
+  name: string;
+  /** Пришло с чеков, копейки. */
+  fromSales: Kopecks;
+  /** Пришло документами прихода, копейки. */
+  income: Kopecks;
+  /** Ушло документами расхода, копейки. */
+  expense: Kopecks;
+  /** Пришло переводами с других счетов, копейки. */
+  transferIn: Kopecks;
+  /** Ушло переводами на другие счета, копейки. */
+  transferOut: Kopecks;
+  /** Остаток на счёте, копейки. */
+  balance: Kopecks;
+}
+
+/** Какой способ оплаты кладёт деньги на какой счёт. */
+const SALE_ACCOUNT: Record<string, string> = {
+  cash: 'Касса магазина',
+  card: 'Терминал / Счет в банке',
+  transfer: 'Счет в банке',
+};
+
+/**
+ * Остатки по счетам.
+ *
+ * Нигде не хранятся — считаются из чеков и денежных документов, по той же
+ * причине, по которой не хранится остаток товара: число, которое кто-то
+ * увеличивает, рано или поздно разойдётся с тем, из чего оно должно
+ * складываться, и объяснить расхождение будет нечем.
+ */
+export function accountBalances(db: SqlDriver): AccountBalance[] {
+  const totals = new Map<string, AccountBalance>();
+  const at = (name: string): AccountBalance => {
+    let row = totals.get(name);
+    if (!row) {
+      row = {
+        name,
+        fromSales: 0,
+        income: 0,
+        expense: 0,
+        transferIn: 0,
+        transferOut: 0,
+        balance: 0,
+      };
+      totals.set(name, row);
+    }
+    return row;
+  };
+
+  for (const name of ACCOUNTS) at(name);
+
+  for (const row of db.all<{ payment: string; total: number }>(
+    `SELECT payment, COALESCE(SUM(total), 0) AS total
+     FROM sales s
+     WHERE NOT EXISTS (
+       SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+     )
+     GROUP BY payment`,
+  )) {
+    at(SALE_ACCOUNT[row.payment] ?? row.payment).fromSales += row.total;
+  }
+
+  for (const row of db.all<{
+    type: MoneyType;
+    account: string;
+    account_to: string | null;
+    total: number;
+  }>(
+    `SELECT type, account, account_to, COALESCE(SUM(amount), 0) AS total
+     FROM money_docs
+     GROUP BY type, account, account_to`,
+  )) {
+    if (row.type === 'income') at(row.account).income += row.total;
+    if (row.type === 'expense') at(row.account).expense += row.total;
+    if (row.type === 'transfer') {
+      at(row.account).transferOut += row.total;
+      if (row.account_to) at(row.account_to).transferIn += row.total;
+    }
+  }
+
+  const result = [...totals.values()];
+  for (const row of result) {
+    row.balance = row.fromSales + row.income + row.transferIn - row.expense - row.transferOut;
+  }
+  return result;
+}
+
 export function createMoneyDoc(db: SqlDriver, input: MoneyDocInput): Id {
   if (input.amount <= 0) throw new Error('Сумма должна быть больше нуля');
   if (!input.account.trim()) throw new Error('Не выбран счёт');

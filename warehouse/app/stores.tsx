@@ -1,5 +1,5 @@
-import { Section } from '../src/web/screens/Section';
+import { StoresTable } from '../src/web/screens/StoresTable';
 
 export default function StoresScreen() {
-  return <Section title={'Компания / магазины'} note={'Магазины и склады: WAYSTEA / Рынок на Студеной, Чайный бар, Черёмушки.'} />;
+  return <StoresTable />;
 }

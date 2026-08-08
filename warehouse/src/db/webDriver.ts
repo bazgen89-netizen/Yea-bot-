@@ -92,6 +92,17 @@ export function createWebDriver(db: SqlJsDatabase, onChange: () => void): SqlDri
       db.exec(sql);
       if (depth === 0) onChange();
     },
+    snapshot() {
+      return db.export();
+    },
+    async restore(bytes) {
+      // Копия кладётся сразу в хранилище, минуя базу в памяти: подменить её
+      // на живой странице нельзя — экраны держат ссылку на прежнюю. Поэтому
+      // сохраняем файл и перезагружаемся, чтобы приложение открыло его как
+      // обычную сохранённую базу.
+      await writeSaved(bytes);
+      globalThis.location?.reload();
+    },
   };
 }
 

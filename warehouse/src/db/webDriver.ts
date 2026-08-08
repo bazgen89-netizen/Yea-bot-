@@ -1,5 +1,6 @@
 import type { SqlDriver, SqlParam } from './driver';
 import { migrate } from './schema';
+import { seedCatalog } from './seed';
 
 /**
  * База для браузера — на sql.js вместо expo-sqlite.
@@ -118,6 +119,7 @@ export async function openWebDatabase(): Promise<SqlDriver> {
 
   const driver = createWebDriver(db, save);
   migrate(driver);
+  seedCatalog(driver);
   save();
 
   return driver;

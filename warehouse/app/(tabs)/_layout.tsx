@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Icon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing } from '../../src/ui/theme';
+import { useDesktop } from '../../src/ui/useDesktop';
 
 /**
  * Круглая кнопка создания в центре нижней панели. Это не вкладка: она не
@@ -24,6 +25,8 @@ function CreateButton({ onPress }: { onPress: () => void }) {
 
 export default function TabsLayout() {
   const router = useRouter();
+  // В кабинете разделы открываются боковым меню — нижняя панель там лишняя.
+  const desktop = useDesktop();
 
   return (
     <Tabs
@@ -31,7 +34,7 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabInactive,
-        tabBarStyle: styles.bar,
+        tabBarStyle: desktop ? { display: 'none' } : styles.bar,
         tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
         sceneStyle: { backgroundColor: colors.bg },

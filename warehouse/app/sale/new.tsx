@@ -76,7 +76,7 @@ export default function SellScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader title="Продажа" subtitle="Оформление чека" />
+      <AppHeader back title="Продажа" subtitle="Оформление чека" />
 
       <FlatList
         data={cart.lines}

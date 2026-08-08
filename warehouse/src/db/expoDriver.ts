@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 
 import type { SqlDriver, SqlParam } from './driver';
 import { migrate } from './schema';
+import { seedCatalog } from './seed';
 
 export const DATABASE_NAME = 'warehouse.db';
 
@@ -48,5 +49,6 @@ export async function openDatabase(): Promise<SqlDriver> {
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
   const driver = createExpoDriver(db);
   migrate(driver);
+  seedCatalog(driver);
   return driver;
 }

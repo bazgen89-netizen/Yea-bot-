@@ -6,6 +6,7 @@ import { CartProvider } from '../src/state/CartProvider';
 import { DatabaseProvider } from '../src/state/DatabaseProvider';
 import { ScannerProvider } from '../src/state/ScannerProvider';
 import { colors } from '../src/ui/theme';
+import { Shell } from '../src/web/Shell';
 
 export default function RootLayout() {
   return (
@@ -14,6 +15,7 @@ export default function RootLayout() {
         <CartProvider>
           <ScannerProvider>
             <StatusBar style="light" />
+            <Shell>
             <Stack
               screenOptions={{
                 headerStyle: { backgroundColor: colors.primary },
@@ -39,6 +41,7 @@ export default function RootLayout() {
                 options={{ title: 'Сканер', presentation: 'modal' }}
               />
             </Stack>
+            </Shell>
           </ScannerProvider>
         </CartProvider>
       </DatabaseProvider>

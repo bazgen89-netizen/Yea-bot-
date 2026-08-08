@@ -1,27 +1,50 @@
+import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon } from './icons';
 import { colors, spacing } from './theme';
 
 /**
  * Синяя шапка: название организации слева, действия справа.
  * Отступ сверху берётся из безопасной зоны — под «чёлкой» текст прятаться
  * не должен.
+ *
+ * `back` рисует стрелку возврата. Экраны, которые прячут системную шапку
+ * (`headerShown: false`), обязаны её просить: без неё с экрана нельзя уйти
+ * иначе как кнопкой браузера, а в приложении на телефоне — вообще никак.
  */
 export function AppHeader({
   title,
   subtitle,
   actions,
+  back,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  back?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+      {back ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Назад"
+          hitSlop={12}
+          // Экран могли открыть по прямой ссылке — тогда возвращаться некуда,
+          // и уводим на Главную, а не оставляем в тупике.
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          style={({ pressed }) => [styles.back, pressed && { opacity: 0.6 }]}
+        >
+          <Icon.arrowBack color={colors.primaryText} size={26} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.titles}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -65,6 +88,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
   },
+  back: { paddingRight: spacing.md, paddingBottom: 2 },
   titles: { flex: 1 },
   title: {
     color: colors.primaryText,

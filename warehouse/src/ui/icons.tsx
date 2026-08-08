@@ -69,6 +69,7 @@ export const Icon = {
     <MaterialCommunityIcons name="package-variant" size={p.size ?? 22} color={p.color} />
   ),
   check: (p: Props) => <Ionicons name="checkmark" size={p.size ?? 20} color={p.color} />,
+  arrowBack: (p: Props) => <Ionicons name="arrow-back" size={p.size ?? 24} color={p.color} />,
 };
 
 /**
@@ -121,6 +122,82 @@ export const MenuIcon = {
   call: (p: Props) => <Ionicons name="call-outline" size={p.size ?? 20} color={p.color} />,
   person: (p: Props) => (
     <Ionicons name="person-circle-outline" size={p.size ?? 22} color={p.color} />
+  ),
+};
+
+/**
+ * Иконки бокового меню веб-кабинета. Отдельный набор: там свой размер
+ * и свой смысл у пунктов, которых в телефоне нет вовсе.
+ */
+export const WebIcon = {
+  home: (p: Props) => <MaterialCommunityIcons name="view-grid" size={p.size ?? 21} color={p.color} />,
+  products: (p: Props) => (
+    <MaterialCommunityIcons name="package-variant-closed" size={p.size ?? 21} color={p.color} />
+  ),
+  registers: (p: Props) => (
+    <MaterialCommunityIcons name="tray" size={p.size ?? 21} color={p.color} />
+  ),
+  goods: (p: Props) => <Ionicons name="sync" size={p.size ?? 21} color={p.color} />,
+  money: (p: Props) => (
+    <MaterialCommunityIcons name="currency-usd" size={p.size ?? 21} color={p.color} />
+  ),
+  reports: (p: Props) => (
+    <MaterialCommunityIcons name="chart-box" size={p.size ?? 21} color={p.color} />
+  ),
+  parties: (p: Props) => <Ionicons name="person" size={p.size ?? 20} color={p.color} />,
+  company: (p: Props) => <Ionicons name="people" size={p.size ?? 21} color={p.color} />,
+  storefront: (p: Props) => <Ionicons name="globe-outline" size={p.size ?? 21} color={p.color} />,
+  integrations: (p: Props) => <Ionicons name="attach" size={p.size ?? 21} color={p.color} />,
+  lab: (p: Props) => <MaterialCommunityIcons name="flask" size={p.size ?? 21} color={p.color} />,
+  billing: (p: Props) => (
+    <MaterialCommunityIcons name="credit-card-outline" size={p.size ?? 21} color={p.color} />
+  ),
+  trash: (p: Props) => <Ionicons name="trash-outline" size={p.size ?? 20} color={p.color} />,
+  download: (p: Props) => (
+    <Ionicons name="arrow-down-circle" size={p.size ?? 18} color={p.color} />
+  ),
+
+  whatsNew: (p: Props) => (
+    <MaterialCommunityIcons name="book-open-variant" size={p.size ?? 21} color={p.color} />
+  ),
+  help: (p: Props) => <Ionicons name="help-circle-outline" size={p.size ?? 21} color={p.color} />,
+  suggest: (p: Props) => <Ionicons name="bulb-outline" size={p.size ?? 21} color={p.color} />,
+
+  /** Значки в шапке. */
+  language: (p: Props) => <Ionicons name="globe-outline" size={p.size ?? 22} color={p.color} />,
+  barcode: (p: Props) => (
+    <MaterialCommunityIcons name="barcode" size={p.size ?? 24} color={p.color} />
+  ),
+  calendar: (p: Props) => <Ionicons name="calendar-outline" size={p.size ?? 22} color={p.color} />,
+  bell: (p: Props) => <Ionicons name="notifications" size={p.size ?? 22} color={p.color} />,
+
+  chevronDown: (p: Props) => <Ionicons name="chevron-down" size={p.size ?? 16} color={p.color} />,
+  chevronUp: (p: Props) => <Ionicons name="chevron-up" size={p.size ?? 16} color={p.color} />,
+  chevronLeft: (p: Props) => <Ionicons name="chevron-back" size={p.size ?? 18} color={p.color} />,
+
+  /** Кнопки над таблицами. */
+  funnel: (p: Props) => <Ionicons name="funnel-outline" size={p.size ?? 17} color={p.color} />,
+  excel: (p: Props) => (
+    <MaterialCommunityIcons name="file-excel-outline" size={p.size ?? 18} color={p.color} />
+  ),
+  folderPlus: (p: Props) => (
+    <MaterialCommunityIcons name="folder-plus-outline" size={p.size ?? 20} color={p.color} />
+  ),
+  folder: (p: Props) => <Ionicons name="folder" size={p.size ?? 22} color={p.color ?? '#5B9BD5'} />,
+  pencil: (p: Props) => <Ionicons name="pencil" size={p.size ?? 16} color={p.color} />,
+  gear: (p: Props) => <Ionicons name="settings-sharp" size={p.size ?? 20} color={p.color} />,
+  lockOpen: (p: Props) => (
+    <MaterialCommunityIcons name="lock-open-variant" size={p.size ?? 20} color={p.color} />
+  ),
+  lockClosed: (p: Props) => (
+    <MaterialCommunityIcons name="lock" size={p.size ?? 20} color={p.color} />
+  ),
+  done: (p: Props) => <Ionicons name="checkmark" size={p.size ?? 19} color={p.color} />,
+  comment: (p: Props) => (
+    <MaterialCommunityIcons name="comment" size={p.size ?? 17} color={p.color ?? '#9AA0A6'} />
+  ),
+  percent: (p: Props) => (
+    <MaterialCommunityIcons name="percent" size={p.size ?? 15} color={p.color} />
   ),
 };
 

@@ -34,6 +34,7 @@ export default function CounterpartiesScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <AppHeader
+        back
         title={title}
         subtitle={
           kind === 'supplier'

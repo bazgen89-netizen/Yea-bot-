@@ -115,6 +115,31 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_sales_customer ON sales(customer_id);
   `,
+
+  // 3 — магазины: остаток считается по точкам, а не общей кучей
+  `
+  CREATE TABLE locations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL UNIQUE,
+    archived   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL
+  );
+
+  -- NULL означает «до появления магазинов»: у движений, записанных раньше,
+  -- точки не было, и придумывать её задним числом нельзя.
+  ALTER TABLE stock_moves ADD COLUMN location_id INTEGER REFERENCES locations(id);
+  ALTER TABLE sales       ADD COLUMN location_id INTEGER REFERENCES locations(id);
+  ALTER TABLE docs        ADD COLUMN location_id INTEGER REFERENCES locations(id);
+
+  CREATE INDEX idx_moves_location ON stock_moves(location_id);
+
+  -- Отметка о том, что каталог уже загружен: иначе при каждом запуске
+  -- приложение заводило бы те же товары заново.
+  CREATE TABLE app_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

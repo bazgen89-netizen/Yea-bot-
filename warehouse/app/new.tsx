@@ -75,7 +75,19 @@ export default function CreateSheet() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.grabber} />
+      <View style={styles.grabberRow}>
+        <View style={styles.grabber} />
+        {/* Свайпом шторка закрывается только на телефоне — в браузере нужен крестик. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Закрыть"
+          hitSlop={12}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.closeSign}>✕</Text>
+        </Pressable>
+      </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
         {SECTIONS.map((section) => (
@@ -118,14 +130,20 @@ export default function CreateSheet() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
+  grabberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
   grabber: {
     width: 44,
     height: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
   },
+  close: { position: 'absolute', right: spacing.lg, padding: spacing.xs },
+  closeSign: { fontSize: 20, color: colors.textMuted },
   content: { padding: spacing.lg, gap: spacing.xl },
   section: { gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

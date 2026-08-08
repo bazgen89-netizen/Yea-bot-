@@ -10,6 +10,21 @@ if [ ! -d "$VAULT" ]; then
   exit 0
 fi
 
+# Глобальная установка: делает мозг доступным во ВСЕХ проектах контейнера,
+# без настройки окружения. Идемпотентно, тихо.
+GLOBAL_HOOK="$HOME/.claude/hooks/second-brain-start.sh"
+if [ ! -x "$GLOBAL_HOOK" ] && [ -x "$ROOT/bootstrap/install-second-brain.sh" ]; then
+  bash "$ROOT/bootstrap/install-second-brain.sh" >/dev/null 2>&1 || true
+  INSTALLED_NOW=1
+else
+  INSTALLED_NOW=0
+fi
+
+# Глобальный хук уже стоял — он и расскажет про мозг, второй раз не повторяем.
+if [ -x "$GLOBAL_HOOK" ] && [ "$INSTALLED_NOW" = "0" ]; then
+  exit 0
+fi
+
 # Отметка начала сессии — по ней Stop-хук поймёт, дописывались ли заметки.
 SID="$(python3 -c 'import json,sys; print((json.load(sys.stdin).get("session_id") or "nosid"))' 2>/dev/null <&0 || echo nosid)"
 : > "/tmp/second-brain-$SID.start" 2>/dev/null || true

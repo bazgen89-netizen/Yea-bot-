@@ -6,6 +6,7 @@ import {
   motionByProduct,
   salesByCategory,
   salesSummary,
+  stockOverview,
   topProducts,
   type Period,
 } from './reports';
@@ -261,6 +262,25 @@ export const REPORTS: ReportDefinition[] = [
       { title: 'Позиций в чеке', width: 170, numeric: true },
     ],
     rows: () => [],
+  },
+  {
+    id: 'stock',
+    title: 'Оценка склада',
+    note: 'Во сколько оценивается склад и что мешает верить этой оценке.',
+    columns: [
+      { title: 'Показатель', width: 340 },
+      { title: 'Значение', width: 240, numeric: true },
+    ],
+    rows: (db) => {
+      const s = stockOverview(db);
+      return [
+        ['Количество товара', `${formatQtyWeb(s.quantity)} ед.`],
+        ['Стоимость в розничных ценах', money(s.retailValue)],
+        ['Стоимость по себестоимости', money(s.costValue)],
+        ['Позиций с себестоимостью 0', String(s.zeroCost)],
+        ['Позиций с остатком меньше 0', String(s.negative)],
+      ];
+    },
   },
   {
     id: 'accounts',

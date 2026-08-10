@@ -36,6 +36,7 @@ const ICONS: Record<string, keyof typeof WebIcon> = {
   agent: 'company',
   finance: 'money',
   staff: 'company',
+  stock: 'reports',
   accounts: 'money',
 };
 

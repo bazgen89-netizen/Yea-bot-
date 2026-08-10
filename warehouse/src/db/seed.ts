@@ -7,8 +7,9 @@ import CATALOG from './seed/products.json';
  * Первичное наполнение базы данными WAYSTEA.
  *
  * Чтобы приложение было на чём проверять, оно приходит с настоящими данными:
- * 661 позиция каталога с остатками по трём магазинам и 3184 карточки клиентов —
- * те же выгрузки, что делает рабочая программа. Каждая загружается один раз:
+ * 590 позиций каталога с остатками по магазинам и 3184 карточки клиентов.
+ * Каталог снимается прямо из Connect API — `scripts/sync-cloudshop.mjs`,
+ * поэтому цены, коды и остатки в нём те же, что в работающем магазине. Каждая загружается один раз:
  * отметка в `app_state` не даёт повторить её при следующем запуске и затереть
  * то, что успели наработать.
  *
@@ -29,6 +30,8 @@ interface SeedProduct {
   p: number;
   /** Скидка, сотые доли процента. */
   d: number;
+  /** Категория. Пусто — товар без категории. */
+  g?: string | null;
   /** Остатки: название магазина → количество в тысячных. */
   q: Record<string, number>;
 }
@@ -95,6 +98,9 @@ function seedProducts(db: SqlDriver): void {
 
   db.tx(() => {
     const locations = new Map<string, number>();
+    // Категории заводятся по мере встречи, а не отдельным списком: список
+    // и товары разошлись бы при первой же выгрузке, где категорию убрали.
+    const categories = new Map<string, number>();
     // Документ, которым остатки попали на склад. Без него движения висели бы
     // сами по себе, а на вопрос «откуда тут 416 грамм» ответить было бы нечем.
     const docs = new Map<number, number>();
@@ -119,12 +125,23 @@ function seedProducts(db: SqlDriver): void {
         .map((v) => v.trim().toLowerCase())
         .join(' ');
 
+      let categoryId: number | null = null;
+      if (item.g?.trim()) {
+        const name = item.g.trim();
+        categoryId = categories.get(name) ?? null;
+        if (categoryId === null) {
+          db.run('INSERT INTO categories (name) VALUES (?)', [name]);
+          categoryId = db.lastInsertId();
+          categories.set(name, categoryId);
+        }
+      }
+
       db.run(
         `INSERT INTO products
-           (name, sku, barcode, category_id, unit, cost_price, sale_price, min_qty,
-            photo_uri, created_at, search_text)
-         VALUES (?, ?, NULL, NULL, ?, 0, ?, 0, NULL, ?, ?)`,
-        [item.n, item.s, item.u, item.p, now, search],
+           (name, sku, code, barcode, category_id, unit, cost_price, sale_price, min_qty,
+            discount_bp, photo_uri, created_at, search_text)
+         VALUES (?, ?, ?, NULL, ?, ?, 0, ?, 0, ?, NULL, ?, ?)`,
+        [item.n, item.s, item.c, categoryId, item.u, item.p, item.d, now, search],
       );
       const productId = db.lastInsertId();
 

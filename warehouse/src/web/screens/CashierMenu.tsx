@@ -185,20 +185,38 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
       item.action();
       return;
     }
+    if (!item.href) return;
+
+    const { href } = item;
     onClose();
-    if (item.href) router.push(item.href);
+
+    // Касса лежит поверх группы вкладок, и переход в раздел этой группы
+    // прямо отсюда открывал её заново — то есть с начального экрана,
+    // с Главной. Поэтому сначала снимаем кассу, а раздел выбираем уже
+    // изнутри группы, как это делает боковое меню кабинета.
+    //
+    // Заодно уходит вторая беда: без этого каждый заход в кассу и обратно
+    // добавлял в стек ещё один экран, и «назад» приходилось жать по разу
+    // на каждый заход.
+    setTimeout(() => {
+      if (router.canGoBack()) router.back();
+      setTimeout(() => router.navigate(href), 0);
+    }, 0);
   };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Затемнение на весь экран: панель закрывают нажатием мимо неё. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Закрыть меню"
-        style={styles.backdrop}
-        onPress={onClose}
-      >
-        <Pressable style={styles.panel} onPress={() => {}}>
+      {/* Затемнение лежит отдельным слоем под панелью, а не оборачивает её:
+          вложенная кнопка в вебе перехватывает нажатия у того, что внутри. */}
+      <View style={styles.root}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Закрыть меню"
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+        />
+
+        <View style={styles.panel}>
           <View style={styles.head}>
             <Icon.menu size={24} color="#FFFFFF" />
             <Text style={styles.headTitle}>Меню</Text>
@@ -215,8 +233,8 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
           <View style={styles.footer}>
             <Group items={[exit]} onPick={go} />
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -252,14 +270,21 @@ function Divider() {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  root: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    // Панель выезжает от кнопки «Меню» — от левого нижнего угла.
+    justifyContent: 'flex-end',
+    alignItems: 'flex-start',
+  },
   panel: {
     width: 380,
     maxHeight: '92%',
     backgroundColor: '#FFFFFF',
     borderTopRightRadius: 4,
-    // Панель выезжает от кнопки «Меню» — от левого нижнего угла.
-    alignSelf: 'flex-start',
+    // Затемнение позиционировано абсолютно и потому рисуется поверх обычного
+    // потока — без этого оно накрывало бы саму панель и съедало её нажатия.
+    zIndex: 1,
   },
   head: {
     flexDirection: 'row',

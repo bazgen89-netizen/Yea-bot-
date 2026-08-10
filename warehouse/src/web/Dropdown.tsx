@@ -75,12 +75,16 @@ export function Dropdown<T extends string>({
       </Pressable>
 
       <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Закрыть список"
-          style={styles.backdrop}
-          onPress={() => setOpen(false)}
-        >
+        {/* Подложка — отдельный слой под списком, а не обёртка вокруг него:
+            вложенная кнопка в вебе перехватывает нажатия у пунктов внутри. */}
+        <View style={styles.backdrop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Закрыть список"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setOpen(false)}
+          />
+
           <View
             style={[
               styles.menu,
@@ -108,7 +112,7 @@ export function Dropdown<T extends string>({
               ))}
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );
@@ -143,6 +147,9 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1 },
   menu: {
     position: 'absolute',
+    // См. панель кассира: подложка тоже абсолютная, и без явного порядка
+    // она оказывается поверх списка.
+    zIndex: 1,
     maxHeight: 320,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,

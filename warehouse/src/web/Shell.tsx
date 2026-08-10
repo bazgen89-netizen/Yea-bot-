@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { titleFor } from './menu';
+import { useLanguage } from '../state/LanguageProvider';
 import { useDesktop } from '../ui/useDesktop';
 import { web } from '../ui/webTheme';
 
@@ -20,6 +21,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // В раскладке параметры экрана видны только через глобальный хук.
   const params = useGlobalSearchParams<{ kind?: string; type?: string }>();
+  const { tp } = useLanguage();
 
   // Экран кассира занимает окно целиком: у него своя шапка и своё меню внизу,
   // и уйти оттуда можно кнопкой «Меню».
@@ -27,7 +29,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <View style={styles.shell}>
-      <Header title={titleFor(pathname, params.kind, params.type)} />
+      <Header title={tp(titleFor(pathname, params.kind, params.type))} />
       <View style={styles.body}>
         <Sidebar />
         <View style={styles.content}>{children}</View>

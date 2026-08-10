@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CartProvider } from '../src/state/CartProvider';
 import { DatabaseProvider } from '../src/state/DatabaseProvider';
+import { LanguageProvider } from '../src/state/LanguageProvider';
 import { ScannerProvider } from '../src/state/ScannerProvider';
 import { colors } from '../src/ui/theme';
 import { useDesktop } from '../src/ui/useDesktop';
@@ -13,14 +14,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <DatabaseProvider>
-        <CartProvider>
-          <ScannerProvider>
-            <StatusBar style="light" />
-            <Shell>
-              <Screens />
-            </Shell>
-          </ScannerProvider>
-        </CartProvider>
+        {/* Язык читается из базы, поэтому провайдер стоит внутри базы. */}
+        <LanguageProvider>
+          <CartProvider>
+            <ScannerProvider>
+              <StatusBar style="light" />
+              <Shell>
+                <Screens />
+              </Shell>
+            </ScannerProvider>
+          </CartProvider>
+        </LanguageProvider>
       </DatabaseProvider>
     </SafeAreaProvider>
   );

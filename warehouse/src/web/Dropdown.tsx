@@ -31,8 +31,11 @@ export function Dropdown<T extends string>({
   value: T;
   options: Option<T>[];
   onChange: (value: T) => void;
-  /** `chip` — рамка, как у «неделю»; `dotted` — пунктир внутри заголовка. */
-  variant?: 'chip' | 'dotted';
+  /**
+   * `chip` — рамка, как у «неделю»; `dotted` — пунктир внутри заголовка;
+   * `header` — белым по синему, для шапки.
+   */
+  variant?: 'chip' | 'dotted' | 'header';
   width?: number;
   label?: string;
 }) {
@@ -60,18 +63,13 @@ export function Dropdown<T extends string>({
           setOpen(true);
         }}
         style={(state) => [
-          variant === 'chip' ? styles.chip : styles.dotted,
+          styles[variant],
           width ? { width } : null,
           isHovered(state) && variant === 'chip' && styles.chipHover,
         ]}
       >
-        <Text style={variant === 'chip' ? styles.chipText : styles.dottedText}>
-          {current?.label ?? ''}
-        </Text>
-        <WebIcon.chevronDown
-          size={14}
-          color={variant === 'chip' ? web.textMuted : web.text}
-        />
+        <Text style={styles[`${variant}Text`]}>{current?.label ?? ''}</Text>
+        <WebIcon.chevronDown size={14} color={CHEVRON[variant]} />
       </Pressable>
 
       <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
@@ -123,6 +121,13 @@ function isHovered(state: { pressed: boolean }): boolean {
   return (state as { hovered?: boolean }).hovered === true;
 }
 
+/** Цвет стрелки в каждом варианте. */
+const CHEVRON: Record<'chip' | 'dotted' | 'header', string> = {
+  chip: web.textMuted,
+  dotted: web.text,
+  header: web.headerText,
+};
+
 const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
@@ -137,6 +142,8 @@ const styles = StyleSheet.create({
   },
   chipHover: { backgroundColor: web.rowHover },
   chipText: { fontSize: 14, color: web.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerText: { fontSize: 15, color: web.headerText },
   dotted: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dottedText: {
     fontSize: 30,

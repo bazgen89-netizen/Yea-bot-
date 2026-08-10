@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { MENU, MENU_FOOTER, type MenuChild, type MenuEntry } from './menu';
+import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web } from '../ui/webTheme';
 
@@ -10,6 +11,7 @@ import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web } from '../ui/webTheme';
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   // Раздел, открытый вручную. Пока его нет, раскрытым считается тот,
   // внутри которого мы сейчас находимся: перешли в «Клиенты» — «Контрагенты»
@@ -38,7 +40,7 @@ export function Sidebar() {
         onPress={() => router.push('/new')}
         style={({ pressed }) => [styles.create, small && styles.createSmall, pressed && { opacity: 0.9 }]}
       >
-        <Text style={styles.createLabel}>{small ? '+' : 'Создать документ'}</Text>
+        <Text style={styles.createLabel}>{small ? '+' : t('Создать документ')}</Text>
       </Pressable>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -198,12 +200,14 @@ function Row({
   onPress: () => void;
   badge?: number;
 }) {
+  const { t } = useLanguage();
   const tint = entry.dim ? web.sidebarDisabled : web.sidebarIcon;
+  const label = t(entry.label);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={entry.label}
+      accessibilityLabel={label}
       accessibilityState={{ expanded, selected: active }}
       onPress={onPress}
       style={(state) => [
@@ -227,7 +231,7 @@ function Row({
           style={[styles.rowLabel, entry.dim && { color: web.sidebarDisabled }]}
           numberOfLines={1}
         >
-          {entry.label}
+          {label}
         </Text>
       )}
 
@@ -251,6 +255,8 @@ function ChildRow({
   active: boolean;
   onPress: () => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -271,7 +277,7 @@ function ChildRow({
         ]}
         numberOfLines={1}
       >
-        {child.label}
+        {t(child.label)}
       </Text>
     </Pressable>
   );

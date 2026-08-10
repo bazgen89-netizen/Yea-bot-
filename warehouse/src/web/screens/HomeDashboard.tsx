@@ -15,8 +15,8 @@ import {
 } from '../../db/reports';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQtyWeb } from '../../domain/qty';
-import { pluralize } from '../../domain/plural';
 import { useQuery } from '../../state/DatabaseProvider';
+import { useLanguage } from '../../state/LanguageProvider';
 import { web, webText } from '../../ui/webTheme';
 
 /** Периоды выпадающего списка — те же и в том же порядке, что в оригинале. */
@@ -39,6 +39,7 @@ const CHART_DAYS: Record<PeriodKind, number> = {
 
 /** Главная кабинета: показатели за период, график, документы и оценка склада. */
 export function HomeDashboard() {
+  const { t } = useLanguage();
   const [kind, setKind] = useState<PeriodKind>('month');
   // «Документы» живут своим периодом: в оригинале там по умолчанию неделя,
   // а в показателях — месяц.
@@ -48,6 +49,7 @@ export function HomeDashboard() {
   const period = useMemo(() => periodFor(kind), [kind]);
   const docsPeriod = useMemo(() => periodFor(docsKind), [docsKind]);
 
+  const periods = PERIODS.map((period) => ({ ...period, label: t(period.label) }));
   const locations = useQuery((db) => listLocations(db));
   const byName = locations.map((location) => ({
     value: String(location.id),
@@ -55,8 +57,8 @@ export function HomeDashboard() {
   }));
   // В заголовке список стоит после предлога — «по [всем магазинам]»; отдельной
   // кнопкой предлог нужен ей самой.
-  const stores: Option<string>[] = [{ value: 'all', label: 'всем магазинам' }, ...byName];
-  const storesChip: Option<string>[] = [{ value: 'all', label: 'по всем магазинам' }, ...byName];
+  const stores: Option<string>[] = [{ value: 'all', label: t('всем магазинам') }, ...byName];
+  const storesChip: Option<string>[] = [{ value: 'all', label: t('по всем магазинам') }, ...byName];
 
   const summary = useQuery((db) => salesSummary(db, period, scope), [period.from, scope]);
   const daily = useQuery((db) => dailySales(db, period, scope), [period.from, scope]);
@@ -72,35 +74,35 @@ export function HomeDashboard() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.pageTitle}>
-        <Text style={webText.pageTitle}>Показатели за</Text>
+        <Text style={webText.pageTitle}>{t('Показатели за')}</Text>
         <Dropdown
           value={kind}
-          options={PERIODS}
+          options={periods}
           onChange={setKind}
           variant="dotted"
-          label="Период показателей"
+          label={t('Показатели за')}
         />
-        <Text style={webText.pageTitle}>по</Text>
+        <Text style={webText.pageTitle}>{t('по')}</Text>
         <Dropdown
           value={storeValue}
           options={stores}
           onChange={pickStore}
           variant="dotted"
-          label="Магазин"
+          label={t('Магазины')}
         />
       </View>
 
       <View style={styles.top}>
         <View style={styles.metrics}>
-          <Metric label="Выручка" value={formatMoneyWeb(summary.revenue)} highlight />
-          <Metric label="Себестоимость продаж" value={formatMoneyWeb(summary.cost)} />
-          <Metric label="Прибыль" value={formatMoneyWeb(summary.profit)} />
-          <Metric label="Средний чек" value={formatMoneyWeb(summary.averageReceipt)} />
+          <Metric label={t('Выручка')} value={formatMoneyWeb(summary.revenue)} highlight />
+          <Metric label={t('Себестоимость продаж')} value={formatMoneyWeb(summary.cost)} />
+          <Metric label={t('Прибыль')} value={formatMoneyWeb(summary.profit)} />
+          <Metric label={t('Средний чек')} value={formatMoneyWeb(summary.averageReceipt)} />
         </View>
 
         <View style={styles.chartCard}>
           <View style={styles.chartLegend}>
-            <Text style={styles.chartLegendText}>Выручка</Text>
+            <Text style={styles.chartLegendText}>{t('Выручка')}</Text>
           </View>
           <Chart points={daily.map((point) => point.revenue)} days={CHART_DAYS[kind]} />
         </View>
@@ -109,26 +111,26 @@ export function HomeDashboard() {
       <View style={styles.bottom}>
         <View style={styles.documents}>
           <View style={styles.blockHead}>
-            <Text style={webText.blockTitle}>Документы</Text>
+            <Text style={webText.blockTitle}>{t('Документы')}</Text>
             <Dropdown
               value={docsKind}
-              options={PERIODS}
+              options={periods}
               onChange={setDocsKind}
               width={150}
-              label="Период документов"
+              label={t('Документы')}
             />
           </View>
 
           <View style={styles.docHead}>
-            <Text style={[styles.docName, styles.docHeadText]}>Наименование</Text>
-            <Text style={[styles.docCount, styles.docHeadText]}>Кол-во</Text>
-            <Text style={[styles.docNumber, styles.docHeadText]}>Сумма</Text>
-            <Text style={[styles.docNumber, styles.docHeadText]}>Склад</Text>
+            <Text style={[styles.docName, styles.docHeadText]}>{t('Наименование')}</Text>
+            <Text style={[styles.docCount, styles.docHeadText]}>{t('Кол-во')}</Text>
+            <Text style={[styles.docNumber, styles.docHeadText]}>{t('Сумма')}</Text>
+            <Text style={[styles.docNumber, styles.docHeadText]}>{t('Склад')}</Text>
           </View>
 
           {documents.map((row) => (
             <View key={row.name} style={styles.docRow}>
-              <Text style={[styles.docName, webText.cell]}>{row.name}</Text>
+              <Text style={[styles.docName, webText.cell]}>{t(row.name)}</Text>
               <Text style={[styles.docCount, webText.cellNumber]}>{row.count}</Text>
               <Text style={[styles.docNumber, webText.cellNumber]}>
                 {formatMoneyWeb(row.amount)}
@@ -142,24 +144,24 @@ export function HomeDashboard() {
 
         <View style={styles.stock}>
           <View style={styles.blockHead}>
-            <Text style={webText.blockTitle}>Оценка склада</Text>
+            <Text style={webText.blockTitle}>{t('Оценка склада')}</Text>
             <Dropdown
               value={storeValue}
               options={storesChip}
               onChange={pickStore}
               width={220}
-              label="Магазин для оценки склада"
+              label={t('Оценка склада')}
             />
           </View>
 
           {stock.zeroCost > 0 || stock.negative > 0 ? (
             <View style={styles.warning}>
-              <Text style={styles.warningTitle}>Внимание</Text>
+              <Text style={styles.warningTitle}>{t('Внимание')}</Text>
               {stock.zeroCost > 0 ? (
                 <Text style={styles.warningLine}>
                   •{' '}
                   <Text style={styles.warningLink}>
-                    {pluralize(stock.zeroCost, 'поз.', 'поз.', 'поз.')} с себестоимостью равной 0 руб
+                    {stock.zeroCost} {t('поз. с себестоимостью равной 0 руб')}
                   </Text>
                 </Text>
               ) : null}
@@ -167,26 +169,26 @@ export function HomeDashboard() {
                 <Text style={styles.warningLine}>
                   •{' '}
                   <Text style={styles.warningLink}>
-                    {pluralize(stock.negative, 'поз.', 'поз.', 'поз.')} с остатком меньше 0
+                    {stock.negative} {t('поз. с остатком меньше 0')}
                   </Text>
                 </Text>
               ) : null}
             </View>
           ) : null}
 
-          <Text style={styles.stockLabel}>Количество товара</Text>
-          <Text style={styles.stockQty}>{formatQtyWeb(stock.quantity)} ед.</Text>
+          <Text style={styles.stockLabel}>{t('Количество товара')}</Text>
+          <Text style={styles.stockQty}>{formatQtyWeb(stock.quantity)} {t('ед.')}</Text>
 
           <View style={styles.stockValues}>
             <View style={styles.stockValue}>
-              <Text style={styles.stockLabel}>Стоимость товара</Text>
-              <Text style={styles.stockSub}>В розничных ценах</Text>
-              <Text style={styles.stockAmount}>{formatMoneyWeb(stock.retailValue)} руб</Text>
+              <Text style={styles.stockLabel}>{t('Стоимость товара')}</Text>
+              <Text style={styles.stockSub}>{t('В розничных ценах')}</Text>
+              <Text style={styles.stockAmount}>{formatMoneyWeb(stock.retailValue)} {t('руб')}</Text>
             </View>
             <View style={styles.stockValue}>
-              <Text style={styles.stockLabel}>Стоимость товара</Text>
-              <Text style={styles.stockSub}>По себестоимости</Text>
-              <Text style={styles.stockAmount}>{formatMoneyWeb(stock.costValue)} руб</Text>
+              <Text style={styles.stockLabel}>{t('Стоимость товара')}</Text>
+              <Text style={styles.stockSub}>{t('По себестоимости')}</Text>
+              <Text style={styles.stockAmount}>{formatMoneyWeb(stock.costValue)} {t('руб')}</Text>
             </View>
           </View>
         </View>

@@ -2,6 +2,9 @@ import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Dropdown, type Option } from './Dropdown';
+import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';
+import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web } from '../ui/webTheme';
 
@@ -12,8 +15,14 @@ import { HEADER_HEIGHT, web } from '../ui/webTheme';
  * стили в inline-CSS, и `linear-gradient` туда не попадает — а тянуть ради
  * одной полоски отдельную библиотеку не стоит.
  */
+const LANGUAGE_OPTIONS: Option<LanguageCode>[] = LANGUAGES.map((language) => ({
+  value: language.code,
+  label: language.label,
+}));
+
 export function Header({ title, unread = 15 }: { title: string; unread?: number }) {
   const router = useRouter();
+  const { language, setLanguage, t } = useLanguage();
 
   return (
     <View style={styles.header}>
@@ -29,27 +38,33 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
       <View style={styles.right}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Интерфейс кассира"
+          accessibilityLabel={t('Интерфейс кассира')}
           onPress={() => router.push('/cashier')}
           style={({ pressed }) => [styles.cashier, pressed && { opacity: 0.85 }]}
         >
-          <Text style={styles.cashierLabel}>Интерфейс кассира</Text>
+          <Text style={styles.cashierLabel}>{t('Интерфейс кассира')}</Text>
         </Pressable>
 
-        <HeaderButton label="Язык" onPress={() => router.push('/company')}>
+        <View style={styles.language}>
           <WebIcon.language color={web.headerText} />
-          <Text style={styles.languageLabel}>Русский</Text>
-        </HeaderButton>
+          <Dropdown
+            value={language}
+            options={LANGUAGE_OPTIONS}
+            onChange={setLanguage}
+            variant="header"
+            label={t('Язык')}
+          />
+        </View>
 
-        <HeaderButton label="Сканировать штрихкод" onPress={() => router.push('/scan')}>
+        <HeaderButton label={t('Сканировать штрихкод')} onPress={() => router.push('/scan')}>
           <WebIcon.barcode color={web.headerText} />
         </HeaderButton>
 
-        <HeaderButton label="Смены" onPress={() => router.push('/shifts')}>
+        <HeaderButton label={t('Смены')} onPress={() => router.push('/shifts')}>
           <WebIcon.calendar color={web.headerText} />
         </HeaderButton>
 
-        <HeaderButton label="Уведомления" onPress={() => router.push('/lab')}>
+        <HeaderButton label={t('Уведомления')} onPress={() => router.push('/lab')}>
           <WebIcon.bell color={web.headerText} />
           {unread > 0 ? (
             <View style={styles.badge}>
@@ -58,14 +73,14 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
           ) : null}
         </HeaderButton>
 
-        <HeaderButton label="Настройки компании" onPress={() => router.push('/company')}>
+        <HeaderButton label={t('Настройки компании')} onPress={() => router.push('/company')}>
           <View style={styles.account}>
             <View style={styles.avatar}>
               <Text style={styles.avatarLetter}>W</Text>
             </View>
             <View>
               <Text style={styles.accountName}>waystea</Text>
-              <Text style={styles.accountRole}>Владелец</Text>
+              <Text style={styles.accountRole}>{t('Владелец')}</Text>
             </View>
           </View>
         </HeaderButton>
@@ -123,7 +138,7 @@ const styles = StyleSheet.create({
   },
   cashierLabel: { color: web.headerText, fontSize: 15 },
   headerButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  languageLabel: { color: web.headerText, fontSize: 15 },
+  language: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   badge: {
     position: 'absolute',
     right: -8,

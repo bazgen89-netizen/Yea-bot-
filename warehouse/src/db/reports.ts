@@ -88,6 +88,8 @@ export interface TopProduct {
   unit: string;
   /** Продано, тысячные. */
   qty: number;
+  /** В скольких чеках товар встретился. */
+  sales: number;
   /** Выручка по позиции до скидки на чек, копейки. */
   revenue: number;
   /** Прибыль по позиции, копейки. */
@@ -100,6 +102,7 @@ export function topProducts(db: SqlDriver, period: Period, limit = 10): TopProdu
             p.name,
             p.unit,
             SUM(i.qty)                                     AS qty,
+            COUNT(DISTINCT i.sale_id)                      AS sales,
             CAST(ROUND(SUM(i.qty * i.price) / 1000.0) AS INTEGER)                  AS revenue,
             CAST(ROUND(SUM(i.qty * (i.price - i.cost_price)) / 1000.0) AS INTEGER) AS profit
      FROM sale_items i
@@ -317,4 +320,127 @@ export function stockOverview(db: SqlDriver, scope: Scope = null): StockOverview
   );
 
   return row ?? { quantity: 0, retailValue: 0, costValue: 0, zeroCost: 0, negative: 0 };
+}
+
+export interface CategorySales {
+  name: string;
+  revenue: number;
+  profit: number;
+  sales: number;
+  qty: number;
+}
+
+/**
+ * Продажи по категориям.
+ *
+ * Товары без категории идут одной строкой «Без категории», а не пропадают:
+ * иначе сумма по отчёту не сошлась бы с выручкой за тот же период.
+ */
+export function salesByCategory(db: SqlDriver, period: Period): CategorySales[] {
+  return db.all<CategorySales>(
+    `SELECT COALESCE(c.name, 'Без категории') AS name,
+            CAST(ROUND(SUM(i.qty * i.price) / 1000.0) AS INTEGER)                  AS revenue,
+            CAST(ROUND(SUM(i.qty * (i.price - i.cost_price)) / 1000.0) AS INTEGER) AS profit,
+            COUNT(DISTINCT i.sale_id) AS sales,
+            SUM(i.qty)                AS qty
+     FROM sale_items i
+     JOIN sales s        ON s.id = i.sale_id
+     JOIN products p     ON p.id = i.product_id
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE s.created_at >= ? AND s.created_at < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+       )
+     -- По номеру колонки: имя категории собрано выражением, а колонка name
+     -- есть ещё и у товара — по имени SQLite не понимает, какая имелась в виду.
+     GROUP BY 1
+     ORDER BY revenue DESC`,
+    [period.from, period.to],
+  );
+}
+
+export interface ProductMotion {
+  name: string;
+  unit: string;
+  /** Остаток на начало периода, тысячные. */
+  before: number;
+  /** Поступило за период, тысячные. */
+  movsIn: number;
+  /** Выбыло за период, тысячные (положительное число). */
+  movsOut: number;
+  /** Остаток на конец, тысячные. */
+  after: number;
+}
+
+/**
+ * Движение товара по позициям — так этот отчёт устроен в исходном приложении:
+ * остаток на начало, приход, расход, остаток на конец.
+ *
+ * Товары без движений за период не показываются: строка «ничего не
+ * происходило» занимает место и ничего не сообщает.
+ */
+export function motionByProduct(db: SqlDriver, period: Period): ProductMotion[] {
+  return db
+    .all<ProductMotion>(
+      `SELECT p.name,
+              p.unit,
+              COALESCE((SELECT SUM(m.qty_delta) FROM stock_moves m
+                        WHERE m.product_id = p.id AND m.created_at < ?), 0) AS before,
+              COALESCE(SUM(CASE WHEN v.qty_delta > 0 THEN v.qty_delta END), 0)  AS movsIn,
+              -COALESCE(SUM(CASE WHEN v.qty_delta < 0 THEN v.qty_delta END), 0) AS movsOut,
+              0 AS after
+       FROM stock_moves v
+       JOIN products p ON p.id = v.product_id
+       WHERE v.created_at >= ? AND v.created_at < ?
+       GROUP BY p.id
+       ORDER BY p.name COLLATE NOCASE`,
+      [period.from, period.from, period.to],
+    )
+    .map((row) => ({ ...row, after: row.before + row.movsIn - row.movsOut }));
+}
+
+export interface AgentReport {
+  name: string;
+  salesCount: number;
+  salesSum: number;
+  returnCount: number;
+  /** Средний чек, копейки. */
+  average: number;
+  /** Приход по ордерам, копейки. */
+  debit: number;
+  /** Расход по ордерам, копейки. */
+  credit: number;
+}
+
+/**
+ * Отчёт по агентам — по контрагентам: сколько купили, сколько вернули,
+ * сколько прошло деньгами.
+ *
+ * Только те, у кого за период что-то было: в справочнике три тысячи карточек,
+ * и строки с нулями сделали бы отчёт нечитаемым.
+ */
+export function agentsReport(db: SqlDriver, period: Period): AgentReport[] {
+  const rows = db.all<Omit<AgentReport, 'average'>>(
+    `SELECT c.name,
+            COALESCE(SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END), 0) AS salesCount,
+            COALESCE(SUM(CASE WHEN r.id IS NULL THEN s.total ELSE 0 END), 0) AS salesSum,
+            COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END), 0) AS returnCount,
+            COALESCE((SELECT SUM(amount) FROM money_docs md
+                      WHERE md.counterparty_id = c.id AND md.type = 'income'
+                        AND md.created_at >= ? AND md.created_at < ?), 0) AS debit,
+            COALESCE((SELECT SUM(amount) FROM money_docs md
+                      WHERE md.counterparty_id = c.id AND md.type = 'expense'
+                        AND md.created_at >= ? AND md.created_at < ?), 0) AS credit
+     FROM counterparties c
+     JOIN sales s ON s.customer_id = c.id AND s.created_at >= ? AND s.created_at < ?
+     LEFT JOIN stock_moves r ON r.sale_id = s.id AND r.reason = 'return'
+     GROUP BY c.id
+     ORDER BY salesSum DESC`,
+    [period.from, period.to, period.from, period.to, period.from, period.to],
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    average: row.salesCount > 0 ? Math.round(row.salesSum / row.salesCount) : 0,
+  }));
 }

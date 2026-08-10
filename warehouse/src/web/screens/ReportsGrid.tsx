@@ -21,17 +21,22 @@ interface Tile {
   icon: keyof typeof WebIcon;
 }
 
+/**
+ * Значки — те же, что в исходном приложении: у каждого отчёта в его коде
+ * прописан свой (`cube`, `tags`, `cubes`, `refresh`, `users`, `dollar`).
+ */
 const ICONS: Record<string, keyof typeof WebIcon> = {
-  'sales-by-day': 'calendar',
-  'sales-by-week': 'calendar',
-  'sales-by-month': 'calendar',
-  'sales-by-product': 'products',
-  movement: 'goods',
-  financial: 'money',
+  product: 'products',
+  categories: 'folder',
+  set: 'products',
+  day: 'calendar',
+  week: 'calendar',
+  month: 'calendar',
+  motion: 'goods',
+  agent: 'company',
+  finance: 'money',
+  staff: 'company',
   accounts: 'money',
-  'stock-by-store': 'products',
-  'stock-value': 'reports',
-  'low-stock': 'funnel',
 };
 
 const tiles: Tile[] = REPORTS.map((report) => ({
@@ -40,15 +45,20 @@ const tiles: Tile[] = REPORTS.map((report) => ({
   icon: ICONS[report.id] ?? 'reports',
 }));
 
-/** Вкладки конструктора: те же отчёты, разложенные по смыслу. */
-const BUILDER: Record<string, string[]> = {
-  Продажи: ['sales-by-product', 'sales-by-day', 'sales-by-week', 'sales-by-month'],
-  Склад: ['stock-by-store', 'movement', 'stock-value', 'low-stock'],
-  Финансы: ['financial', 'accounts'],
-};
+/**
+ * Конструктор отчётов. В исходном приложении работает только «Продажи», а
+ * «Склад» и «Финансы» помечены ленточкой «В разработке» — повторяем это, а не
+ * делаем вид, что у нас их три.
+ */
+const BUILDER = [
+  { name: 'Продажи', ready: true, reports: ['product', 'categories', 'day', 'week', 'month'] },
+  { name: 'Склад', ready: false, reports: [] as string[] },
+  { name: 'Финансы', ready: false, reports: [] as string[] },
+];
 
 export function ReportsGrid() {
-  const [tab, setTab] = useState<keyof typeof BUILDER>('Продажи');
+  const [tab, setTab] = useState('Продажи');
+  const current = BUILDER.find((item) => item.name === tab) ?? BUILDER[0];
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -58,21 +68,23 @@ export function ReportsGrid() {
       <Grid tiles={tiles} />
 
       <View style={styles.tabs}>
-        {(Object.keys(BUILDER) as (keyof typeof BUILDER)[]).map((name) => (
+        {BUILDER.map((item) => (
           <Pressable
-            key={name}
+            key={item.name}
             accessibilityRole="button"
-            accessibilityState={{ selected: tab === name }}
-            onPress={() => setTab(name)}
-            style={[styles.tab, tab === name && styles.tabActive]}
+            accessibilityState={{ selected: tab === item.name, disabled: !item.ready }}
+            disabled={!item.ready}
+            onPress={() => setTab(item.name)}
+            style={[styles.tab, tab === item.name && item.ready && styles.tabActive]}
           >
             <Text style={styles.tabHint}>Конструктор отчетов</Text>
-            <Text style={styles.tabLabel}>{name}</Text>
+            <Text style={styles.tabLabel}>{item.name}</Text>
+            {item.ready ? null : <Text style={styles.ribbon}>В разработке</Text>}
           </Pressable>
         ))}
       </View>
 
-      <Grid tiles={BUILDER[tab].map((id) => tiles.find((tile) => tile.id === id)!).filter(Boolean)} />
+      <Grid tiles={current.reports.map((id) => tiles.find((tile) => tile.id === id)!).filter(Boolean)} />
     </ScrollView>
   );
 }
@@ -123,4 +135,5 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#5FA8DE' },
   tabHint: { fontSize: 13, color: '#FFFFFF' },
   tabLabel: { fontSize: 21, color: '#FFFFFF', fontWeight: '700' },
+  ribbon: { fontSize: 12, color: '#FFFFFF', opacity: 0.85 },
 });

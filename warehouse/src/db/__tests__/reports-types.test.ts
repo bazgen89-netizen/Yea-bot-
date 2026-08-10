@@ -32,7 +32,7 @@ describe('реестр отчётов', () => {
   });
 
   it('плитка ведёт на существующий отчёт', () => {
-    expect(reportById('sales-by-day')).not.toBeNull();
+    expect(reportById('day')).not.toBeNull();
     expect(reportById('такого-нет')).toBeNull();
   });
 
@@ -70,18 +70,18 @@ describe('реестр отчётов', () => {
 
     const period = periodFor('month');
 
-    const byProduct = reportById('sales-by-product')!.rows(db, period);
-    expect(byProduct[0][0]).toBe('Шу пуэр');
-    expect(byProduct[0][2]).toBe('4,000.00');
+    const byProduct = reportById('product')!.rows(db, period);
+    // Наименование, выручка, прибыль, продаж, количество, маржа, наценка.
+    expect(byProduct[0]).toEqual(['Шу пуэр', '4,000.00', '2,000.00', '1', '2.000 кг', '50%', '100%']);
+
+    const motion = reportById('motion')!.rows(db, period);
+    // Закупили 10, продали 2: пришло 10, ушло 2, на конец 8.
+    expect(motion[0]).toEqual(['Шу пуэр', '0.000', '10.000', '2.000', '8.000']);
 
     const accounts = reportById('accounts')!.rows(db, period);
     const cash = accounts.find((row) => row[0] === 'Касса магазина')!;
     // 4000,00 с продажи минус 500,00 расход.
     expect(cash[4]).toBe('3,500.00');
-
-    const stores = reportById('stock-by-store')!.rows(db, period);
-    // 10 кг закупили, 2 продали; 8 кг по цене продажи 2000,00.
-    expect(stores[0]).toEqual(['Ереван', '1', '8.000', '16,000.00']);
   });
 });
 

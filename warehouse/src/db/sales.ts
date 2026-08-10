@@ -4,6 +4,18 @@ import { cartTotals, findStockIssues } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
 
+/** Магазин, к которому привязана касса открытой смены. */
+function shiftLocation(db: SqlDriver, shiftId: Id | null): Id | null {
+  if (shiftId === null) return null;
+  const row = db.get<{ location_id: Id | null }>(
+    `SELECT r.location_id FROM shifts s
+     JOIN registers r ON r.id = s.register_id
+     WHERE s.id = ?`,
+    [shiftId],
+  );
+  return row?.location_id ?? null;
+}
+
 export class OutOfStockError extends Error {
   constructor(readonly details: { name: string; requested: number; available: number }[]) {
     const list = details
@@ -19,6 +31,13 @@ export interface SaleInput {
   /** Скидка на весь чек, копейки. */
   discount?: number;
   payment?: PaymentMethod;
+  /**
+   * Магазин, в котором пробит чек.
+   *
+   * Без него движения по чеку висели бы вне магазинов, и остаток точки
+   * после продажи не менялся бы: он считается по движениям этой точки.
+   */
+  locationId?: Id | null;
 }
 
 /**
@@ -51,16 +70,20 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
     // за день, и заставлять его указывать её в каждом чеке — лишний повод
     // ошибиться.
     const shift = openShiftAnywhere(db);
+    // Магазин берём у смены, если он там есть: кассир уже выбрал кассу, и
+    // спрашивать его о том же второй раз незачем.
+    const locationId = input.locationId ?? shiftLocation(db, shift?.id ?? null);
 
     db.run(
-      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         totals.total,
         totals.costTotal,
         input.payment ?? 'cash',
         shift?.id ?? null,
+        locationId,
         now,
       ],
     );
@@ -73,9 +96,9 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         [saleId, line.product_id, line.qty, line.price, line.cost_price],
       );
       db.run(
-        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, created_at)
-         VALUES (?, ?, 'sale', ?, ?, ?)`,
-        [line.product_id, -line.qty, saleId, line.price, now],
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)
+         VALUES (?, ?, 'sale', ?, ?, ?, ?)`,
+        [line.product_id, -line.qty, saleId, line.price, locationId, now],
       );
     }
 
@@ -95,6 +118,12 @@ export function refundSale(db: SqlDriver, saleId: Id): void {
     const items = db.all<SaleItem>('SELECT * FROM sale_items WHERE sale_id = ?', [saleId]);
     if (items.length === 0) throw new Error('Чек не найден');
 
+    // Товар возвращается в тот же магазин, из которого ушёл: иначе остаток
+    // точки после возврата не сошёлся бы с её же продажей.
+    const sale = db.get<{ location_id: Id | null }>('SELECT location_id FROM sales WHERE id = ?', [
+      saleId,
+    ]);
+
     const existing = db.get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM stock_moves WHERE sale_id = ? AND reason = 'return'",
       [saleId],
@@ -103,9 +132,9 @@ export function refundSale(db: SqlDriver, saleId: Id): void {
 
     for (const item of items) {
       db.run(
-        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, created_at)
-         VALUES (?, ?, 'return', ?, ?, ?)`,
-        [item.product_id, item.qty, saleId, item.price, now],
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)
+         VALUES (?, ?, 'return', ?, ?, ?, ?)`,
+        [item.product_id, item.qty, saleId, item.price, sale?.location_id ?? null, now],
       );
     }
 

@@ -38,7 +38,12 @@ export function Cashier() {
 
   const pay = () => {
     if (cart.lines.length === 0) return;
-    createSale(db, { discount: cart.discount, payment: 'cash', lines: cart.lines });
+    createSale(db, {
+      discount: cart.discount,
+      payment: 'cash',
+      lines: cart.lines,
+      locationId: locations[0]?.id ?? null,
+    });
     cart.clear();
     setSelected(null);
     refresh();

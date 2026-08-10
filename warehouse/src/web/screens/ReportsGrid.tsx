@@ -1,54 +1,50 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { REPORTS } from '../../db/reportTypes';
 import { WebIcon } from '../../ui/icons';
 import { web, webText } from '../../ui/webTheme';
 
 /**
  * «Выберите тип отчёта» — плитки кабинета.
  *
- * Плитки перечислены все, что есть в исходном приложении, включая ещё не
- * сделанные: список отчётов — это обещание, и урезать его молча нельзя.
- * Готовые открываются, остальные помечены.
+ * Плитки собраны из реестра отчётов: каждая существует ровно потому, что за
+ * ней есть отчёт, и открывает именно его. Раньше список был написан руками и
+ * половина плиток не вела никуда — плитка, которая ничего не открывает, хуже
+ * отсутствующей: по ней судят, что в программе есть.
  */
 
 interface Tile {
+  id: string;
   label: string;
   icon: keyof typeof WebIcon;
-  href?: Href;
 }
 
-const MAIN: Tile[] = [
-  { label: 'Продажи по\nдням', icon: 'calendar', href: '/reports' },
-  { label: 'Продажи по\nнеделям', icon: 'calendar' },
-  { label: 'Продажи по\nмесяцам', icon: 'calendar' },
-  { label: 'Отчёт по\nдвижению', icon: 'goods', href: '/journal' },
-  { label: 'Отчёт по\nагентам', icon: 'company' },
-  { label: 'Финансовый\nотчёт', icon: 'money', href: '/money' },
-  { label: 'Отчёт по\nсотрудникам', icon: 'company' },
-  { label: 'Отчет по\nсчетам', icon: 'money' },
-];
+const ICONS: Record<string, keyof typeof WebIcon> = {
+  'sales-by-day': 'calendar',
+  'sales-by-week': 'calendar',
+  'sales-by-month': 'calendar',
+  'sales-by-product': 'products',
+  movement: 'goods',
+  financial: 'money',
+  accounts: 'money',
+  'stock-by-store': 'products',
+  'stock-value': 'reports',
+  'low-stock': 'funnel',
+};
 
-const BUILDER: Record<string, Tile[]> = {
-  Продажи: [
-    { label: 'Продажи по\nтоварам', icon: 'products', href: '/reports' },
-    { label: 'Продажи по\nкатегориям', icon: 'billing' },
-    { label: 'Продажи по\nкомплектам', icon: 'products' },
-    { label: 'Продажи по\nдням', icon: 'calendar', href: '/reports' },
-    { label: 'Продажи по\nнеделям', icon: 'calendar' },
-    { label: 'Продажи по\nмесяцам', icon: 'calendar' },
-  ],
-  Склад: [
-    { label: 'Остатки по\nмагазинам', icon: 'products', href: '/catalog' },
-    { label: 'Движение\nтовара', icon: 'goods', href: '/journal' },
-    { label: 'Оценка\nсклада', icon: 'reports', href: '/' },
-  ],
-  Финансы: [
-    { label: 'Движение\nденег', icon: 'money', href: '/money' },
-    { label: 'Отчет по\nсчетам', icon: 'money' },
-    { label: 'Финансовый\nотчёт', icon: 'money', href: '/money' },
-  ],
+const tiles: Tile[] = REPORTS.map((report) => ({
+  id: report.id,
+  label: report.title,
+  icon: ICONS[report.id] ?? 'reports',
+}));
+
+/** Вкладки конструктора: те же отчёты, разложенные по смыслу. */
+const BUILDER: Record<string, string[]> = {
+  Продажи: ['sales-by-product', 'sales-by-day', 'sales-by-week', 'sales-by-month'],
+  Склад: ['stock-by-store', 'movement', 'stock-value', 'low-stock'],
+  Финансы: ['financial', 'accounts'],
 };
 
 export function ReportsGrid() {
@@ -59,7 +55,7 @@ export function ReportsGrid() {
       <Text style={webText.pageTitle}>Выберите тип отчёта</Text>
 
       <View style={styles.divider} />
-      <Grid tiles={MAIN} />
+      <Grid tiles={tiles} />
 
       <View style={styles.tabs}>
         {(Object.keys(BUILDER) as (keyof typeof BUILDER)[]).map((name) => (
@@ -76,31 +72,25 @@ export function ReportsGrid() {
         ))}
       </View>
 
-      <Grid tiles={BUILDER[tab]} />
+      <Grid tiles={BUILDER[tab].map((id) => tiles.find((tile) => tile.id === id)!).filter(Boolean)} />
     </ScrollView>
   );
 }
 
-function Grid({ tiles }: { tiles: Tile[] }) {
+function Grid({ tiles: items }: { tiles: Tile[] }) {
   const router = useRouter();
 
   return (
     <View style={styles.grid}>
-      {tiles.map((tile) => (
+      {items.map((tile) => (
         <Pressable
-          key={tile.label}
+          key={tile.id}
           accessibilityRole="button"
-          onPress={() => tile.href && router.push(tile.href)}
-          style={(state) => [
-            styles.tile,
-            (state as { hovered?: boolean }).hovered && tile.href && styles.tileHover,
-          ]}
+          onPress={() => router.push({ pathname: '/reports/[type]', params: { type: tile.id } })}
+          style={(state) => [styles.tile, (state as { hovered?: boolean }).hovered && styles.tileHover]}
         >
           {WebIcon[tile.icon]({ size: 62, color: '#D3D6D9' })}
-          <Text style={[styles.tileLabel, !tile.href && { color: web.textMuted }]}>
-            {tile.label}
-          </Text>
-          {tile.href ? null : <Text style={styles.soon}>скоро</Text>}
+          <Text style={styles.tileLabel}>{tile.label}</Text>
         </Pressable>
       ))}
     </View>
@@ -113,7 +103,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: web.border, marginTop: 22, marginBottom: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: {
-    width: '33.33%',
+    width: '25%',
     alignItems: 'center',
     paddingVertical: 34,
     gap: 14,
@@ -121,7 +111,6 @@ const styles = StyleSheet.create({
   },
   tileHover: { backgroundColor: web.rowHover },
   tileLabel: { fontSize: 17, color: web.text, textAlign: 'center', lineHeight: 23 },
-  soon: { fontSize: 12, color: web.textMuted },
   tabs: { flexDirection: 'row', gap: 24, marginTop: 30, marginBottom: 6 },
   tab: {
     width: 224,

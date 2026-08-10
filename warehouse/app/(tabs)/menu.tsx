@@ -24,8 +24,12 @@ interface MenuRow {
 
 /**
  * Меню повторяет разделы привычного пользователю приложения: те же названия,
- * тот же порядок, счётчики справа. Разделы, до которых ещё не дошли руки,
- * не прячутся — иначе непонятно, чего в приложении не хватает.
+ * тот же порядок, счётчики справа.
+ *
+ * Каждая строка ведёт на свой экран. Пометка «скоро» осталась только там, где
+ * экрана действительно нет: она легко переживает появление раздела и начинает
+ * врать, поэтому за ней следит тест — он сверяет это меню с меню кабинета
+ * и падает, если раздел уже есть, а строка всё ещё помечена.
  */
 function useSections(): { title: string; rows: MenuRow[] }[] {
   const customers = useQuery((db) => countCounterparties(db, 'customer'));
@@ -35,9 +39,10 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
     {
       title: 'Компания',
       rows: [
-        { label: 'Настройки компании', icon: 'company', soon: true },
-        { label: 'Программа лояльности', icon: 'loyalty', soon: true },
-        { label: 'Тарифы и оплата', icon: 'billing', soon: true },
+        { label: 'Настройки компании', icon: 'company', href: '/company' },
+        { label: 'Программа лояльности', icon: 'loyalty', href: '/loyalty' },
+        { label: 'Тарифы и оплата', icon: 'billing', href: '/billing' },
+        { label: 'Печатные формы', icon: 'license', href: '/print-forms' },
       ],
     },
     {
@@ -55,22 +60,27 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
           count: suppliers,
           href: { pathname: '/counterparties', params: { kind: 'supplier' } },
         },
-        { label: 'Магазины', icon: 'shops', soon: true },
-        { label: 'Счета', icon: 'accounts', soon: true },
-        { label: 'Сотрудники', icon: 'staff', soon: true },
-        { label: 'Корзина', icon: 'trash', dim: true, soon: true },
+        { label: 'Магазины', icon: 'shops', href: '/stores' },
+        { label: 'Счета', icon: 'accounts', href: '/accounts' },
+        { label: 'Сотрудники', icon: 'staff', href: '/staff' },
+        { label: 'Корзина', icon: 'trash', dim: true, href: '/trash' },
       ],
     },
     {
       title: 'Точка продаж',
       rows: [
-        { label: 'Кассы', icon: 'register', soon: true },
-        { label: 'Смены', icon: 'shifts', soon: true },
+        { label: 'Кассы', icon: 'register', href: '/registers' },
+        { label: 'Смены', icon: 'shifts', href: '/shifts' },
+        { label: 'Интерфейс кассира', icon: 'person', href: '/cashier' },
       ],
     },
     {
       title: 'Журнал',
-      rows: [{ label: 'Движение денег', icon: 'money', href: '/journal' }],
+      rows: [
+        { label: 'Движение товара', icon: 'shifts', href: '/journal' },
+        { label: 'Движение денег', icon: 'money', href: '/money' },
+        { label: 'Отчёты', icon: 'billing', href: '/reports' },
+      ],
     },
     {
       title: 'Информация',

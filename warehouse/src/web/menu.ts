@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 
+import { reportById } from '../db/reportTypes';
 import type { WebIcon } from '../ui/icons';
 
 /**
@@ -113,6 +114,12 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
   if (pathname.startsWith('/journal')) return 'Движение товара';
   if (pathname.startsWith('/money')) return 'Движение денег';
+  if (pathname.startsWith('/reports/')) {
+    // Название отчёта берём из реестра, а не из второго списка рядом:
+    // два списка названий рано или поздно разойдутся.
+    const report = reportById(pathname.slice('/reports/'.length));
+    return report ? `Отчеты / ${report.title}` : 'Отчеты';
+  }
   if (pathname.startsWith('/reports')) return 'Отчеты';
   if (pathname.startsWith('/shifts')) return 'Кассовый раздел / смены';
   if (pathname.startsWith('/registers')) return 'Кассовый раздел / кассы';

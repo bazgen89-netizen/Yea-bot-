@@ -3,15 +3,16 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { listLocations } from '../../src/db/locations';
-import { findByBarcode, listProducts } from '../../src/db/products';
+import { findByBarcode } from '../../src/db/products';
 import { postDoc, postTransfer } from '../../src/db/stock';
 import { formatMoney, formatMoneyWithSign, parseMoney } from '../../src/domain/money';
-import { formatQty, formatQtyWithUnit, lineTotal, parseQty } from '../../src/domain/qty';
+import { formatQty, lineTotal, parseQty } from '../../src/domain/qty';
 import { pluralize } from '../../src/domain/plural';
 import { DOC_KIND_LABEL, type DocKind, type DocLine, type Id, type ProductWithStock } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
-import { Button, Card, Choice, Empty, Field, Row } from '../../src/ui/components';
+import { Button, Card, Choice, Empty, Field } from '../../src/ui/components';
+import { ProductPicker } from '../../src/ui/ProductPicker';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 import { say } from '../../src/ui/alert';
 
@@ -336,56 +337,6 @@ function DocLineRow({
   );
 }
 
-function ProductPicker({
-  onPick,
-  onClose,
-}: {
-  onPick: (product: ProductWithStock) => void;
-  onClose: () => void;
-}) {
-  const { db } = useDatabase();
-  const [search, setSearch] = useState('');
-  const products = listProducts(db, { search });
-
-  return (
-    <View style={styles.screen}>
-      <View style={styles.pickerHeader}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Поиск товара"
-          placeholderTextColor={colors.textMuted}
-          style={styles.search}
-          autoFocus
-        />
-        <Button title="Отмена" variant="secondary" onPress={onClose} />
-      </View>
-
-      <ScrollView keyboardShouldPersistTaps="handled">
-        {products.length === 0 ? (
-          <Empty title="Ничего не нашлось" hint="Товар сначала нужно завести в каталоге" />
-        ) : (
-          products.map((product) => (
-            <Row
-              key={product.id}
-              onPress={() => onPick(product)}
-              left={
-                <>
-                  <Text style={text.body}>{product.name}</Text>
-                  <Text style={text.muted}>
-                    Остаток {formatQtyWithUnit(product.stock, product.unit)}
-                  </Text>
-                </>
-              }
-              right={<Text style={text.amount}>{formatMoneyWithSign(product.cost_price)}</Text>}
-            />
-          ))
-        )}
-      </ScrollView>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   // Ширина ограничена: на широком экране кабинета поле «Комментарий» во всю
@@ -416,21 +367,4 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm },
   action: { flex: 1 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pickerHeader: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-  },
-  search: {
-    flex: 1,
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-  },
 });

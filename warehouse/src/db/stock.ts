@@ -58,8 +58,11 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
 
   const { kind, docType } = resolveKind(input.type);
 
-  if (kind === 'adjustment' || kind === 'inventory') {
-    throw new Error('Инвентаризация проводится через adjustStock()');
+  if (kind === 'inventory') {
+    throw new Error('Инвентаризация проводится через postInventory()');
+  }
+  if (kind === 'adjustment') {
+    throw new Error('Корректировка проводится через postAdjustment()');
   }
   if (kind === 'transfer') {
     throw new Error('Перемещение проводится через postTransfer()');
@@ -190,6 +193,130 @@ export function adjustStock(db: SqlDriver, productId: Id, actualQty: number, not
   });
 }
 
+/** Строка пересчёта: сколько насчитали по факту. */
+export interface CountLine {
+  product_id: Id;
+  name: string;
+  unit: string;
+  /** Фактическое количество, тысячные. */
+  actual: number;
+  /** Себестоимость за единицу — по ней оценивается расхождение. */
+  price?: number;
+}
+
+export interface InventoryInput {
+  locationId?: Id | null;
+  note?: string | null;
+  lines: CountLine[];
+}
+
+/**
+ * Инвентаризация целым документом.
+ *
+ * До этого пересчёт делался по одному товару прямо в карточке, и документа
+ * после него не оставалось — только россыпь движений «adjust», по которым
+ * нельзя сказать, что это была одна ревизия одного дня.
+ *
+ * Позиции без расхождения тоже записываются, движением на ноль: документ —
+ * это ведомость пересчёта, и «пересчитали, сошлось» в ней такой же
+ * осмысленный результат, как недостача.
+ */
+export function postInventory(db: SqlDriver, input: InventoryInput): Id {
+  if (input.lines.length === 0) throw new Error('Документ без позиций провести нельзя');
+
+  const now = new Date().toISOString();
+
+  return db.tx(() => {
+    db.run(
+      `INSERT INTO docs (type, subtype, note, location_id, created_at)
+       VALUES ('adjust', 'inventory', ?, ?, ?)`,
+      [input.note?.trim() || null, input.locationId ?? null, now],
+    );
+    const docId = db.lastInsertId();
+
+    for (const line of input.lines) {
+      if (line.actual < 0) {
+        throw new Error(`Фактический остаток не может быть отрицательным: ${line.name}`);
+      }
+
+      const current = stockAt(db, line.product_id, input.locationId ?? null);
+
+      db.run(
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, doc_id, price, location_id, created_at)
+         VALUES (?, ?, 'adjust', ?, ?, ?, ?)`,
+        [line.product_id, line.actual - current, docId, line.price ?? 0, input.locationId ?? null, now],
+      );
+    }
+
+    return docId;
+  });
+}
+
+/** Строка корректировки: на сколько подвинуть остаток. */
+export interface AdjustLine {
+  product_id: Id;
+  name: string;
+  unit: string;
+  /** Плюс — прибавить, минус — убавить. Тысячные. */
+  delta: number;
+  price?: number;
+}
+
+/**
+ * Корректировка — прямая правка остатка на заданную величину.
+ *
+ * Отличается от инвентаризации тем, с чего начинается: в инвентаризации
+ * называют факт и разницу считает программа, в корректировке называют саму
+ * разницу. Смешивать их в одном документе нельзя — по ним по-разному
+ * разбирают недостачу.
+ */
+export function postAdjustment(
+  db: SqlDriver,
+  input: { locationId?: Id | null; note?: string | null; lines: AdjustLine[] },
+): Id {
+  if (input.lines.length === 0) throw new Error('Документ без позиций провести нельзя');
+
+  const now = new Date().toISOString();
+
+  return db.tx(() => {
+    db.run(
+      `INSERT INTO docs (type, subtype, note, location_id, created_at)
+       VALUES ('adjust', 'adjustment', ?, ?, ?)`,
+      [input.note?.trim() || null, input.locationId ?? null, now],
+    );
+    const docId = db.lastInsertId();
+
+    for (const line of input.lines) {
+      if (line.delta === 0) continue;
+
+      db.run(
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, doc_id, price, location_id, created_at)
+         VALUES (?, ?, 'adjust', ?, ?, ?, ?)`,
+        [line.product_id, line.delta, docId, line.price ?? 0, input.locationId ?? null, now],
+      );
+    }
+
+    return docId;
+  });
+}
+
+/**
+ * Остаток товара в одном магазине; без магазина — общий.
+ *
+ * Нужен инвентаризации: пересчитывают полку в конкретной точке, и сравнивать
+ * найденное с суммой по всем точкам значило бы списать чужой товар.
+ */
+export function stockAt(db: SqlDriver, productId: Id, locationId: Id | null): number {
+  if (locationId == null) return getStock(db, productId);
+
+  const row = db.get<{ stock: number }>(
+    `SELECT COALESCE(SUM(qty_delta), 0) AS stock
+     FROM stock_moves WHERE product_id = ? AND location_id = ?`,
+    [productId, locationId],
+  );
+  return row?.stock ?? 0;
+}
+
 export function getStock(db: SqlDriver, productId: Id): number {
   const row = db.get<{ stock: number }>(
     'SELECT COALESCE(SUM(qty_delta), 0) AS stock FROM stock_moves WHERE product_id = ?',
@@ -228,6 +355,93 @@ export interface DocSummary {
   positions: number;
   /** Сумма документа в закупочных ценах, копейки. */
   amount: number;
+}
+
+/** Позиция документа так, как она записана в движениях. */
+export interface DocPosition {
+  product_id: Id;
+  name: string;
+  unit: string;
+  /** Всегда положительное: направление документа известно из его вида. */
+  qty: number;
+  price: number;
+  /** Цена × количество, копейки. */
+  sum: number;
+}
+
+export interface DocDetails extends DocSummary {
+  location_id: Id | null;
+  location_to: Id | null;
+  location_name: string | null;
+  location_to_name: string | null;
+  positions_list: DocPosition[];
+}
+
+/**
+ * Документ целиком — то, ради чего в журнале нажимают на строку.
+ *
+ * Позиции восстанавливаются из движений, а не хранятся отдельной таблицей:
+ * движение и есть позиция документа, и вторая копия рано или поздно разошлась
+ * бы с первой. У перемещения берётся одна сторона — иначе каждая позиция
+ * показалась бы дважды.
+ */
+export function getDoc(db: SqlDriver, id: Id): DocDetails | null {
+  const doc = db.get<DocSummary & { location_id: Id | null; location_to: Id | null }>(
+    `SELECT d.*,
+            COUNT(m.id) AS positions,
+            CAST(ROUND(COALESCE(SUM(ABS(m.qty_delta) * m.price), 0) / 1000.0) AS INTEGER) AS amount
+     FROM docs d
+     LEFT JOIN stock_moves m ON m.doc_id = d.id AND ${ONE_SIDE}
+     WHERE d.id = ?
+     GROUP BY d.id`,
+    [id],
+  );
+  if (!doc) return null;
+
+  const positions = db.all<DocPosition>(
+    `SELECT m.product_id,
+            p.name,
+            p.unit,
+            ABS(m.qty_delta) AS qty,
+            m.price,
+            CAST(ROUND(ABS(m.qty_delta) * m.price / 1000.0) AS INTEGER) AS sum
+     FROM stock_moves m
+     JOIN products p ON p.id = m.product_id
+     JOIN docs d ON d.id = m.doc_id
+     WHERE m.doc_id = ? AND ${ONE_SIDE}
+     ORDER BY m.id`,
+    [id],
+  );
+
+  const names = db.get<{ from_name: string | null; to_name: string | null }>(
+    `SELECT lf.name AS from_name, lt.name AS to_name
+     FROM docs d
+     LEFT JOIN locations lf ON lf.id = d.location_id
+     LEFT JOIN locations lt ON lt.id = d.location_to
+     WHERE d.id = ?`,
+    [id],
+  );
+
+  return {
+    ...doc,
+    location_name: names?.from_name ?? null,
+    location_to_name: names?.to_name ?? null,
+    positions_list: positions,
+  };
+}
+
+/**
+ * Отмена документа: он и его движения исчезают вместе.
+ *
+ * Не правкой остатка обратным документом: отменённая закупка не должна
+ * оставлять след в отчёте о движении. Правку цены товара закупкой отмена
+ * не откатывает — прежнюю цену никто не записывал, и выдумывать её нельзя.
+ */
+export function cancelDoc(db: SqlDriver, id: Id): void {
+  db.tx(() => {
+    db.run('DELETE FROM stock_moves WHERE doc_id = ?', [id]);
+    db.run('DELETE FROM docs WHERE id = ?', [id]);
+  });
 }
 
 /** Список складских документов для журнала. */

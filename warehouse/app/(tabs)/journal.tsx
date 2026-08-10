@@ -6,6 +6,7 @@ import { listDocs, type DocSummary } from '../../src/db/stock';
 import { listSales, type SaleSummary } from '../../src/db/sales';
 import { formatMoneyWithSign } from '../../src/domain/money';
 import { pluralize } from '../../src/domain/plural';
+import { DOC_KIND_LABEL, docKind } from '../../src/domain/types';
 import { useQuery } from '../../src/state/DatabaseProvider';
 import { AppHeader } from '../../src/ui/AppHeader';
 import { Badge, Button, Empty, Row } from '../../src/ui/components';
@@ -15,11 +16,6 @@ import { JournalTable } from '../../src/web/screens/JournalTable';
 
 type Tab = 'docs' | 'sales';
 
-const DOC_LABEL = {
-  receipt: 'Приход',
-  writeoff: 'Списание',
-  adjust: 'Инвентаризация',
-} as const;
 
 export default function DocsScreen() {
   // На широком экране журнал показывается таблицей, как в кабинете.
@@ -49,7 +45,14 @@ function JournalPhone() {
         <FlatList
           data={docs}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <DocRow doc={item} />}
+          renderItem={({ item }) => (
+            <DocRow
+              doc={item}
+              onPress={() =>
+                router.push({ pathname: '/doc/[id]', params: { id: String(item.id) } })
+              }
+            />
+          )}
           ListEmptyComponent={
             <Empty
               title="Документов пока нет"
@@ -92,12 +95,15 @@ function JournalPhone() {
   );
 }
 
-function DocRow({ doc }: { doc: DocSummary }) {
+function DocRow({ doc, onPress }: { doc: DocSummary; onPress: () => void }) {
   return (
     <Row
+      onPress={onPress}
       left={
         <>
-          <Text style={text.body}>{DOC_LABEL[doc.type]}</Text>
+          <Text style={text.body}>
+            {DOC_KIND_LABEL[docKind(doc)]} №{doc.id}
+          </Text>
           <Text style={text.muted} numberOfLines={1}>
             {formatDate(doc.created_at)}
             {doc.counterparty ? ` · ${doc.counterparty}` : ''}

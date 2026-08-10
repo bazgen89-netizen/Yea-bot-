@@ -5,7 +5,16 @@ import { ensureLocation, stockByLocation } from '../locations';
 import { createMoneyDoc } from '../money';
 import { listJournal, listMoney, moneyTitle } from '../journal';
 import { documentTotals } from '../reports';
-import { getStock, listDocs, postDoc, postTransfer } from '../stock';
+import {
+  cancelDoc,
+  getDoc,
+  getStock,
+  listDocs,
+  postAdjustment,
+  postDoc,
+  postInventory,
+  postTransfer,
+} from '../stock';
 import { docKind, type DocLine } from '../../domain/types';
 
 const ALL_TIME = { from: '1970-01-01T00:00:00.000Z', to: '2999-01-01T00:00:00.000Z' };
@@ -161,5 +170,155 @@ describe('денежные документы', () => {
     expect(() =>
       createMoneyDoc(db, { type: 'income', amount: 0, account: 'Касса магазина' }),
     ).toThrow();
+  });
+});
+
+describe('просмотр документа', () => {
+  it('отдаёт позиции, суммы и магазины', () => {
+    const tea = product('Шу пуэр');
+    const docId = postDoc(db, {
+      type: 'purchase',
+      counterparty: 'Чайный дом',
+      note: 'Августовская закупка',
+      lines: [
+        { product_id: tea, name: 'Шу пуэр', unit: 'кг', qty: 8000, price: 200000 },
+      ],
+    });
+
+    const doc = getDoc(db, docId)!;
+    expect(doc.subtype).toBe('purchase');
+    expect(doc.counterparty).toBe('Чайный дом');
+    expect(doc.positions_list).toHaveLength(1);
+    expect(doc.positions_list[0].name).toBe('Шу пуэр');
+    expect(doc.positions_list[0].qty).toBe(8000);
+    // 8 кг по 2000,00 — 16 000,00.
+    expect(doc.positions_list[0].sum).toBe(1600000);
+    expect(doc.amount).toBe(1600000);
+  });
+
+  it('у перемещения показывает одну сторону, а не обе', () => {
+    const tea = product('Шу пуэр');
+    const shopA = ensureLocation(db, 'Магазин А');
+    const shopB = ensureLocation(db, 'Магазин Б');
+    postDoc(db, {
+      type: 'purchase',
+      locationId: shopA,
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', qty: 8000, price: 200000 }],
+    });
+
+    const docId = postTransfer(db, {
+      from: shopA,
+      to: shopB,
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', qty: 3000, price: 200000 }],
+    });
+
+    const doc = getDoc(db, docId)!;
+    expect(doc.positions_list).toHaveLength(1);
+    expect(doc.positions_list[0].qty).toBe(3000);
+    expect(doc.location_name).toBe('Магазин А');
+    expect(doc.location_to_name).toBe('Магазин Б');
+  });
+
+  it('отмена возвращает остаток к тому, что было до документа', () => {
+    const tea = product('Шу пуэр');
+    postDoc(db, {
+      type: 'purchase',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', qty: 8000, price: 200000 }],
+    });
+    const writeoff = postDoc(db, {
+      type: 'writeoff',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', qty: 3000, price: 200000 }],
+    });
+
+    expect(getStock(db, tea)).toBe(5000);
+
+    cancelDoc(db, writeoff);
+
+    expect(getStock(db, tea)).toBe(8000);
+    expect(getDoc(db, writeoff)).toBeNull();
+  });
+});
+
+describe('инвентаризация и корректировка', () => {
+  it('инвентаризация выравнивает остаток по факту и оставляет ведомость', () => {
+    const tea = product('Шу пуэр');
+    postDoc(db, { type: 'purchase', lines: [line(tea, 8000)] });
+
+    const docId = postInventory(db, {
+      note: 'Ревизия за август',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', actual: 7500, price: 200000 }],
+    });
+
+    expect(getStock(db, tea)).toBe(7500);
+
+    const doc = getDoc(db, docId)!;
+    expect(docKind(doc)).toBe('inventory');
+    expect(doc.note).toBe('Ревизия за август');
+    // Недостача полкило: в ведомости она видна как позиция.
+    expect(doc.positions_list).toHaveLength(1);
+    expect(doc.positions_list[0].qty).toBe(500);
+  });
+
+  it('позиции без расхождения тоже попадают в ведомость', () => {
+    const tea = product('Шу пуэр');
+    postDoc(db, { type: 'purchase', lines: [line(tea, 8000)] });
+
+    const docId = postInventory(db, {
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', actual: 8000 }],
+    });
+
+    expect(getStock(db, tea)).toBe(8000);
+    expect(getDoc(db, docId)!.positions_list).toHaveLength(1);
+  });
+
+  it('считает факт по магазину пересчёта, а не по всем сразу', () => {
+    const tea = product('Шу пуэр');
+    const shopA = ensureLocation(db, 'Ереван');
+    const shopB = ensureLocation(db, 'Гюмри');
+    postDoc(db, { type: 'purchase', locationId: shopA, lines: [line(tea, 5000)] });
+    postDoc(db, { type: 'purchase', locationId: shopB, lines: [line(tea, 3000)] });
+
+    // В Ереване насчитали 4 кг вместо пяти. Гюмри трогать нельзя.
+    postInventory(db, {
+      locationId: shopA,
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', actual: 4000 }],
+    });
+
+    const byShop = stockByLocation(db).get(tea)!;
+    expect(byShop.get(shopA)).toBe(4000);
+    expect(byShop.get(shopB)).toBe(3000);
+    expect(getStock(db, tea)).toBe(7000);
+  });
+
+  it('отрицательный факт не принимается', () => {
+    const tea = product('Шу пуэр');
+    expect(() =>
+      postInventory(db, {
+        lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', actual: -1000 }],
+      }),
+    ).toThrow(/отрицательным/);
+  });
+
+  it('корректировка двигает остаток на указанную величину', () => {
+    const tea = product('Шу пуэр');
+    postDoc(db, { type: 'purchase', lines: [line(tea, 8000)] });
+
+    const docId = postAdjustment(db, {
+      note: 'Пересорт',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'кг', delta: -500, price: 200000 }],
+    });
+
+    expect(getStock(db, tea)).toBe(7500);
+    expect(docKind(getDoc(db, docId)!)).toBe('adjustment');
+  });
+
+  it('оба вида проводятся своими функциями, а не общей', () => {
+    const tea = product('Шу пуэр');
+    expect(() => postDoc(db, { type: 'inventory', lines: [line(tea, 1000)] })).toThrow(
+      /postInventory/,
+    );
+    expect(() => postDoc(db, { type: 'adjustment', lines: [line(tea, 1000)] })).toThrow(
+      /postAdjustment/,
+    );
   });
 });

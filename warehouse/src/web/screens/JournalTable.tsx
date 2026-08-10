@@ -85,9 +85,13 @@ export function JournalTable() {
                     key={`${entry.kind}${entry.id}`}
                     entry={entry}
                     onPress={() => {
-                      if (entry.kind === 'sale' || entry.kind === 'refund') {
-                        router.push({ pathname: '/sale/[id]', params: { id: String(entry.id) } });
-                      }
+                      // Чек и складской документ — разные экраны: у чека есть
+                      // оплата и возврат, у документа — контрагент и магазины.
+                      router.push(
+                        entry.kind === 'sale' || entry.kind === 'refund'
+                          ? { pathname: '/sale/[id]', params: { id: String(entry.id) } }
+                          : { pathname: '/doc/[id]', params: { id: String(entry.id) } },
+                      );
                     }}
                   />
                 ))}

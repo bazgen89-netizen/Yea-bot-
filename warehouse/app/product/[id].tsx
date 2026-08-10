@@ -34,6 +34,8 @@ import {
   type ProductKind,
 } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { ProductCard } from '../../src/web/screens/ProductCard';
 import { useScanner } from '../../src/state/ScannerProvider';
 import { Badge, Button, Card, Choice, Field, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
@@ -48,6 +50,17 @@ const REASON_LABEL: Record<MoveReason, string> = {
 };
 
 export default function ProductScreen() {
+  // На широком экране — карточка кабинета: две колонки, остаток по магазинам.
+  // Раньше здесь показывалась телефонная вёрстка, единственная в кабинете.
+  const desktop = useDesktop();
+  const params = useLocalSearchParams<{ id: string; barcode?: string; type?: string }>();
+
+  if (desktop) return <ProductCard id={params.id} />;
+
+  return <ProductPhone />;
+}
+
+function ProductPhone() {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { scanBarcode } = useScanner();

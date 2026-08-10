@@ -13,7 +13,7 @@ import { formatMoneyWeb } from '../../domain/money';
 import { formatQtyWeb } from '../../domain/qty';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 // Кнопки — последняя колонка: ширины подобраны так, чтобы они помещались,
 // а не прятались за горизонтальной прокруткой.
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     borderColor: web.border,
     borderRadius: 3,
     paddingHorizontal: 12,
-    fontSize: 15,
+    fontFamily: WEB_FONT, fontSize: 15,
     color: web.text,
   },
   inputSmall: {
@@ -191,11 +191,11 @@ const styles = StyleSheet.create({
     borderColor: web.border,
     borderRadius: 3,
     paddingHorizontal: 10,
-    fontSize: 14,
+    fontFamily: WEB_FONT, fontSize: 14,
     color: web.text,
   },
   rename: { flexDirection: 'row', gap: 8, alignItems: 'center', paddingRight: 12 },
   right: { textAlign: 'right' },
   actions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', paddingLeft: 12 },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

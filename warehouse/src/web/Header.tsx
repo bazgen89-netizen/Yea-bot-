@@ -6,7 +6,7 @@ import { Dropdown, type Option } from './Dropdown';
 import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
-import { HEADER_HEIGHT, web } from '../ui/webTheme';
+import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
 
 /**
  * Шапка кабинета: логотип, название раздела, кнопка кассира и значки справа.
@@ -125,8 +125,8 @@ const styles = StyleSheet.create({
   bandLeft: { left: 0, width: '34%', backgroundColor: web.headerFrom },
   bandMiddle: { left: '34%', width: '33%', backgroundColor: '#01699E' },
   bandRight: { left: '67%', right: 0, backgroundColor: web.headerTo },
-  logo: { color: web.headerText, fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
-  title: { flex: 1, color: web.headerText, fontSize: 21, marginLeft: 24 },
+  logo: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
+  title: { flex: 1, color: web.headerText, fontFamily: WEB_FONT, fontSize: 21, marginLeft: 24 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   cashier: {
     backgroundColor: web.headerButton,
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cashierLabel: { color: web.headerText, fontSize: 15 },
+  cashierLabel: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 15 },
   headerButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   language: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   badge: {
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  badgeText: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 10, fontWeight: '700' },
   account: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
     width: 38,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLetter: { color: web.headerText, fontSize: 17, fontWeight: '700' },
-  accountName: { color: web.headerText, fontSize: 15 },
-  accountRole: { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
+  avatarLetter: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 17, fontWeight: '700' },
+  accountName: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 15 },
+  accountRole: { color: 'rgba(255,255,255,0.8)', fontFamily: WEB_FONT, fontSize: 13 },
 });

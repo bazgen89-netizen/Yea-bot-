@@ -6,7 +6,7 @@ import { MENU, MENU_FOOTER, menuFor, type MenuChild, type MenuEntry } from './me
 import { usePermissions } from '../state/usePermissions';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
-import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web } from '../ui/webTheme';
+import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web, WEB_FONT } from '../ui/webTheme';
 
 /** Боковое меню кабинета. Разделы с вложенными пунктами раскрываются. */
 export function Sidebar() {
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   createSmall: { marginHorizontal: 10 },
-  createLabel: { color: '#FFFFFF', fontSize: 17 },
+  createLabel: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -334,7 +334,8 @@ const styles = StyleSheet.create({
   rowActive: { backgroundColor: web.sidebarActive },
   rowHover: { backgroundColor: '#F7F7F7' },
   rowIcon: { width: 22, alignItems: 'center' },
-  rowLabel: { flex: 1, fontSize: 16, color: web.sidebarText },
+  // .ui.menu — 1rem при базе 14, то есть ровно 14 пикселей.
+  rowLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.sidebarText },
   badge: {
     position: 'absolute',
     left: -8,
@@ -347,9 +348,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  badgeText: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 10, fontWeight: '700' },
   child: { justifyContent: 'center', paddingLeft: 66, paddingRight: 18, height: 38, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  childLabel: { flex: 1, fontSize: 15, color: web.sidebarChild },
+  // Вложенный пункт — .857em от того же корня: 12 пикселей.
+  childLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 12, color: web.sidebarChild },
   footer: { borderTopWidth: 1, borderTopColor: web.sidebarBorder, paddingVertical: 6 },
   bottomBar: {
     flexDirection: 'row',

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { visiblePages } from './pagination';
 import { WebIcon } from '../ui/icons';
-import { web, webText } from '../ui/webTheme';
+import { web, webText, WEB_FONT } from '../ui/webTheme';
 
 /**
  * Кирпичи таблиц кабинета: панель действий сверху, шапка колонок, строки,
@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  searchInput: { flex: 1, fontSize: 15, color: web.text, outlineStyle: 'none' } as object,
-  searchIcon: { fontSize: 19, color: web.textMuted },
+  searchInput: { flex: 1, fontFamily: WEB_FONT, fontSize: 15, color: web.text, outlineStyle: 'none' } as object,
+  searchIcon: { fontFamily: WEB_FONT, fontSize: 19, color: web.textMuted },
   button: {
     height: 44,
     borderWidth: 1,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
   },
-  buttonLabel: { fontSize: 15 },
+  buttonLabel: { fontFamily: WEB_FONT, fontSize: 15 },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -246,8 +246,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: web.border,
   },
-  pagerLabel: { fontSize: 14, color: web.textMuted, marginRight: 12 },
-  pagerGap: { fontSize: 14, color: web.textMuted, paddingHorizontal: 6 },
+  pagerLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted, marginRight: 12 },
+  pagerGap: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted, paddingHorizontal: 6 },
   pageButton: {
     minWidth: 40,
     height: 40,
@@ -256,6 +256,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   pageButtonActive: { backgroundColor: '#FBF7E8' },
-  pageLabel: { fontSize: 15, color: web.link },
+  pageLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },
   pageLabelActive: { color: web.text },
 });

@@ -102,6 +102,35 @@ if (icon) {
   );
 }
 
+/**
+ * Roboto — тот же файл, каким пользуется оригинал.
+ *
+ * Без него страница рисовалась системным шрифтом: в стилях Roboto был назван
+ * первым, но самого файла не существовало, и браузер молча брал `-apple-system`.
+ * Совпадение размеров при этом ничего не даёт — у другой гарнитуры другие
+ * ширины букв, и колонки с высотами строк всё равно расходятся с оригиналом.
+ *
+ * Начертания три: 400 обычный, 500 для заголовков блоков, 700 для шапки таблиц.
+ */
+const ROBOTO = [
+  ['Roboto-Regular.ttf', 400],
+  ['Roboto-Medium.ttf', 500],
+  ['Roboto-Bold.ttf', 700],
+];
+
+const faces = [];
+for (const [file, weight] of ROBOTO) {
+  const data = await readFile(join(root, 'assets/fonts', file)).catch(() => null);
+  if (!data) throw new Error(`Нет файла шрифта assets/fonts/${file}`);
+
+  faces.push(
+    `@font-face{font-family:Roboto;font-style:normal;font-weight:${weight};` +
+      `font-display:swap;src:url(data:font/ttf;base64,${data.toString('base64')}) format("truetype")}`,
+  );
+}
+
+page = replaceOnce(page, '</head>', `<style id="roboto">${faces.join('')}</style></head>`);
+
 // Шрифты иконок бандл грузит по ссылке — подменяем ссылки на сами шрифты.
 let inlined = 0;
 for (const file of await walk(join(dist, 'assets'))) {

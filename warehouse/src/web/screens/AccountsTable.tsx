@@ -5,7 +5,7 @@ import { Column, HeadRow, Row, ToolButton, Toolbar } from '../Table';
 import { accountBalances, type AccountBalance } from '../../db/money';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 // Остаток — то, ради чего сюда заходят: ширины подобраны так, чтобы он
 // помещался на экране, а не оказывался за горизонтальной прокруткой.
@@ -123,9 +123,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: web.border,
   },
-  totalLabel: { fontSize: 16, color: web.text },
+  totalLabel: { fontFamily: WEB_FONT, fontSize: 16, color: web.text },
   totalValue: {
-    fontSize: 18,
+    fontFamily: WEB_FONT, fontSize: 18,
     color: web.text,
     textAlign: 'right',
     fontWeight: '600',

@@ -101,21 +101,49 @@ export const SIDEBAR_WIDTH = 292;
 export const SIDEBAR_SMALL_WIDTH = 64;
 export const HEADER_HEIGHT = 64;
 
+/**
+ * Размеры шрифта.
+ *
+ * Все до одного взяты из таблицы стилей оригинала, а не подобраны на глаз.
+ * Ключевое: у него `html { font-size: 14px }`, а не привычные 16 — поэтому
+ * каждый `rem` в его вёрстке на восьмую меньше, чем кажется по цифре.
+ * Заголовок `h1: 1.9rem` — это 26,6 пикселя, а не 30, и всё, что считалось
+ * от шестнадцати, было крупнее оригинала.
+ *
+ *   html            14px    (vendor.css)
+ *   h1              1.9rem  = 26,6
+ *   h2              1.6rem  = 22,4
+ *   .ui.menu        1rem    = 14      — пункт бокового меню
+ *   вложенный пункт .857em  = 12
+ *   .ui.table       14px             — тело таблицы
+ *   ссылка в строке 15px
+ *   подпись под ней 11px
+ *   плитка отчёта   15,5px, значок 66px
+ */
+export const REM = 14;
+
 export const webText = StyleSheet.create({
-  /** «Показатели за месяц по всем магазинам», «Выберите тип отчёта». */
-  pageTitle: { fontSize: 30, color: web.text, fontWeight: '400' },
-  /** «Документы», «Оценка склада по всем магазинам». */
-  blockTitle: { fontSize: 25, color: '#37474F', fontWeight: '400' },
+  /** Заголовок страницы — `h1`, 1.9rem при базе 14. */
+  pageTitle: { fontFamily: WEB_FONT, fontSize: 27, color: web.text, fontWeight: '400' },
+  /**
+   * Заголовок дашборда. У него он не `h1`, а выпадающий список внутри
+   * заголовка, и размер задан явно: 28 пикселей начертанием 300.
+   */
+  dashboardTitle: { fontFamily: WEB_FONT, fontSize: 28, color: '#33425B', fontWeight: '300' },
+  /** «Документы», «Оценка склада по всем магазинам» — `h2`, 1.6rem. */
+  blockTitle: { fontFamily: WEB_FONT, fontSize: 22, color: '#37474F', fontWeight: '400' },
   /** Крупные суммы показателей. */
-  metric: { fontSize: 30, color: web.text, fontVariant: ['tabular-nums'] as const },
-  metricLabel: { fontSize: 14, color: web.textMuted },
-  column: {
-    fontSize: 12,
-    color: web.columnHead,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase' as const,
-  },
-  cell: { fontSize: 14, color: web.text },
-  cellNumber: { fontSize: 14, color: web.text, fontVariant: ['tabular-nums'] as const },
-  link: { fontSize: 14, color: web.link },
+  metric: { fontFamily: WEB_FONT, fontSize: 28, color: web.text, fontVariant: ['tabular-nums'] as const },
+  metricLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
+  /**
+   * Заголовок колонки: `.ui.table thead th` — 14 пикселей, начертание 700,
+   * `text-transform: none`. Прописные с разрядкой были моей выдумкой.
+   */
+  column: { fontFamily: WEB_FONT, fontSize: 14, color: 'rgba(0,0,0,0.87)', fontWeight: '700' },
+  cell: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  cellNumber: { fontFamily: WEB_FONT, fontSize: 14, color: web.text, fontVariant: ['tabular-nums'] as const },
+  /** Название товара, номер документа — 15 пикселей, крупнее остальных ячеек. */
+  link: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },
+  /** Вторая строка в ячейке: артикул, дата, комментарий. */
+  cellSmall: { fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted },
 });

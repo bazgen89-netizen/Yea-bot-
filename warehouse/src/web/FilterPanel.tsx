@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PRESETS, PRESET_LABEL, type CatalogFilters } from '../state/catalogFilters';
-import { web } from '../ui/webTheme';
+import { web, WEB_FONT } from '../ui/webTheme';
 
 /**
  * Панель фильтров каталога в кабинете.
@@ -143,8 +143,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: web.border,
   },
-  title: { fontSize: 16, color: web.text },
-  close: { fontSize: 22, color: web.textMuted, lineHeight: 22 },
+  title: { fontFamily: WEB_FONT, fontSize: 16, color: web.text },
+  close: { fontFamily: WEB_FONT, fontSize: 22, color: web.textMuted, lineHeight: 22 },
   list: { paddingVertical: 6 },
   row: {
     flexDirection: 'row',
@@ -164,19 +164,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boxChecked: { backgroundColor: web.link, borderColor: web.link },
-  tick: { fontSize: 11, color: '#FFFFFF', lineHeight: 13 },
-  label: { flex: 1, fontSize: 14, color: web.text },
-  count: { fontSize: 13, color: web.textMuted },
+  tick: { fontFamily: WEB_FONT, fontSize: 11, color: '#FFFFFF', lineHeight: 13 },
+  label: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  count: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
   section: {
-    fontSize: 12,
+    fontFamily: WEB_FONT, fontSize: 12,
     color: web.textMuted,
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 4,
     textTransform: 'uppercase',
   },
-  link: { flex: 1, fontSize: 14, color: web.link },
-  remove: { fontSize: 13, color: web.danger },
+  link: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.link },
+  remove: { fontFamily: WEB_FONT, fontSize: 13, color: web.danger },
   foot: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -193,13 +193,13 @@ const styles = StyleSheet.create({
     borderColor: web.border,
     borderRadius: 2,
     paddingHorizontal: 10,
-    fontSize: 14,
+    fontFamily: WEB_FONT, fontSize: 14,
     color: web.text,
   },
   save: { paddingHorizontal: 12, paddingVertical: 7 },
-  saveLabel: { fontSize: 14, color: web.link },
+  saveLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.link },
   reset: { paddingHorizontal: 12, paddingVertical: 7 },
-  resetLabel: { fontSize: 14, color: web.textMuted },
+  resetLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
   apply: {
     marginLeft: 'auto',
     paddingHorizontal: 18,
@@ -207,5 +207,5 @@ const styles = StyleSheet.create({
     backgroundColor: web.green,
     borderRadius: 2,
   },
-  applyLabel: { fontSize: 14, color: '#FFFFFF' },
+  applyLabel: { fontFamily: WEB_FONT, fontSize: 14, color: '#FFFFFF' },
 });

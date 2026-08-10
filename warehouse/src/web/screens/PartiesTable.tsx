@@ -7,7 +7,7 @@ import { listCounterparties } from '../../db/counterparties';
 import type { CounterpartyWithTotals, PartyKind } from '../../domain/types';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /** 3184 клиента дают 64 страницы — ровно как в исходном приложении. */
 const PAGE_SIZE = 50;
@@ -151,6 +151,6 @@ function PartyRow({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   nameCell: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  total: { fontSize: 16, color: web.text, marginHorizontal: 6 },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  total: { fontFamily: WEB_FONT, fontSize: 16, color: web.text, marginHorizontal: 6 },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

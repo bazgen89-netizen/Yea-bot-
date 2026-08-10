@@ -7,7 +7,7 @@ import { formatDay, formatTime } from '../../db/journal';
 import { listRegisters, openShift, type RegisterWithState } from '../../db/shifts';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 // Колонок мало, и кнопка — последняя из них: ширины подобраны так, чтобы
 // она помещалась целиком, а не пряталась за горизонтальной прокруткой.
@@ -148,5 +148,5 @@ const styles = StyleSheet.create({
   stripe: { width: 4 },
   rowInner: { flex: 1 },
   status: { width: 42, alignItems: 'center' },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

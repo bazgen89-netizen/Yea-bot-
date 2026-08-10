@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /**
  * Раздел, экран которого ещё не собран.
@@ -34,6 +34,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
-  note: { fontSize: 17, color: web.text, textAlign: 'center', maxWidth: 620 },
-  hint: { fontSize: 14, color: web.textMuted },
+  note: { fontFamily: WEB_FONT, fontSize: 17, color: web.text, textAlign: 'center', maxWidth: 620 },
+  hint: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
 });

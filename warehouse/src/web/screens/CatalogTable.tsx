@@ -13,7 +13,7 @@ import type { ProductWithStock } from '../../domain/types';
 import { useCatalogFilters } from '../../state/catalogFilters';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /** Сколько строк на странице. При 661 товаре выходит семь страниц — как в исходном. */
 const PAGE_SIZE = 100;
@@ -238,9 +238,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumbImage: { width: '100%', height: '100%' },
-  link: { flex: 1, fontSize: 14, color: web.link, lineHeight: 19 },
+  // Название товара — 15 пикселей: в оригинале ссылка в строке крупнее ячеек.
+  link: { flex: 1, fontFamily: WEB_FONT, fontSize: 15, color: web.link, lineHeight: 19 },
   right: { textAlign: 'right' },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
   createRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: web.border,
   },
-  createSign: { fontSize: 16, color: web.link },
-  createLabel: { fontSize: 15, color: web.link },
-  total: { flex: 1, textAlign: 'right', fontSize: 14, color: web.textMuted },
+  createSign: { fontFamily: WEB_FONT, fontSize: 16, color: web.link },
+  createLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },
+  total: { flex: 1, textAlign: 'right', fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
 });

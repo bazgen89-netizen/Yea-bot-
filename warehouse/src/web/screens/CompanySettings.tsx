@@ -15,7 +15,7 @@ import { SEED_CLIENTS, SEED_PRODUCTS } from '../../db/seed';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { pickFile, saveFile } from '../../ui/download';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /**
  * «Настройки / настройки компании» — вкладки, как в оригинале.
@@ -298,12 +298,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: { borderBottomColor: web.link },
-  tabLabel: { fontSize: 15, color: web.textMuted },
+  tabLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
   tabLabelActive: { color: web.link },
   content: { padding: 26, gap: 26, maxWidth: 900, width: '100%' },
   block: { gap: 16 },
   field: { gap: 6 },
-  fieldLabel: { fontSize: 14, color: web.columnHead },
+  fieldLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.columnHead },
   input: {
     width: 420,
     height: 42,
@@ -311,11 +311,11 @@ const styles = StyleSheet.create({
     borderColor: web.border,
     borderRadius: 3,
     paddingHorizontal: 12,
-    fontSize: 15,
+    fontFamily: WEB_FONT, fontSize: 15,
     color: web.text,
     backgroundColor: '#FFFFFF',
   },
-  note: { fontSize: 14, color: web.textMuted, maxWidth: 620, lineHeight: 20 },
+  note: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted, maxWidth: 620, lineHeight: 20 },
   actions: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   counts: { flexDirection: 'row', gap: 40, flexWrap: 'wrap' },
   count: { gap: 4 },

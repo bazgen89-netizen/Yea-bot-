@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatMoneyWeb } from '../domain/money';
-import { web } from '../ui/webTheme';
+import { web, WEB_FONT } from '../ui/webTheme';
 
 /**
  * График выручки по дням месяца.
@@ -74,7 +74,7 @@ function isMarked(day: number): boolean {
 const styles = StyleSheet.create({
   chart: { flexDirection: 'row', height: 280, gap: 10 },
   axis: { width: 58, justifyContent: 'space-between', paddingBottom: 26 },
-  tick: { fontSize: 12, color: web.textMuted, textAlign: 'right' },
+  tick: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, textAlign: 'right' },
   plot: { flex: 1 },
   grid: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 26, justifyContent: 'space-between' },
   gridLine: { height: 1, backgroundColor: '#EFEFEF' },
@@ -84,6 +84,6 @@ const styles = StyleSheet.create({
   barSlot: { flex: 1, maxWidth: 60, height: '100%', justifyContent: 'flex-end' },
   bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
-  day: { flex: 1, fontSize: 11, color: web.textMuted, textAlign: 'center' },
+  day: { flex: 1, fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted, textAlign: 'center' },
   dayMarked: { color: web.link },
 });

@@ -14,7 +14,7 @@ import {
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 const COLUMNS: Column[] = [
   { key: 'doc', title: 'Документ', width: 250 },
@@ -154,10 +154,10 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   statusHead: { width: 46 },
-  day: { fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
+  day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row' },
   stripe: { width: 4 },
   rowInner: { flex: 1 },
   status: { width: 42, alignItems: 'center' },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { WebIcon } from '../ui/icons';
-import { web } from '../ui/webTheme';
+import { web, WEB_FONT } from '../ui/webTheme';
 
 /**
  * Выпадающий список кабинета.
@@ -141,12 +141,12 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   chipHover: { backgroundColor: web.rowHover },
-  chipText: { fontSize: 14, color: web.text },
+  chipText: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerText: { fontSize: 15, color: web.headerText },
+  headerText: { fontFamily: WEB_FONT, fontSize: 15, color: web.headerText },
   dotted: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dottedText: {
-    fontSize: 30,
+    fontFamily: WEB_FONT, fontSize: 30,
     color: web.text,
     textDecorationLine: 'underline',
     textDecorationStyle: 'dotted',
@@ -174,5 +174,5 @@ const styles = StyleSheet.create({
   item: { paddingHorizontal: 16, paddingVertical: 11 },
   itemHover: { backgroundColor: web.rowHover },
   itemActive: { backgroundColor: web.sidebarActive },
-  itemText: { fontSize: 15, color: web.text },
+  itemText: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
 });

@@ -17,7 +17,7 @@ import { formatMoneyWeb } from '../../domain/money';
 import { formatQtyWeb } from '../../domain/qty';
 import { useQuery } from '../../state/DatabaseProvider';
 import { useLanguage } from '../../state/LanguageProvider';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /** Периоды выпадающего списка — те же и в том же порядке, что в оригинале. */
 const PERIODS: Option<PeriodKind>[] = [
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginBottom: 12,
   },
-  chartLegendText: { color: '#FFFFFF', fontSize: 14 },
+  chartLegendText: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 14 },
   bottom: { flexDirection: 'row', gap: 26, alignItems: 'flex-start' },
   documents: {
     flex: 1,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: web.border,
   },
-  docHeadText: { fontSize: 15, color: web.text },
+  docHeadText: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
   docRow: {
     flexDirection: 'row',
     paddingVertical: 14,
@@ -277,13 +277,13 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 6,
   },
-  warningTitle: { fontSize: 15, fontWeight: '700', color: web.warningText },
-  warningLine: { fontSize: 14, color: web.warningText },
+  warningTitle: { fontFamily: WEB_FONT, fontSize: 15, fontWeight: '700', color: web.warningText },
+  warningLine: { fontFamily: WEB_FONT, fontSize: 14, color: web.warningText },
   warningLink: { color: web.link },
-  stockLabel: { fontSize: 15, color: web.text },
-  stockSub: { fontSize: 15, color: web.text, fontWeight: '600' },
-  stockQty: { fontSize: 30, color: web.text, fontVariant: ['tabular-nums'] },
+  stockLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
+  stockSub: { fontFamily: WEB_FONT, fontSize: 15, color: web.text, fontWeight: '600' },
+  stockQty: { fontFamily: WEB_FONT, fontSize: 30, color: web.text, fontVariant: ['tabular-nums'] },
   stockValues: { flexDirection: 'row', gap: 26, marginTop: 6 },
   stockValue: { flex: 1, gap: 2 },
-  stockAmount: { fontSize: 26, color: web.text, fontVariant: ['tabular-nums'], marginTop: 6 },
+  stockAmount: { fontFamily: WEB_FONT, fontSize: 26, color: web.text, fontVariant: ['tabular-nums'], marginTop: 6 },
 });

@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { REPORTS } from '../../db/reportTypes';
 import { WebIcon } from '../../ui/icons';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /**
  * «Выберите тип отчёта» — плитки кабинета.
@@ -102,7 +102,7 @@ function Grid({ tiles: items }: { tiles: Tile[] }) {
           onPress={() => router.push({ pathname: '/reports/[type]', params: { type: tile.id } })}
           style={(state) => [styles.tile, (state as { hovered?: boolean }).hovered && styles.tileHover]}
         >
-          {WebIcon[tile.icon]({ size: 62, color: '#D3D6D9' })}
+          {WebIcon[tile.icon]({ size: 66, color: '#CCCCCC' })}
           <Text style={styles.tileLabel}>{tile.label}</Text>
         </Pressable>
       ))}
@@ -123,7 +123,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   tileHover: { backgroundColor: web.rowHover },
-  tileLabel: { fontSize: 17, color: web.text, textAlign: 'center', lineHeight: 23 },
+  // Плитка отчёта в оригинале — 15,5 пикселя, значок 66, цвет значка #ccc.
+  tileLabel: { fontFamily: WEB_FONT, fontSize: 15.5, color: web.text, textAlign: 'center', lineHeight: 21 },
   tabs: { flexDirection: 'row', gap: 24, marginTop: 30, marginBottom: 6 },
   tab: {
     width: 224,
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabActive: { backgroundColor: '#5FA8DE' },
-  tabHint: { fontSize: 13, color: '#FFFFFF' },
-  tabLabel: { fontSize: 21, color: '#FFFFFF', fontWeight: '700' },
-  ribbon: { fontSize: 12, color: '#FFFFFF', opacity: 0.85 },
+  tabHint: { fontFamily: WEB_FONT, fontSize: 13, color: '#FFFFFF' },
+  tabLabel: { fontFamily: WEB_FONT, fontSize: 21, color: '#FFFFFF', fontWeight: '700' },
+  ribbon: { fontFamily: WEB_FONT, fontSize: 12, color: '#FFFFFF', opacity: 0.85 },
 });

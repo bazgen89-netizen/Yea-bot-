@@ -8,7 +8,7 @@ import { formatMoneyWeb } from '../../domain/money';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { say } from '../../ui/alert';
-import { web, webText } from '../../ui/webTheme';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 const COLUMNS: Column[] = [
   { key: 'shift', title: 'Смена', width: 150 },
@@ -197,5 +197,5 @@ const styles = StyleSheet.create({
   rowInner: { flex: 1 },
   status: { width: 42, alignItems: 'center' },
   right: { textAlign: 'right' },
-  empty: { padding: 40, fontSize: 15, color: web.textMuted },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

@@ -2,7 +2,8 @@ import { useRouter, usePathname, type Href } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { MENU, MENU_FOOTER, type MenuChild, type MenuEntry } from './menu';
+import { MENU, MENU_FOOTER, menuFor, type MenuChild, type MenuEntry } from './menu';
+import { usePermissions } from '../state/usePermissions';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web } from '../ui/webTheme';
@@ -21,7 +22,12 @@ export function Sidebar() {
   // одни значки, а место отдаётся таблице.
   const [small, setSmall] = useState(false);
 
-  const containing = MENU.find((entry) =>
+  // Меню собирается под права того, кто работает: у продавца нет ни денег,
+  // ни отчётов, и показывать их, чтобы отказать при нажатии, незачем.
+  const { allowed } = usePermissions();
+  const menu = menuFor(allowed);
+
+  const containing = menu.find((entry) =>
     entry.children?.some((child) => hrefPath(child.href) === pathname),
   )?.label;
 
@@ -44,7 +50,7 @@ export function Sidebar() {
       </Pressable>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {MENU.map((entry) => (
+        {menu.map((entry) => (
           <Section
             key={entry.label}
             entry={entry}

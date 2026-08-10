@@ -46,8 +46,38 @@ await page.goto(`file://${dist}index.html`);
 await page.waitForTimeout(12000);
 
 const vis = (label) => page.getByText(label, { exact: true }).locator('visible=true').first();
+/**
+ * Текст только того, что видно.
+ *
+ * `innerText` корня отдаёт и вкладки, спрятанные под текущей: экраны в
+ * expo-router остаются в разметке. Из-за этого «Каталог» и «Журнал» читались
+ * как копия «Главной» — не потому, что они одинаковые, а потому, что мерили
+ * не то. Собираем текст обходом, пропуская скрытые ветки.
+ */
 const lines = async () =>
-  (await page.evaluate(() => document.getElementById('root').innerText))
+  (await page.evaluate(() => {
+    const skip = (el) => {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return true;
+      if (el.getAttribute('aria-hidden') === 'true') return true;
+      const r = el.getBoundingClientRect();
+      return r.width === 0 && r.height === 0;
+    };
+
+    const out = [];
+    const walk = (el) => {
+      if (el.nodeType === Node.TEXT_NODE) {
+        const text = el.textContent.trim();
+        if (text) out.push(text);
+        return;
+      }
+      if (el.nodeType !== Node.ELEMENT_NODE || skip(el)) return;
+      for (const child of el.childNodes) walk(child);
+    };
+
+    walk(document.getElementById('root'));
+    return out.join('\n');
+  }))
     .split('\n')
     .map((s) => s.replace(/[-]|[\u{F0000}-\u{FFFFD}]/gu, '').trim())
     .filter(Boolean);
@@ -62,6 +92,10 @@ async function title() {
 async function clickables() {
   return page.evaluate(() =>
     [...document.querySelectorAll('[role="button"]')]
+      // Экран, с которого ушли, остаётся в разметке скрытым: без этой
+      // проверки в список попадали кнопки предыдущего раздела, и весь он
+      // читался как «не нажалось».
+      .filter((el) => el.offsetParent !== null && !el.closest('[aria-hidden="true"]'))
       .map((el) => {
         const r = el.getBoundingClientRect();
         const text = el.innerText
@@ -78,7 +112,7 @@ async function clickables() {
 
 /** Закрыть всё, что могло открыться от нажатия: список, шторку, панель. */
 async function dismiss() {
-  for (const label of ['Закрыть список', 'Закрыть меню']) {
+  for (const label of ['Закрыть список', 'Закрыть меню', 'Закрыть фильтр', 'Закрыть фильтры']) {
     const back = page.getByLabel(label, { exact: true });
     if (await back.count()) {
       await back.first().click({ timeout: 2000 }).catch(() => {});
@@ -118,6 +152,9 @@ for (const [menu, expected] of SECTIONS) {
     await page.waitForTimeout(1100);
 
     const after = await title();
+    // Панель или шторка, открытая этим нажатием, закрывает собой остальные
+    // кнопки: без этого весь хвост списка читался бы как «не нажалось».
+    await dismiss();
     const opened = await page.getByLabel('Закрыть список', { exact: true }).count();
     results.push({
       name,

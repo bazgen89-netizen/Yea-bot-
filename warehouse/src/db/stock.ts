@@ -1,4 +1,5 @@
 import type { SqlDriver } from './driver';
+import { currentStaffId } from './staff';
 import { DOC_KIND_TYPE, type DocKind, type DocLine, type DocType, type Id, type StockMove } from '../domain/types';
 
 export interface DocInput {
@@ -73,14 +74,15 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
 
   return db.tx(() => {
     db.run(
-      `INSERT INTO docs (type, subtype, counterparty, note, location_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO docs (type, subtype, counterparty, note, location_id, staff_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         docType,
         kind,
         input.counterparty?.trim() || null,
         input.note?.trim() || null,
         input.locationId ?? null,
+        currentStaffId(db),
         now,
       ],
     );
@@ -138,9 +140,9 @@ export function postTransfer(db: SqlDriver, input: TransferInput): Id {
 
   return db.tx(() => {
     db.run(
-      `INSERT INTO docs (type, subtype, note, location_id, location_to, created_at)
-       VALUES ('writeoff', 'transfer', ?, ?, ?, ?)`,
-      [input.note?.trim() || null, input.from, input.to, now],
+      `INSERT INTO docs (type, subtype, note, location_id, location_to, staff_id, created_at)
+       VALUES ('writeoff', 'transfer', ?, ?, ?, ?, ?)`,
+      [input.note?.trim() || null, input.from, input.to, currentStaffId(db), now],
     );
     const docId = db.lastInsertId();
 
@@ -228,9 +230,9 @@ export function postInventory(db: SqlDriver, input: InventoryInput): Id {
 
   return db.tx(() => {
     db.run(
-      `INSERT INTO docs (type, subtype, note, location_id, created_at)
-       VALUES ('adjust', 'inventory', ?, ?, ?)`,
-      [input.note?.trim() || null, input.locationId ?? null, now],
+      `INSERT INTO docs (type, subtype, note, location_id, staff_id, created_at)
+       VALUES ('adjust', 'inventory', ?, ?, ?, ?)`,
+      [input.note?.trim() || null, input.locationId ?? null, currentStaffId(db), now],
     );
     const docId = db.lastInsertId();
 
@@ -280,9 +282,9 @@ export function postAdjustment(
 
   return db.tx(() => {
     db.run(
-      `INSERT INTO docs (type, subtype, note, location_id, created_at)
-       VALUES ('adjust', 'adjustment', ?, ?, ?)`,
-      [input.note?.trim() || null, input.locationId ?? null, now],
+      `INSERT INTO docs (type, subtype, note, location_id, staff_id, created_at)
+       VALUES ('adjust', 'adjustment', ?, ?, ?, ?)`,
+      [input.note?.trim() || null, input.locationId ?? null, currentStaffId(db), now],
     );
     const docId = db.lastInsertId();
 

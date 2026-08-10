@@ -1,6 +1,7 @@
 import type { Href } from 'expo-router';
 
 import { reportById } from '../db/reportTypes';
+import type { Permission } from '../domain/permissions';
 import type { WebIcon } from '../ui/icons';
 
 /**
@@ -18,6 +19,8 @@ export interface MenuChild {
   href: Href;
   /** «Скачать программу» — синяя строка со значком загрузки. */
   accent?: boolean;
+  /** Право, без которого пункт не показывается. */
+  needs?: Permission;
 }
 
 export interface MenuEntry {
@@ -27,29 +30,43 @@ export interface MenuEntry {
   children?: MenuChild[];
   /** Приглушённый пункт — «Корзина». */
   dim?: boolean;
+  /**
+   * Право, без которого пункт не показывается. У пунктов с подпунктами
+   * право проверяется у каждого подпункта отдельно: управляющему видна
+   * «Компания», но не «Сотрудники» внутри неё.
+   */
+  needs?: Permission;
 }
 
 export const MENU: MenuEntry[] = [
-  { label: 'Главная', icon: 'home', href: '/' },
-  { label: 'Товары и услуги', icon: 'products', href: '/catalog' },
+  { label: 'Главная', icon: 'home', href: '/', needs: 'dashboard' },
+  { label: 'Товары и услуги', icon: 'products', href: '/catalog', needs: 'catalog' },
   {
     label: 'Кассы и смены',
     icon: 'registers',
     children: [
-      { label: 'Смены', href: '/shifts' },
-      { label: 'Кассы', href: '/registers' },
+      { label: 'Смены', href: '/shifts', needs: 'shifts' },
+      { label: 'Кассы', href: '/registers', needs: 'registers' },
       { label: 'Скачать программу', href: '/billing', accent: true },
     ],
   },
-  { label: 'Движение товара', icon: 'goods', href: '/journal' },
-  { label: 'Движение денег', icon: 'money', href: '/money' },
-  { label: 'Отчеты', icon: 'reports', href: '/reports' },
+  { label: 'Движение товара', icon: 'goods', href: '/journal', needs: 'movements' },
+  { label: 'Движение денег', icon: 'money', href: '/money', needs: 'money' },
+  { label: 'Отчеты', icon: 'reports', href: '/reports', needs: 'reports' },
   {
     label: 'Контрагенты',
     icon: 'parties',
     children: [
-      { label: 'Поставщики', href: { pathname: '/counterparties', params: { kind: 'supplier' } } },
-      { label: 'Клиенты', href: { pathname: '/counterparties', params: { kind: 'customer' } } },
+      {
+        label: 'Поставщики',
+        href: { pathname: '/counterparties', params: { kind: 'supplier' } },
+        needs: 'suppliers',
+      },
+      {
+        label: 'Клиенты',
+        href: { pathname: '/counterparties', params: { kind: 'customer' } },
+        needs: 'clients',
+      },
     ],
   },
   {
@@ -57,20 +74,44 @@ export const MENU: MenuEntry[] = [
     icon: 'company',
     children: [
       { label: 'Настройки', href: '/company' },
-      { label: 'Сотрудники', href: '/staff' },
-      { label: 'Магазины', href: '/stores' },
-      { label: 'Счета', href: '/accounts' },
+      { label: 'Сотрудники', href: '/staff', needs: 'staff' },
+      { label: 'Магазины', href: '/stores', needs: 'stores' },
+      { label: 'Счета', href: '/accounts', needs: 'accounts' },
       { label: 'Лояльность', href: '/loyalty' },
       { label: 'Печатные формы', href: '/print-forms' },
       { label: 'Интернет-витрина', href: '/storefront' },
     ],
   },
   { label: 'Интернет-витрина', icon: 'storefront', href: '/storefront' },
-  { label: 'Интеграции', icon: 'integrations', href: '/integrations' },
+  { label: 'Интеграции', icon: 'integrations', href: '/integrations', needs: 'integrations' },
   { label: 'Лаборатория', icon: 'lab', href: '/lab' },
   { label: 'Тарифы и оплата', icon: 'billing', href: '/billing' },
   { label: 'Корзина', icon: 'trash', href: '/trash', dim: true },
 ];
+
+/**
+ * Меню под права сотрудника.
+ *
+ * Пункты убираются, а не приглушаются: приглушённый пункт обещает, что
+ * раздел появится, а он не появится — его просто не положено видеть.
+ * Раздел, у всех подпунктов которого нет права, исчезает целиком.
+ */
+export function menuFor(
+  allowed: (permission: Permission) => boolean,
+  menu: MenuEntry[] = MENU,
+): MenuEntry[] {
+  return menu
+    .filter((entry) => !entry.needs || allowed(entry.needs))
+    .map((entry) =>
+      entry.children
+        ? {
+            ...entry,
+            children: entry.children.filter((child) => !child.needs || allowed(child.needs)),
+          }
+        : entry,
+    )
+    .filter((entry) => !entry.children || entry.children.length > 0);
+}
 
 /** Нижняя часть меню — она отделена от разделов и не прокручивается вместе с ними. */
 export const MENU_FOOTER: MenuEntry[] = [

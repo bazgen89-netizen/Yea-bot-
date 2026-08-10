@@ -1,5 +1,6 @@
 import type { SqlDriver } from './driver';
 import { openShiftAnywhere } from './shifts';
+import { currentStaffId } from './staff';
 import { cartTotals, findStockIssues } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
@@ -75,8 +76,9 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
     const locationId = input.locationId ?? shiftLocation(db, shift?.id ?? null);
 
     db.run(
-      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
+                          staff_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         totals.total,
@@ -84,6 +86,9 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         input.payment ?? 'cash',
         shift?.id ?? null,
         locationId,
+        // Чек помнит, кто его пробил: без этого отчёт по сотрудникам
+        // считать не из чего.
+        currentStaffId(db),
         now,
       ],
     );

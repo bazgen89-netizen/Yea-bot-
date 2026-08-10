@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { countCounterparties } from '../../src/db/counterparties';
 import { useQuery } from '../../src/state/DatabaseProvider';
+import { usePermissions } from '../../src/state/usePermissions';
+import type { Permission } from '../../src/domain/permissions';
 import { Icon, MenuIcon } from '../../src/ui/icons';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 
@@ -20,6 +22,8 @@ interface MenuRow {
   dim?: boolean;
   /** Ещё не сделано — строка видна, но помечена. */
   soon?: boolean;
+  /** Право, без которого строки не видно. */
+  needs?: Permission;
 }
 
 /**
@@ -34,8 +38,9 @@ interface MenuRow {
 function useSections(): { title: string; rows: MenuRow[] }[] {
   const customers = useQuery((db) => countCounterparties(db, 'customer'));
   const suppliers = useQuery((db) => countCounterparties(db, 'supplier'));
+  const { allowed } = usePermissions();
 
-  return [
+  const sections: { title: string; rows: MenuRow[] }[] = [
     {
       title: 'Компания',
       rows: [
@@ -53,33 +58,35 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
           icon: 'customers',
           count: customers,
           href: { pathname: '/counterparties', params: { kind: 'customer' } },
+          needs: 'clients',
         },
         {
           label: 'Поставщики',
           icon: 'suppliers',
           count: suppliers,
           href: { pathname: '/counterparties', params: { kind: 'supplier' } },
+          needs: 'suppliers',
         },
-        { label: 'Магазины', icon: 'shops', href: '/stores' },
-        { label: 'Счета', icon: 'accounts', href: '/accounts' },
-        { label: 'Сотрудники', icon: 'staff', href: '/staff' },
+        { label: 'Магазины', icon: 'shops', href: '/stores', needs: 'stores' },
+        { label: 'Счета', icon: 'accounts', href: '/accounts', needs: 'accounts' },
+        { label: 'Сотрудники', icon: 'staff', href: '/staff', needs: 'staff' },
         { label: 'Корзина', icon: 'trash', dim: true, href: '/trash' },
       ],
     },
     {
       title: 'Точка продаж',
       rows: [
-        { label: 'Кассы', icon: 'register', href: '/registers' },
-        { label: 'Смены', icon: 'shifts', href: '/shifts' },
+        { label: 'Кассы', icon: 'register', href: '/registers', needs: 'registers' },
+        { label: 'Смены', icon: 'shifts', href: '/shifts', needs: 'shifts' },
         { label: 'Интерфейс кассира', icon: 'person', href: '/cashier' },
       ],
     },
     {
       title: 'Журнал',
       rows: [
-        { label: 'Движение товара', icon: 'shifts', href: '/journal' },
-        { label: 'Движение денег', icon: 'money', href: '/money' },
-        { label: 'Отчёты', icon: 'billing', href: '/reports' },
+        { label: 'Движение товара', icon: 'shifts', href: '/journal', needs: 'movements' },
+        { label: 'Движение денег', icon: 'money', href: '/money', needs: 'money' },
+        { label: 'Отчёты', icon: 'billing', href: '/reports', needs: 'reports' },
       ],
     },
     {
@@ -92,6 +99,15 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
       ],
     },
   ];
+
+  // Раздел, из которого права выбросили все строки, пропадает целиком:
+  // пустой заголовок читается как поломка, а не как запрет.
+  return sections
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => !row.needs || allowed(row.needs)),
+    }))
+    .filter((section) => section.rows.length > 0);
 }
 
 export default function MenuScreen() {

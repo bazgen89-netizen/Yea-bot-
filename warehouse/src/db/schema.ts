@@ -248,6 +248,39 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_products_expires ON products(expires_at);
   `,
+
+  // 9 — сотрудники и права
+  `
+  CREATE TABLE staff (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    phone       TEXT,
+    email       TEXT,
+    -- Пять ролей исходного приложения. Роль задаёт права по умолчанию,
+    -- а не заменяет их: у продавца одного магазина и продавца другого
+    -- набор может отличаться.
+    role        TEXT    NOT NULL DEFAULT 'seller'
+                        CHECK (role IN ('owner','manager','cashier','storekeeper','seller')),
+    -- Права списком через запятую; пусто — берутся от роли.
+    permissions TEXT,
+    -- Код, который сотрудник набирает у кассы. Не пароль: файл базы на
+    -- планшете читается целиком, и хранить здесь что-то, охраняющее деньги,
+    -- было бы обманом. Он защищает от чужого нажатия, а не от злого умысла.
+    pin         TEXT,
+    location_id INTEGER REFERENCES locations(id),
+    archived    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_staff_archived ON staff(archived);
+
+  -- Кто провёл документ. У всего, что заведено до появления сотрудников, пусто.
+  ALTER TABLE docs       ADD COLUMN staff_id INTEGER REFERENCES staff(id);
+  ALTER TABLE sales      ADD COLUMN staff_id INTEGER REFERENCES staff(id);
+  ALTER TABLE money_docs ADD COLUMN staff_id INTEGER REFERENCES staff(id);
+
+  CREATE INDEX idx_sales_staff ON sales(staff_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

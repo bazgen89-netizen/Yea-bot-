@@ -444,3 +444,56 @@ export function agentsReport(db: SqlDriver, period: Period): AgentReport[] {
     average: row.salesCount > 0 ? Math.round(row.salesSum / row.salesCount) : 0,
   }));
 }
+
+export interface StaffReport {
+  name: string;
+  role: string;
+  salesCount: number;
+  returnCount: number;
+  /** Сумма пробитого без возвратов, копейки. */
+  salesSum: number;
+  /** Средний чек, копейки. */
+  average: number;
+  /** Сумма выданных скидок, копейки. */
+  discounts: number;
+  /** Позиций в чеке в среднем, сотые доли штуки: 250 = 2,5. */
+  itemsPerReceipt: number;
+}
+
+/**
+ * Отчёт по сотрудникам.
+ *
+ * Раньше отдавал пустую таблицу, потому что чек не помнил, кто его пробил.
+ * Теперь помнит — но только с того дня, как завели сотрудников: у чеков,
+ * пробитых раньше, сотрудника нет и приписать его задним числом нельзя.
+ */
+export function staffReport(db: SqlDriver, period: Period): StaffReport[] {
+  const rows = db.all<Omit<StaffReport, 'average' | 'itemsPerReceipt'> & { items: number }>(
+    `SELECT st.name,
+            st.role,
+            COALESCE(SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END), 0) AS salesCount,
+            COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END), 0) AS returnCount,
+            COALESCE(SUM(CASE WHEN r.id IS NULL THEN s.total ELSE 0 END), 0) AS salesSum,
+            COALESCE(SUM(CASE WHEN r.id IS NULL THEN s.discount ELSE 0 END), 0) AS discounts,
+            COALESCE(SUM(CASE WHEN r.id IS NULL
+                              THEN (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id)
+                              ELSE 0 END), 0) AS items
+     FROM staff st
+     JOIN sales s ON s.staff_id = st.id AND s.created_at >= ? AND s.created_at < ?
+     LEFT JOIN stock_moves r ON r.sale_id = s.id AND r.reason = 'return'
+     GROUP BY st.id
+     ORDER BY salesSum DESC`,
+    [period.from, period.to],
+  );
+
+  return rows.map((row) => ({
+    name: row.name,
+    role: row.role,
+    salesCount: row.salesCount,
+    returnCount: row.returnCount,
+    salesSum: row.salesSum,
+    discounts: row.discounts,
+    average: row.salesCount > 0 ? Math.round(row.salesSum / row.salesCount) : 0,
+    itemsPerReceipt: row.salesCount > 0 ? Math.round((row.items * 100) / row.salesCount) : 0,
+  }));
+}

@@ -6,12 +6,14 @@ import {
   motionByProduct,
   salesByCategory,
   salesSummary,
+  staffReport,
   stockOverview,
   topProducts,
   type Period,
 } from './reports';
 import { formatDayLabel, groupByMonth, groupByWeek } from '../domain/grouping';
 import { formatMoneyWeb } from '../domain/money';
+import { ROLE_LABEL, type Role } from '../domain/permissions';
 import { formatQtyWeb } from '../domain/qty';
 
 /**
@@ -252,16 +254,26 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: 'staff',
     title: 'Отчёт по сотрудникам',
-    note: 'Сотрудников в базе пока нет — все документы заводит владелец.',
+    note: 'Кто сколько пробил. Чеки, пробитые до появления сотрудников, ни за кем не числятся.',
     columns: [
       { title: 'Сотрудник', width: 300 },
       { title: 'Продаж', width: 130, numeric: true },
       { title: 'Возвратов', width: 140, numeric: true },
+      { title: 'Сумма продаж', width: 170, numeric: true },
       { title: 'Средний чек', width: 170, numeric: true },
       { title: 'Сумма скидок', width: 170, numeric: true },
       { title: 'Позиций в чеке', width: 170, numeric: true },
     ],
-    rows: () => [],
+    rows: (db, period) =>
+      staffReport(db, period).map((row) => [
+        `${row.name} · ${ROLE_LABEL[row.role as Role] ?? row.role}`,
+        String(row.salesCount),
+        String(row.returnCount),
+        money(row.salesSum),
+        money(row.average),
+        money(row.discounts),
+        (row.itemsPerReceipt / 100).toFixed(2).replace('.', ','),
+      ]),
   },
   {
     id: 'stock',

@@ -2,9 +2,11 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CashierMenu } from './CashierMenu';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createSale } from '../../db/sales';
+import { openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { Id, ProductWithStock } from '../../domain/types';
@@ -27,9 +29,11 @@ export function Cashier() {
 
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Id | null>(null);
+  const [menu, setMenu] = useState(false);
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
+  const shift = useQuery((database) => openShiftAnywhere(database));
   const shop = locations[0]?.name ?? 'Магазин';
 
   const pay = () => {
@@ -140,7 +144,7 @@ export function Cashier() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Меню"
-          onPress={() => router.push('/')}
+          onPress={() => setMenu(true)}
           style={styles.bottomMenu}
         >
           <Icon.menu size={24} color={pos.text} />
@@ -148,7 +152,7 @@ export function Cashier() {
         </Pressable>
 
         <Text style={styles.bottomShop} numberOfLines={1}>
-          {shop} / Смена #1
+          {shop} / {shift ? `Смена #${shift.id}` : 'Смена закрыта'}
         </Text>
 
         <Text style={styles.bottomClock}>{today()}</Text>
@@ -163,6 +167,8 @@ export function Cashier() {
           <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
         </Pressable>
       </View>
+
+      <CashierMenu visible={menu} onClose={() => setMenu(false)} />
     </View>
   );
 }

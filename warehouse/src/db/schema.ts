@@ -222,6 +222,32 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_sales_shift ON sales(shift_id);
   `,
+
+  // 8 — поля карточки товара, которых не хватало против исходного приложения
+  `
+  -- Вид позиции. Так их описывает само исходное приложение:
+  --   product — «продукт, имеющий остаток, который необходимо восполнять»
+  --   service — «продукт, не имеющий остатка на складе»
+  --   set     — «продукт, состоящий из нескольких других»
+  ALTER TABLE products ADD COLUMN kind TEXT NOT NULL DEFAULT 'product'
+    CHECK (kind IN ('product','service','set'));
+
+  -- Код товара — отдельно от артикула: артикул поставщика, код внутренний.
+  ALTER TABLE products ADD COLUMN code TEXT;
+
+  -- Ставка НДС в сотых долях процента: 2000 = 20 %. NULL — без НДС.
+  ALTER TABLE products ADD COLUMN vat_bp INTEGER;
+
+  -- Срок годности, YYYY-MM-DD. На нём держатся три фильтра каталога.
+  ALTER TABLE products ADD COLUMN expires_at TEXT;
+
+  -- Скидка на товар в сотых долях процента: 500 = 5 %. Хранится процентом,
+  -- а не готовой ценой: цена продажи меняется, и записанная цена со скидкой
+  -- разошлась бы с ней молча.
+  ALTER TABLE products ADD COLUMN discount_bp INTEGER NOT NULL DEFAULT 0;
+
+  CREATE INDEX idx_products_expires ON products(expires_at);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

@@ -8,10 +8,31 @@ export interface Category {
   name: string;
 }
 
+/**
+ * Вид позиции — так их описывает исходное приложение:
+ * товар имеет остаток, услуга не имеет, комплект состоит из других.
+ */
+export type ProductKind = 'product' | 'service' | 'set';
+
+export const PRODUCT_KIND_LABEL: Record<ProductKind, string> = {
+  product: 'Товар',
+  service: 'Услуга',
+  set: 'Комплект',
+};
+
+export const PRODUCT_KIND_HINT: Record<ProductKind, string> = {
+  product: 'Продукт, имеющий остаток, который необходимо восполнять',
+  service: 'Продукт, не имеющий остатка на складе',
+  set: 'Продукт, состоящий из нескольких других',
+};
+
 export interface Product {
   id: Id;
   name: string;
+  kind: ProductKind;
   sku: string | null;
+  /** Внутренний код товара — отдельно от артикула поставщика. */
+  code: string | null;
   barcode: string | null;
   category_id: Id | null;
   unit: string;
@@ -21,6 +42,12 @@ export interface Product {
   sale_price: Kopecks;
   /** Порог «заканчивается», тысячные. 0 = не следить. */
   min_qty: Milli;
+  /** Ставка НДС в сотых долях процента: 2000 = 20 %. NULL — без НДС. */
+  vat_bp: number | null;
+  /** Срок годности, YYYY-MM-DD. */
+  expires_at: string | null;
+  /** Скидка на товар в сотых долях процента: 500 = 5 %. */
+  discount_bp: number;
   photo_uri: string | null;
   archived: number;
   created_at: string;

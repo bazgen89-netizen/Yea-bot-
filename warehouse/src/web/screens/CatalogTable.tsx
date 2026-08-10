@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { FilterPanel } from '../FilterPanel';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { listLocations, stockByLocation } from '../../db/locations';
 import { listProducts } from '../../db/products';
@@ -9,6 +10,7 @@ import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import { pluralize } from '../../domain/plural';
 import type { ProductWithStock } from '../../domain/types';
+import { useCatalogFilters } from '../../state/catalogFilters';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText } from '../../ui/webTheme';
@@ -26,8 +28,14 @@ export function CatalogTable() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  const products = useQuery((db) => listProducts(db, { search }), [search]);
+  const filters = useCatalogFilters();
+
+  const products = useQuery(
+    (db) => listProducts(db, { search, presets: filters.presets }),
+    [search, filters.presets],
+  );
   const locations = useQuery((db) => listLocations(db));
   const stock = useQuery((db) => stockByLocation(db));
 
@@ -64,7 +72,15 @@ export function CatalogTable() {
           }}
           placeholder="Поиск по наименованию,"
         />
-        <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
+        <ToolButton
+          label={filters.active > 0 ? `Фильтр: ${filters.active}` : 'Фильтр'}
+          tone={filters.active > 0 ? 'blueOutline' : 'plain'}
+          icon={<WebIcon.funnel color={filters.active > 0 ? web.link : web.text} />}
+          onPress={() => {
+            setFilterOpen(true);
+            setPage(1);
+          }}
+        />
         <ToolButton
           label={`Действия ${products.length} поз.`}
           trailing={<WebIcon.chevronDown color={web.text} />}
@@ -110,6 +126,12 @@ export function CatalogTable() {
           </ScrollView>
         </View>
       </ScrollView>
+
+      <FilterPanel
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        filters={filters}
+      />
 
       <Pager page={current} pages={pages} onPage={setPage} />
 
@@ -169,7 +191,9 @@ function ProductRow({
       <Text style={[webText.cellNumber, { width: price.width }]}>
         {formatMoneyWeb(product.sale_price)}
       </Text>
-      <Text style={[webText.cellNumber, { width: discount.width }]}>0</Text>
+      <Text style={[webText.cellNumber, { width: discount.width }]}>
+        {product.discount_bp ? product.discount_bp / 100 : 0}
+      </Text>
 
       {locations.map((id, index) => {
         const qty = stock?.get(id) ?? 0;
@@ -192,11 +216,12 @@ function ProductRow({
 }
 
 /**
- * Код товара в выгрузке — короткий номер вроде «01444». Своей колонки под него
- * в базе телефона нет, он лежит в артикуле; пока показываем сам идентификатор.
+ * Код товара — короткий номер вроде «01444». Если у товара его не задали,
+ * показываем номер записи в том же виде: колонка не должна пустовать, по ней
+ * товар ищут вслух.
  */
 function codeOf(product: ProductWithStock): string {
-  return String(product.id).padStart(5, '0');
+  return product.code ?? String(product.id).padStart(5, '0');
 }
 
 const styles = StyleSheet.create({

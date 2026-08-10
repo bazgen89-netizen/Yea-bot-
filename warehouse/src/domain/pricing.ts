@@ -1,0 +1,115 @@
+/**
+ * Цена товара: скидка, наценка, маржа, НДС.
+ *
+ * Проценты живут в сотых долях процента (500 = 5 %) — как скидка клиента в
+ * базе. Дробных процентов не бывает: 5,5 % — это 550, а не 5.5, и умножение
+ * на копейки остаётся целочисленным.
+ */
+import type { Kopecks } from './money';
+
+/** Сотые доли процента: 500 = 5 %, 2000 = 20 %. */
+export type Bp = number;
+
+/** 500 -> "5 %", 550 -> "5,5 %". */
+export function formatPercent(bp: Bp): string {
+  const whole = Math.trunc(bp / 100);
+  const frac = Math.abs(bp % 100);
+  if (frac === 0) return `${whole} %`;
+  const digits = frac % 10 === 0 ? String(frac / 10) : String(frac).padStart(2, '0');
+  return `${whole},${digits} %`;
+}
+
+/** "5", "5,5", "5 %" -> сотые доли процента. null, если не число. */
+export function parsePercent(input: string): Bp | null {
+  const cleaned = input.replace(/[\s %]/g, '').replace(',', '.');
+  if (cleaned === '') return null;
+  if (!/^-?\d*\.?\d*$/.test(cleaned)) return null;
+
+  const value = Number(cleaned);
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}
+
+/** Цена после скидки. Скидка больше 100 % цену в минус не уводит. */
+export function priceWithDiscount(price: Kopecks, discountBp: Bp): Kopecks {
+  if (discountBp <= 0) return price;
+  const capped = Math.min(discountBp, 10000);
+  return price - Math.round((price * capped) / 10000);
+}
+
+/**
+ * Наценка — прибыль к себестоимости: сколько накинули сверху закупки.
+ * При нулевой себестоимости не определена: делить не на что.
+ */
+export function markupBp(cost: Kopecks, sale: Kopecks): Bp | null {
+  if (cost === 0) return null;
+  return Math.round(((sale - cost) / cost) * 10000);
+}
+
+/**
+ * Маржа — прибыль к выручке: какая доля цены остаётся магазину.
+ * При нулевой цене не определена.
+ */
+export function marginBp(cost: Kopecks, sale: Kopecks): Bp | null {
+  if (sale === 0) return null;
+  return Math.round(((sale - cost) / sale) * 10000);
+}
+
+/** Цена продажи, дающая заданную наценку к себестоимости. */
+export function priceFromMarkup(cost: Kopecks, bp: Bp): Kopecks {
+  return cost + Math.round((cost * bp) / 10000);
+}
+
+/**
+ * НДС, уже сидящий в цене. В рознице цена на ценнике — с налогом,
+ * поэтому налог из неё выделяется, а не начисляется сверху.
+ */
+export function vatInPrice(price: Kopecks, vatBp: Bp | null): Kopecks {
+  if (!vatBp) return 0;
+  return Math.round((price * vatBp) / (10000 + vatBp));
+}
+
+/** Ставки НДС, которые предлагает исходное приложение. */
+export const VAT_RATES: { label: string; bp: Bp | null }[] = [
+  { label: 'Без НДС', bp: null },
+  { label: '0 %', bp: 0 },
+  { label: '5 %', bp: 500 },
+  { label: '7 %', bp: 700 },
+  { label: '10 %', bp: 1000 },
+  { label: '20 %', bp: 2000 },
+];
+
+/** Сегодняшняя дата в виде YYYY-MM-DD — в этом виде хранится срок годности. */
+export function today(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Дата через сколько-то дней, тем же форматом. */
+export function dayShift(days: number, from: string = today()): string {
+  const date = new Date(`${from}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** «2026-08-10» -> «10.08.2026». Пусто — прочерк. */
+export function formatDate(value: string | null): string {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) return value;
+  return `${day}.${month}.${year}`;
+}
+
+/** «10.08.2026», «10/08/2026», «2026-08-10» -> «2026-08-10». null, если не дата. */
+export function parseDate(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (iso) return trimmed;
+
+  const human = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(trimmed);
+  if (!human) return null;
+
+  const [, day, month, year] = human;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}

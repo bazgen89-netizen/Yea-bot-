@@ -16,9 +16,11 @@ import { formatMoney } from '../../src/domain/money';
 import { formatQty } from '../../src/domain/qty';
 import { pluralize } from '../../src/domain/plural';
 import type { ProductWithStock } from '../../src/domain/types';
+import { useCatalogFilters } from '../../src/state/catalogFilters';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
 import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
+import { FilterSheet } from '../../src/ui/FilterSheet';
 import { Icon } from '../../src/ui/icons';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 import { useDesktop } from '../../src/ui/useDesktop';
@@ -48,15 +50,17 @@ function CatalogList() {
   const { scanBarcode } = useScanner();
 
   const [search, setSearch] = useState('');
-  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [direction, setDirection] = useState<SortDirection>('asc');
   const [showGroups, setShowGroups] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const filters = useCatalogFilters();
 
   const products = useQuery(
-    (database) => listProducts(database, { search, lowStockOnly }),
-    [search, lowStockOnly],
+    (database) => listProducts(database, { search, presets: filters.presets }),
+    [search, filters.presets],
   );
 
   const sorted = sortProducts(products, sortField, direction);
@@ -81,10 +85,10 @@ function CatalogList() {
         actions={
           <>
             <HeaderAction
-              label={lowStockOnly ? 'Показать все товары' : 'Только заканчивающиеся'}
-              onPress={() => setLowStockOnly((value) => !value)}
+              label={filters.active > 0 ? `Фильтр: ${filters.active}` : 'Фильтр'}
+              onPress={() => setFilterOpen(true)}
             >
-              <Icon.filter color={lowStockOnly ? '#FFD166' : '#FFFFFF'} size={22} />
+              <Icon.filter color={filters.active > 0 ? '#FFD166' : '#FFFFFF'} size={22} />
             </HeaderAction>
             <HeaderAction label="Сканировать штрихкод" onPress={scanAndOpen}>
               <Icon.scan color="#FFFFFF" size={23} />
@@ -109,6 +113,23 @@ function CatalogList() {
         <Icon.mic />
       </View>
 
+      {/* Что именно отобрано — иначе короткий список выглядит как пропавшие товары. */}
+      {filters.active > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Изменить фильтр"
+          onPress={() => setFilterOpen(true)}
+          style={styles.filterLine}
+        >
+          <Text style={styles.filterText} numberOfLines={2}>
+            {filters.labels.join(' · ')}
+          </Text>
+          <Text style={styles.filterReset} onPress={filters.clear}>
+            Сбросить
+          </Text>
+        </Pressable>
+      ) : null}
+
       <FlatList
         data={sorted}
         keyExtractor={(item) => String(item.id)}
@@ -121,6 +142,12 @@ function CatalogList() {
             </Text>
           </View>
         }
+      />
+
+      <FilterSheet
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        filters={filters}
       />
 
       <ViewMenu
@@ -308,6 +335,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   search: { flex: 1, fontSize: 17, color: colors.text, paddingVertical: spacing.xs },
+  filterLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  filterText: { flex: 1, fontSize: 13, color: colors.textMuted },
+  filterReset: { fontSize: 13, color: colors.accent },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

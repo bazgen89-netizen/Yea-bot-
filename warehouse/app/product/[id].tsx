@@ -15,11 +15,27 @@ import {
 } from '../../src/db/products';
 import { adjustStock, listMoves } from '../../src/db/stock';
 import { formatMoney, formatMoneyWithSign, parseMoney } from '../../src/domain/money';
+import {
+  VAT_RATES,
+  formatDate,
+  formatPercent,
+  markupBp,
+  marginBp,
+  parseDate,
+  parsePercent,
+  priceFromMarkup,
+  priceWithDiscount,
+} from '../../src/domain/pricing';
 import { formatQty, formatQtyWithUnit, parseQty } from '../../src/domain/qty';
-import type { MoveReason } from '../../src/domain/types';
+import {
+  PRODUCT_KIND_HINT,
+  PRODUCT_KIND_LABEL,
+  type MoveReason,
+  type ProductKind,
+} from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useScanner } from '../../src/state/ScannerProvider';
-import { Badge, Button, Card, Field, Row } from '../../src/ui/components';
+import { Badge, Button, Card, Choice, Field, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 import { confirm, say } from '../../src/ui/alert';
 
@@ -35,7 +51,7 @@ export default function ProductScreen() {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { scanBarcode } = useScanner();
-  const params = useLocalSearchParams<{ id: string; barcode?: string }>();
+  const params = useLocalSearchParams<{ id: string; barcode?: string; type?: string }>();
 
   const isNew = params.id === 'new';
   const productId = isNew ? null : Number(params.id);
@@ -47,7 +63,11 @@ export default function ProductScreen() {
   const categories = useQuery((database) => listCategories(database));
 
   const [name, setName] = useState(product?.name ?? '');
+  const [kind, setKind] = useState<ProductKind>(
+    product?.kind ?? ((params.type as ProductKind) || 'product'),
+  );
   const [sku, setSku] = useState(product?.sku ?? '');
+  const [code, setCode] = useState(product?.code ?? '');
   const [barcode, setBarcode] = useState(product?.barcode ?? params.barcode ?? '');
   const [unit, setUnit] = useState(product?.unit ?? 'шт');
   const [category, setCategory] = useState(product?.category_name ?? '');
@@ -57,8 +77,27 @@ export default function ProductScreen() {
   const [salePrice, setSalePrice] = useState(
     product ? formatMoney(product.sale_price) : '',
   );
+  const [discount, setDiscount] = useState(
+    product?.discount_bp ? String(product.discount_bp / 100).replace('.', ',') : '',
+  );
+  const [vatBp, setVatBp] = useState<number | null>(product?.vat_bp ?? null);
+  const [expires, setExpires] = useState(product ? formatDateInput(product.expires_at) : '');
   const [minQty, setMinQty] = useState(product?.min_qty ? formatQty(product.min_qty) : '');
   const [photoUri, setPhotoUri] = useState(product?.photo_uri ?? null);
+
+  // Наценка и маржа не хранятся: это две записи одной и той же пары цен.
+  // Считаются на лету, чтобы не разойтись с ценами после правки.
+  const cost = costPrice.trim() ? (parseMoney(costPrice) ?? 0) : 0;
+  const sale = salePrice.trim() ? (parseMoney(salePrice) ?? 0) : 0;
+  const markup = markupBp(cost, sale);
+  const margin = marginBp(cost, sale);
+
+  /** Ввели наценку — подставляем цену продажи. Так это работает в исходнике. */
+  function applyMarkup(input: string) {
+    const bp = parsePercent(input);
+    if (bp === null || cost === 0) return;
+    setSalePrice(formatMoney(priceFromMarkup(cost, bp)));
+  }
 
   function save() {
     if (!name.trim()) {
@@ -66,24 +105,36 @@ export default function ProductScreen() {
       return;
     }
 
-    const cost = costPrice.trim() ? parseMoney(costPrice) : 0;
-    const sale = salePrice.trim() ? parseMoney(salePrice) : 0;
+    const parsedCost = costPrice.trim() ? parseMoney(costPrice) : 0;
+    const parsedSale = salePrice.trim() ? parseMoney(salePrice) : 0;
     const min = minQty.trim() ? parseQty(minQty) : 0;
+    const discountBp = discount.trim() ? parsePercent(discount) : 0;
 
-    if (cost === null || sale === null || min === null) {
-      say('Проверьте числа', 'Цены и минимальный остаток должны быть числами.');
+    if (parsedCost === null || parsedSale === null || min === null || discountBp === null) {
+      say('Проверьте числа', 'Цены, скидка и минимальный остаток должны быть числами.');
+      return;
+    }
+
+    const expiresAt = expires.trim() ? parseDate(expires) : null;
+    if (expires.trim() && expiresAt === null) {
+      say('Проверьте срок годности', 'Дата пишется как 31.12.2026.');
       return;
     }
 
     const input: ProductInput = {
       name: name.trim(),
+      kind,
       sku: sku.trim() || null,
+      code: code.trim() || null,
       barcode: barcode.trim() || null,
       category_id: category.trim() ? ensureCategory(db, category) : null,
       unit: unit.trim() || 'шт',
-      cost_price: cost,
-      sale_price: sale,
+      cost_price: parsedCost,
+      sale_price: parsedSale,
       min_qty: min,
+      vat_bp: vatBp,
+      expires_at: expiresAt,
+      discount_bp: discountBp,
       photo_uri: photoUri,
     };
 
@@ -141,6 +192,17 @@ export default function ProductScreen() {
           )}
         </Pressable>
 
+        <Choice
+          label="Вид"
+          value={kind}
+          options={(Object.keys(PRODUCT_KIND_LABEL) as ProductKind[]).map((value) => ({
+            value,
+            label: PRODUCT_KIND_LABEL[value],
+          }))}
+          onChange={setKind}
+        />
+        <Text style={[text.muted, styles.hint]}>{PRODUCT_KIND_HINT[kind]}</Text>
+
         <Field label="Название" value={name} onChangeText={setName} placeholder="Шу пуэр 2019" />
         <Field
           label="Категория"
@@ -163,13 +225,20 @@ export default function ProductScreen() {
             containerStyle={styles.pairInput}
           />
           <Field
-            label="Единица"
-            value={unit}
-            onChangeText={setUnit}
-            placeholder="шт / кг / г"
+            label="Код товара"
+            value={code}
+            onChangeText={setCode}
+            placeholder="0001"
             containerStyle={styles.pairInput}
           />
         </View>
+
+        <Field
+          label="Единица"
+          value={unit}
+          onChangeText={setUnit}
+          placeholder="шт / кг / г"
+        />
 
         <Text style={text.muted}>Штрихкод</Text>
         <View style={styles.barcodeRow}>
@@ -214,6 +283,53 @@ export default function ProductScreen() {
           />
         </View>
 
+        <View style={styles.pair}>
+          <Field
+            label="Наценка"
+            defaultValue={markup === null ? '' : String(markup / 100).replace('.', ',')}
+            onEndEditing={(event) => applyMarkup(event.nativeEvent.text)}
+            placeholder="0"
+            keyboardType="decimal-pad"
+            containerStyle={styles.pairInput}
+            hint={
+              cost === 0
+                ? 'Считается от себестоимости'
+                : `Маржа ${margin === null ? '—' : formatPercent(margin)}`
+            }
+          />
+          <Field
+            label="Скидка"
+            value={discount}
+            onChangeText={setDiscount}
+            placeholder="0"
+            keyboardType="decimal-pad"
+            containerStyle={styles.pairInput}
+            hint={
+              discountValue(discount) > 0
+                ? `Цена со скидкой ${formatMoney(priceWithDiscount(sale, discountValue(discount)))}`
+                : 'Проценты от цены продажи'
+            }
+          />
+        </View>
+
+        <Choice
+          label="НДС"
+          value={vatBp === null ? 'none' : String(vatBp)}
+          options={VAT_RATES.map((rate) => ({
+            value: rate.bp === null ? 'none' : String(rate.bp),
+            label: rate.label,
+          }))}
+          onChange={(value) => setVatBp(value === 'none' ? null : Number(value))}
+        />
+
+        <Field
+          label="Срок годности"
+          value={expires}
+          onChangeText={setExpires}
+          placeholder="31.12.2026"
+          hint="Пусто — за сроком не следим"
+        />
+
         <Field
           label="Сообщать, когда останется меньше"
           value={minQty}
@@ -226,8 +342,9 @@ export default function ProductScreen() {
         <Button title="Сохранить" onPress={save} />
       </Card>
 
-      {product ? <StockCard productId={product.id} /> : null}
-      {product ? <HistoryCard productId={product.id} /> : null}
+      {/* У услуги остатка нет по определению — карточке остатка неоткуда взяться. */}
+      {product && product.kind !== 'service' ? <StockCard productId={product.id} /> : null}
+      {product && product.kind !== 'service' ? <HistoryCard productId={product.id} /> : null}
 
       {product ? (
         <Button
@@ -254,6 +371,16 @@ export default function ProductScreen() {
       ) : null}
     </ScrollView>
   );
+}
+
+/** Срок годности в поле ввода — в том же виде, в каком его печатают: 31.12.2026. */
+function formatDateInput(value: string | null): string {
+  return value ? formatDate(value) : '';
+}
+
+/** Скидка из поля ввода в сотые доли процента; мусор считается нулём. */
+function discountValue(input: string): number {
+  return (input.trim() ? parsePercent(input) : 0) ?? 0;
 }
 
 /** Текущий остаток и пересчёт по факту. */

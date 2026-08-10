@@ -3,9 +3,10 @@ import { LANGUAGES, isLanguage, labelFor } from '../languages';
 import { coverage, translate, translatePath } from '../translate';
 
 describe('языки', () => {
-  it('те же, что в исходном приложении', () => {
-    expect(LANGUAGES.map((l) => l.code)).toEqual(['ru', 'en', 'uk', 'az', 'kk', 'ky', 'uz', 'tr']);
+  it('свой набор: армянский вместо турецкого, азербайджанского и украинского', () => {
+    expect(LANGUAGES.map((l) => l.code)).toEqual(['ru', 'hy', 'en', 'kk', 'ky', 'uz']);
     expect(labelFor('kk')).toBe('Қазақ');
+    expect(labelFor('hy')).toBe('Հայերեն');
   });
 
   it('чужой код языком не считается', () => {
@@ -22,7 +23,7 @@ describe('перевод', () => {
 
   it('переводит известную строку', () => {
     expect(translate('Главная', 'en')).toBe('Home');
-    expect(translate('Клиенты', 'tr')).toBe('Müşteriler');
+    expect(translate('Клиенты', 'hy')).toBe('Հաճախորդներ');
   });
 
   it('неизвестную строку отдаёт по-русски, а не пустой', () => {

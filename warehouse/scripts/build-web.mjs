@@ -131,6 +131,12 @@ for (const [file, weight] of ROBOTO) {
 
 page = replaceOnce(page, '</head>', `<style id="roboto">${faces.join('')}</style></head>`);
 
+// Сборка для показа наполняется примером. Обычная приходит пустой: каталог
+// в ней заводит тот, кто её поставил, а не тот, кто собирал.
+if (process.env.DEMO === '1') {
+  page = replaceOnce(page, '</head>', '<script>window.__DEMO__=true</script></head>');
+}
+
 // Шрифты иконок бандл грузит по ссылке — подменяем ссылки на сами шрифты.
 let inlined = 0;
 for (const file of await walk(join(dist, 'assets'))) {

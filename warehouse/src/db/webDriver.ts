@@ -129,8 +129,16 @@ export async function openWebDatabase(): Promise<SqlDriver> {
 
   const driver = createWebDriver(db, save);
   migrate(driver);
+
   // Пример данных при запуске не грузится: программой пользуется не один
   // магазин, и чужой каталог в свежей установке пришлось бы вычищать руками.
+  // Исключение — сборка для показа: в ней флаг ставится при сборке, и пустая
+  // витрина не имела бы смысла.
+  if ((globalThis as { __DEMO__?: boolean }).__DEMO__) {
+    const { seedCatalog } = await import('./seed');
+    seedCatalog(driver);
+  }
+
   save();
 
   return driver;

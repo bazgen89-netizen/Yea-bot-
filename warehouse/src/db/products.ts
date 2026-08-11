@@ -368,3 +368,92 @@ function emptyToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 }
+
+/**
+ * Состав комплекта: из каких товаров он собран.
+ *
+ * Хранится отдельной таблицей, а не строкой в карточке: позиция состава — это
+ * ссылка на товар, и цена у неё берётся из этого товара. Список в тексте
+ * разошёлся бы с ценами на следующий день.
+ */
+export interface SetItem {
+  product_id: Id;
+  name: string;
+  unit: string;
+  /** Сколько единиц входит в комплект, тысячные. */
+  qty: number;
+  /** Цена продажи входящего товара на сейчас, копейки. */
+  price: number;
+  /** Цена × количество, копейки. */
+  sum: number;
+}
+
+export function setItems(db: SqlDriver, setId: Id): SetItem[] {
+  return db.all<SetItem>(
+    `SELECT s.product_id,
+            p.name,
+            p.unit,
+            s.qty,
+            p.sale_price AS price,
+            CAST(ROUND(s.qty * p.sale_price / 1000.0) AS INTEGER) AS sum
+     FROM product_set_items s
+     JOIN products p ON p.id = s.product_id
+     WHERE s.set_id = ?
+     ORDER BY p.name COLLATE NOCASE`,
+    [setId],
+  );
+}
+
+/** Заменяет состав комплекта целиком: частичная правка тут только путает. */
+export function saveSetItems(
+  db: SqlDriver,
+  setId: Id,
+  items: { product_id: Id; qty: number }[],
+): void {
+  db.tx(() => {
+    db.run('DELETE FROM product_set_items WHERE set_id = ?', [setId]);
+    for (const item of items) {
+      if (item.qty <= 0) continue;
+      db.run(
+        'INSERT INTO product_set_items (set_id, product_id, qty) VALUES (?, ?, ?)',
+        [setId, item.product_id, item.qty],
+      );
+    }
+  });
+}
+
+/** Цена продажи товара в конкретном магазине; пусто — цена общая. */
+export function storePrices(db: SqlDriver, productId: Id): Map<Id, number> {
+  const rows = db.all<{ location_id: Id; price: number }>(
+    'SELECT location_id, price FROM product_prices WHERE product_id = ?',
+    [productId],
+  );
+  return new Map(rows.map((row) => [row.location_id, row.price]));
+}
+
+export function saveStorePrices(
+  db: SqlDriver,
+  productId: Id,
+  prices: Map<Id, number | null>,
+): void {
+  db.tx(() => {
+    for (const [locationId, price] of prices) {
+      // Пустая цена означает «как у всех» — строку тогда просто удаляем,
+      // иначе у товара навсегда осталась бы копия общей цены, которая
+      // перестанет меняться вместе с ней.
+      if (price === null) {
+        db.run('DELETE FROM product_prices WHERE product_id = ? AND location_id = ?', [
+          productId,
+          locationId,
+        ]);
+        continue;
+      }
+
+      db.run(
+        `INSERT INTO product_prices (product_id, location_id, price) VALUES (?, ?, ?)
+         ON CONFLICT(product_id, location_id) DO UPDATE SET price = excluded.price`,
+        [productId, locationId, price],
+      );
+    }
+  });
+}

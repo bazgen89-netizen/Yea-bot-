@@ -37,6 +37,7 @@ import {
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { ProductView } from './ProductView';
 import { ToolButton, Toolbar } from '../Table';
 
 /**
@@ -67,10 +68,16 @@ export function ProductCard({ id }: { id: string }) {
   const isNew = id === 'new';
   const productId = isNew ? null : Number(id);
 
+  // Существующий товар сперва показывается, а не открывается на правку —
+  // так же, как у него: `/catalog/list/m/get/:id` смотрит, `/m/update/:id`
+  // редактирует. Чаще всего в карточку заходят посмотреть остаток и цену.
+  const [editing, setEditing] = useState(isNew);
+
   const product = useQuery(
     (database) => (productId ? getProduct(database, productId) : null),
     [productId],
   );
+
   const categories = useQuery((database) => listCategories(database));
   const locations = useQuery((database) => listLocations(database));
   const stock = useQuery((database) => stockByLocation(database));
@@ -148,6 +155,16 @@ export function ProductCard({ id }: { id: string }) {
 
   const byShop = productId ? stock.get(productId) : undefined;
   const total = locations.reduce((sum, shop) => sum + (byShop?.get(shop.id) ?? 0), 0);
+
+  if (productId && !editing) {
+    return (
+      <ProductView
+        id={productId}
+        onClose={() => router.back()}
+        onEdit={() => setEditing(true)}
+      />
+    );
+  }
 
   return (
     <View style={styles.screen}>

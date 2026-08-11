@@ -122,6 +122,28 @@ export const HEADER_HEIGHT = 64;
  */
 export const REM = 14;
 
+/**
+ * Размеры формы — из Semantic UI, на котором собран оригинал.
+ *
+ *   .ui.form .field>label   .92857143em = 13, начертание 700, обычный регистр
+ *   .ui.form input          14, отступы .67857143em 1em = 9,5 и 14,
+ *                           рамка 1px rgba(34,36,38,.15), радиус .28571429rem = 4
+ *   .ui.form .field         отступ снизу 1em = 14
+ *   .ui.form .fields        поля по 0,5em с каждой стороны — между ними 14
+ *   h3                      1.28571429rem = 18, начертание 700
+ *   .ui.divider             1 пиксель, отступы 1rem = 14
+ *   .ui.toggle.checkbox     дорожка 3,5rem × 1,5rem = 49 × 21, кружок 21,
+ *                           включённая — #2185D0, выключенная — rgba(0,0,0,.05)
+ *   .panel                  отступы 35 сверху и снизу, 100 по бокам
+ *
+ * Раньше подписи в карточке были 12 пикселей прописными серым — это было
+ * придумано, а не снято. У него они чёрные, полужирные и обычным регистром.
+ */
+export const FORM_BORDER = 'rgba(34,36,38,0.15)';
+export const FORM_LABEL = 'rgba(0,0,0,0.87)';
+export const FORM_INPUT_HEIGHT = 38;
+export const FORM_GAP = 14;
+
 export const webText = StyleSheet.create({
   /** Заголовок страницы — `h1`, 1.9rem при базе 14. */
   pageTitle: { fontFamily: WEB_FONT, fontSize: 27, color: web.text, fontWeight: '400' },

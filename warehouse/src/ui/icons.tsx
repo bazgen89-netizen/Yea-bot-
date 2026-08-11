@@ -211,6 +211,13 @@ export const WebIcon = {
   percent: (p: Props) => (
     <MaterialCommunityIcons name="percent" size={p.size ?? 15} color={p.color} />
   ),
+
+  /** Формы: снять категорию, убрать упаковку, пояснение под полем. */
+  close: (p: Props) => <Ionicons name="close" size={p.size ?? 16} color={p.color} />,
+  info: (p: Props) => (
+    <Ionicons name="information-circle-outline" size={p.size ?? 18} color={p.color} />
+  ),
+  search: (p: Props) => <Ionicons name="search" size={p.size ?? 16} color={p.color} />,
 };
 
 /** Иконки плиток отчётов на главной. */

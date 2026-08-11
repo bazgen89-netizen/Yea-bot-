@@ -84,8 +84,8 @@ function ProductPhone() {
   const [barcode, setBarcode] = useState(product?.barcode ?? params.barcode ?? '');
   const [unit, setUnit] = useState(product?.unit ?? 'шт');
   const [category, setCategory] = useState(product?.category_name ?? '');
-  const [costPrice, setCostPrice] = useState(
-    product ? formatMoney(product.cost_price) : '',
+  const [purchasePrice, setPurchasePrice] = useState(
+    product?.purchase_price ? formatMoney(product.purchase_price) : '',
   );
   const [salePrice, setSalePrice] = useState(
     product ? formatMoney(product.sale_price) : '',
@@ -98,18 +98,24 @@ function ProductPhone() {
   const [minQty, setMinQty] = useState(product?.min_qty ? formatQty(product.min_qty) : '');
   const [photoUri, setPhotoUri] = useState(product?.photo_uri ?? null);
 
-  // Наценка и маржа не хранятся: это две записи одной и той же пары цен.
-  // Считаются на лету, чтобы не разойтись с ценами после правки.
-  const cost = costPrice.trim() ? (parseMoney(costPrice) ?? 0) : 0;
+  // Наценка и маржа не хранятся: это две записи одних и тех же цен, и
+  // считаются на лету, чтобы не разойтись с ними после правки.
+  //
+  // Считаются они от разного, и это не описка. Наценка — сколько накинули
+  // сверх цены закупки, той, что в накладной. Маржа — от себестоимости,
+  // средней по всем закупкам. Пока закупка была одна, числа совпадают;
+  // после второй по другой цене — расходятся.
+  const purchase = purchasePrice.trim() ? (parseMoney(purchasePrice) ?? 0) : 0;
   const sale = salePrice.trim() ? (parseMoney(salePrice) ?? 0) : 0;
-  const markup = markupBp(cost, sale);
+  const cost = product?.cost_price ?? purchase;
+  const markup = markupBp(purchase, sale);
   const margin = marginBp(cost, sale);
 
   /** Ввели наценку — подставляем цену продажи. Так это работает в исходнике. */
   function applyMarkup(input: string) {
     const bp = parsePercent(input);
-    if (bp === null || cost === 0) return;
-    setSalePrice(formatMoney(priceFromMarkup(cost, bp)));
+    if (bp === null || purchase === 0) return;
+    setSalePrice(formatMoney(priceFromMarkup(purchase, bp)));
   }
 
   function save() {
@@ -118,12 +124,12 @@ function ProductPhone() {
       return;
     }
 
-    const parsedCost = costPrice.trim() ? parseMoney(costPrice) : 0;
+    const parsedPurchase = purchasePrice.trim() ? parseMoney(purchasePrice) : 0;
     const parsedSale = salePrice.trim() ? parseMoney(salePrice) : 0;
     const min = minQty.trim() ? parseQty(minQty) : 0;
     const discountBp = discount.trim() ? parsePercent(discount) : 0;
 
-    if (parsedCost === null || parsedSale === null || min === null || discountBp === null) {
+    if (parsedPurchase === null || parsedSale === null || min === null || discountBp === null) {
       say('Проверьте числа', 'Цены, скидка и минимальный остаток должны быть числами.');
       return;
     }
@@ -142,7 +148,11 @@ function ProductPhone() {
       barcode: barcode.trim() || null,
       category_id: category.trim() ? ensureCategory(db, category) : null,
       unit: unit.trim() || 'шт',
-      cost_price: parsedCost,
+      // Себестоимость не вводится: она средняя по закупкам и пересчитывается
+      // приходом. У товара, которого ещё не покупали, взять её неоткуда —
+      // и до первой закупки она равна цене из накладной.
+      cost_price: product?.cost_price ?? parsedPurchase,
+      purchase_price: parsedPurchase,
       sale_price: parsedSale,
       min_qty: min,
       vat_bp: vatBp,
@@ -279,9 +289,9 @@ function ProductPhone() {
 
         <View style={styles.pair}>
           <Field
-            label="Закупочная цена"
-            value={costPrice}
-            onChangeText={setCostPrice}
+            label="Цена закупки"
+            value={purchasePrice}
+            onChangeText={setPurchasePrice}
             placeholder="0,00"
             keyboardType="decimal-pad"
             containerStyle={styles.pairInput}
@@ -305,8 +315,8 @@ function ProductPhone() {
             keyboardType="decimal-pad"
             containerStyle={styles.pairInput}
             hint={
-              cost === 0
-                ? 'Считается от себестоимости'
+              purchase === 0
+                ? 'Считается от цены закупки'
                 : `Маржа ${margin === null ? '—' : formatPercent(margin)}`
             }
           />

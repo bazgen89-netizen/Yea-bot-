@@ -2,7 +2,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useState } from 'react';
 
 import { listLocations, stockByLocation } from '../../db/locations';
-import { getProduct, setItems, storePrices } from '../../db/products';
+import { getProduct, productCategories, setItems, storePrices } from '../../db/products';
 import { listMoves } from '../../db/stock';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatDate, formatPercent, marginBp, markupBp } from '../../domain/pricing';
@@ -48,6 +48,7 @@ export function ProductView({
   const stock = useQuery((db) => stockByLocation(db));
   const prices = useQuery((db) => storePrices(db, id), [id]);
   const composition = useQuery((db) => setItems(db, id), [id]);
+  const categories = useQuery((db) => productCategories(db, id), [id]);
 
   if (!product) return null;
 
@@ -111,10 +112,13 @@ export function ProductView({
           <>
             <View style={styles.info}>
               <Info label="Создан" value={new Date(product.created_at).toLocaleDateString('ru-RU')} />
-              <Info label="Категории" value={product.category_name} />
+              <Info label="Категории" value={categories.join(', ') || null} />
               <Info label="Страна" value={product.country} />
               <Info label="Срок годности" value={product.expires_at ? formatDate(product.expires_at) : null} />
-              <Info label="Группа" value={product.category_name} />
+              {/* Группа — папка каталога, а не категория: у него это дерево
+                  со своим окном выбора. Пока его нет, строка стоит пустой —
+                  повторять здесь категорию значило бы выдать одно за другое. */}
+              <Info label="Группа" value={null} />
               <Info label="Описание" value={product.description} />
             </View>
 

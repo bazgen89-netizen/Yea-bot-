@@ -4,6 +4,12 @@ import { ensureLocation } from '../locations';
 import {
   createProduct,
   getProduct,
+  ensureCategory,
+  listCategories,
+  listPacks,
+  productCategories,
+  saveCategories,
+  savePacks,
   saveSetItems,
   saveStorePrices,
   setItems,
@@ -122,5 +128,94 @@ describe('цена закупки и себестоимость — разные
     // Себестоимость — среднее по складу, цена закупки — из последней накладной.
     expect(product.cost_price).toBe(15000);
     expect(product.purchase_price).toBe(20000);
+  });
+});
+
+describe('упаковки', () => {
+  it('сохраняются и читаются в порядке от меньшей к большей', () => {
+    const tea = make('Шу пуэр', { unit: 'кг' });
+
+    savePacks(db, tea, [
+      { name: 'Палета', qty: 120000 },
+      { name: 'Коробка', qty: 12000 },
+    ]);
+
+    expect(listPacks(db, tea).map((pack) => pack.name)).toEqual(['Коробка', 'Палета']);
+  });
+
+  it('пустые строки формы не попадают в базу', () => {
+    const tea = make('Шу пуэр');
+
+    // Нажали «Добавить упаковку» и не заполнили — такие строки остаются в
+    // форме, и записывать их значило бы завести упаковку без названия.
+    savePacks(db, tea, [
+      { name: 'Коробка', qty: 12000 },
+      { name: '', qty: 0 },
+      { name: 'Блок', qty: 0 },
+    ]);
+
+    expect(listPacks(db, tea)).toHaveLength(1);
+  });
+
+  it('сохранение заменяет список целиком', () => {
+    const tea = make('Шу пуэр');
+
+    savePacks(db, tea, [{ name: 'Коробка', qty: 12000 }]);
+    savePacks(db, tea, [{ name: 'Блок', qty: 6000 }]);
+
+    expect(listPacks(db, tea).map((pack) => pack.name)).toEqual(['Блок']);
+  });
+});
+
+describe('категории товара', () => {
+  it('их несколько, а в карточку попадает первая', () => {
+    const tea = make('Шу пуэр 2019');
+
+    saveCategories(db, tea, ['Пуэр', 'Подарочное']);
+
+    expect(productCategories(db, tea)).toEqual(['Подарочное', 'Пуэр']);
+
+    // На products.category_id стоят отчёт по категориям и колонка
+    // справочника — она должна указывать на первую из выбранных.
+    const saved = getProduct(db, tea)!;
+    expect(saved.category_name).toBe('Пуэр');
+  });
+
+  it('новая категория заводится по ходу, повтор — нет', () => {
+    const first = make('Шу пуэр');
+    const second = make('Шэн пуэр');
+
+    saveCategories(db, first, ['Пуэр']);
+    saveCategories(db, second, ['Пуэр']);
+
+    expect(listCategories(db).filter((item) => item.name === 'Пуэр')).toHaveLength(1);
+  });
+
+  it('снятая категория исчезает из списка товара', () => {
+    const tea = make('Шу пуэр');
+
+    saveCategories(db, tea, ['Пуэр', 'Подарочное']);
+    saveCategories(db, tea, ['Пуэр']);
+
+    expect(productCategories(db, tea)).toEqual(['Пуэр']);
+    expect(getProduct(db, tea)!.category_name).toBe('Пуэр');
+  });
+
+  it('товару из импорта список собирается из его собственной категории', () => {
+    // Импорт и касса заполняют одну колонку в карточке и списка не заводят.
+    // Карточка всё равно должна открыться с этой категорией, а не пустой.
+    const tea = make('Шу пуэр', { category_id: ensureCategory(db, 'Пуэр') });
+
+    expect(productCategories(db, tea)).toEqual(['Пуэр']);
+  });
+
+  it('без категорий товар остаётся без категории', () => {
+    const tea = make('Шу пуэр');
+
+    saveCategories(db, tea, ['Пуэр']);
+    saveCategories(db, tea, []);
+
+    expect(productCategories(db, tea)).toEqual([]);
+    expect(getProduct(db, tea)!.category_id).toBeNull();
   });
 });

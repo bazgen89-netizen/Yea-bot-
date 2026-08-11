@@ -1,7 +1,13 @@
 import type { SqlDriver } from './driver';
 import { importCounterparties, type PartyInput } from './counterparties';
 import { ensureLocation } from './locations';
-import { createProduct, ensureCategory, listProducts, updateProduct } from './products';
+import {
+  createProduct,
+  ensureCategory,
+  listProducts,
+  saveCategories,
+  updateProduct,
+} from './products';
 import { postInventory } from './stock';
 import { parseTable, pick } from '../domain/csv';
 import { parseMoney } from '../domain/money';
@@ -93,7 +99,12 @@ export function importProducts(db: SqlDriver, text: string): ImportResult {
       (sku ? bySku.get(sku) : undefined) ??
       byName.get(name.toLowerCase());
 
-    const category = pick(row, 'категория', 'группа', 'category');
+    // Категорий у товара бывает несколько — в файле они через запятую.
+    const category = pick(row, 'категория', 'категории', 'группа', 'category');
+    const categoryList = category
+      .split(/[,;|]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
     const discount = pick(row, 'скидка', 'скидка, %', 'discount');
     const expires = pick(row, 'срок годности', 'годен до');
     const minQty = pick(row, 'мин. остаток', 'мин. ост.', 'минимальный остаток');
@@ -104,7 +115,7 @@ export function importProducts(db: SqlDriver, text: string): ImportResult {
       sku: sku || null,
       code: code || null,
       barcode: barcode || null,
-      category_id: category ? ensureCategory(db, category) : (found?.category_id ?? null),
+      category_id: categoryList[0] ? ensureCategory(db, categoryList[0]) : (found?.category_id ?? null),
       unit: pick(row, 'ед. изм.', 'единица измерения', 'единица', 'unit') || found?.unit || 'шт',
       cost_price: money('себестоимость', 'cost') ?? found?.cost_price ?? 0,
       purchase_price: money('цена закупки', 'закупка', 'purchase') ?? found?.purchase_price ?? 0,
@@ -136,6 +147,8 @@ export function importProducts(db: SqlDriver, text: string): ImportResult {
       });
       return;
     }
+
+    if (categoryList.length > 0) saveCategories(db, productId, categoryList);
 
     const qtyText = pick(row, 'остаток', 'количество', 'кол-во', 'qty', 'stock');
     if (qtyText) {

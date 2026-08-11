@@ -2,7 +2,7 @@ import type { SqlDriver } from '../driver';
 import { createTestDriver } from '../testDriver';
 import { listCounterparties } from '../counterparties';
 import { importParties, importProducts } from '../import';
-import { getProduct, listProducts } from '../products';
+import { getProduct, listProducts, productCategories } from '../products';
 import { getStock } from '../stock';
 import { detectDelimiter, parseCsv, parseTable } from '../../domain/csv';
 
@@ -169,5 +169,18 @@ describe('загрузка клиентов', () => {
 
     expect(listCounterparties(db, { kind: 'supplier' })).toHaveLength(1);
     expect(listCounterparties(db, { kind: 'customer' })).toHaveLength(0);
+  });
+});
+
+describe('категории в файле', () => {
+  it('несколько категорий через запятую попадают все, а в карточку — первая', () => {
+    importProducts(
+      db,
+      'Наименование;Категории;Цена продажи\nШу пуэр;Пуэр, Подарочное;500,00\n',
+    );
+
+    const tea = listProducts(db).find((item) => item.name === 'Шу пуэр')!;
+    expect(productCategories(db, tea.id).sort()).toEqual(['Подарочное', 'Пуэр']);
+    expect(tea.category_name).toBe('Пуэр');
   });
 });

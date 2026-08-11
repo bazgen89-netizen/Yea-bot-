@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { WebIcon } from '../ui/icons';
-import { web, WEB_FONT } from '../ui/webTheme';
+import { FORM_BORDER, web, WEB_FONT } from '../ui/webTheme';
 
 /**
  * Выпадающий список кабинета.
@@ -27,17 +27,21 @@ export function Dropdown<T extends string>({
   variant = 'chip',
   width,
   label,
+  placeholder,
 }: {
   value: T;
   options: Option<T>[];
   onChange: (value: T) => void;
   /**
    * `chip` — рамка, как у «неделю»; `dotted` — пунктир внутри заголовка;
-   * `header` — белым по синему, для шапки.
+   * `header` — белым по синему, для шапки; `field` — во всю ширину поля
+   * формы, вровень с соседними полями ввода.
    */
-  variant?: 'chip' | 'dotted' | 'header';
+  variant?: 'chip' | 'dotted' | 'header' | 'field';
   width?: number;
   label?: string;
+  /** Что показать, когда ничего не выбрано. */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   // Куда положить список: под кнопкой, которую нажали.
@@ -65,10 +69,15 @@ export function Dropdown<T extends string>({
         style={(state) => [
           styles[variant],
           width ? { width } : null,
-          isHovered(state) && variant === 'chip' && styles.chipHover,
+          isHovered(state) && (variant === 'chip' || variant === 'field') && styles.chipHover,
         ]}
       >
-        <Text style={styles[`${variant}Text`]}>{current?.label ?? ''}</Text>
+        <Text
+          style={[styles[`${variant}Text`], !current && styles.placeholder]}
+          numberOfLines={1}
+        >
+          {current?.label ?? placeholder ?? ''}
+        </Text>
         <WebIcon.chevronDown size={14} color={CHEVRON[variant]} />
       </Pressable>
 
@@ -122,10 +131,11 @@ function isHovered(state: { pressed: boolean }): boolean {
 }
 
 /** Цвет стрелки в каждом варианте. */
-const CHEVRON: Record<'chip' | 'dotted' | 'header', string> = {
+const CHEVRON: Record<'chip' | 'dotted' | 'header' | 'field', string> = {
   chip: web.textMuted,
   dotted: web.text,
   header: web.headerText,
+  field: web.textMuted,
 };
 
 const styles = StyleSheet.create({
@@ -141,6 +151,22 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   chipHover: { backgroundColor: web.rowHover },
+  // Поле формы: та же высота и рамка, что у ввода рядом — иначе строка
+  // «Тип маркировки · Система налогообложения» выглядит ступенькой.
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    height: 38,
+    borderWidth: 1,
+    borderColor: FORM_BORDER,
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  fieldText: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  placeholder: { color: web.textMuted },
   chipText: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerText: { fontFamily: WEB_FONT, fontSize: 15, color: web.headerText },

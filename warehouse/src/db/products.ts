@@ -1,5 +1,6 @@
 import type { SqlDriver, SqlParam } from './driver';
 import { dayShift, today } from '../domain/pricing';
+import type { Milli } from '../domain/qty';
 import type { Category, Id, Product, ProductKind, ProductWithStock } from '../domain/types';
 
 /**
@@ -220,6 +221,9 @@ function columns(input: ProductInput): SqlParam[] {
     input.weight_g ?? null,
     input.free_price ?? 0,
     input.store_price ?? 0,
+    emptyToNull(input.marking_type),
+    emptyToNull(input.tax_system),
+    input.excisable ?? 0,
     emptyToNull(input.photo_uri),
     searchText(input),
   ];
@@ -252,6 +256,9 @@ const COLUMN_NAMES = [
   'weight_g',
   'free_price',
   'store_price',
+  'marking_type',
+  'tax_system',
+  'excisable',
   'photo_uri',
   'search_text',
 ];
@@ -455,5 +462,106 @@ export function saveStorePrices(
         [productId, locationId, price],
       );
     }
+  });
+}
+
+/**
+ * Упаковка: «коробка — 12 шт».
+ *
+ * У товара их бывает несколько — коробка, палета, блок, — и продаётся он всё
+ * равно в базовой единице: упаковка нужна приёмке, чтобы вбить «3 коробки»
+ * вместо «36 штук». Поэтому это отдельные строки, а не поле в карточке.
+ */
+export interface Pack {
+  id: Id;
+  name: string;
+  /** Сколько базовых единиц в упаковке, тысячные. */
+  qty: Milli;
+}
+
+export function listPacks(db: SqlDriver, productId: Id): Pack[] {
+  return db.all<Pack>(
+    'SELECT id, name, qty FROM product_packs WHERE product_id = ? ORDER BY qty, id',
+    [productId],
+  );
+}
+
+/** Заменяет список упаковок целиком — как и состав комплекта. */
+export function savePacks(
+  db: SqlDriver,
+  productId: Id,
+  packs: { name: string; qty: Milli }[],
+): void {
+  db.tx(() => {
+    db.run('DELETE FROM product_packs WHERE product_id = ?', [productId]);
+    for (const pack of packs) {
+      // Упаковка без названия или с нулевым количеством ничего не значит:
+      // такие строки остаются в форме от нажатия «Добавить упаковку».
+      if (!pack.name.trim() || pack.qty <= 0) continue;
+      db.run('INSERT INTO product_packs (product_id, name, qty) VALUES (?, ?, ?)', [
+        productId,
+        pack.name.trim(),
+        pack.qty,
+      ]);
+    }
+  });
+}
+
+/**
+ * Все категории товара.
+ *
+ * Их у товара бывает несколько, но в `products.category_id` лежит одна —
+ * первая. По ней собран отчёт по категориям и колонка справочника, и менять
+ * это ради второй категории значило бы переписать обе.
+ */
+export function productCategories(db: SqlDriver, productId: Id): string[] {
+  const linked = db
+    .all<{ name: string }>(
+      `SELECT c.name
+       FROM product_categories pc
+       JOIN categories c ON c.id = pc.category_id
+       WHERE pc.product_id = ?
+       ORDER BY c.name COLLATE NOCASE`,
+      [productId],
+    )
+    .map((row) => row.name);
+
+  if (linked.length > 0) return linked;
+
+  // Список пуст не только у товара без категории: товар мог приехать импортом
+  // или родиться на кассе — там заполняется одна колонка в карточке, и списка
+  // ему никто не заводил. Тогда единственная категория и есть весь список.
+  const own = db.get<{ name: string }>(
+    `SELECT c.name FROM products p
+     JOIN categories c ON c.id = p.category_id
+     WHERE p.id = ?`,
+    [productId],
+  );
+
+  return own ? [own.name] : [];
+}
+
+/**
+ * Записывает список категорий и заодно первую — в саму карточку.
+ *
+ * Категории заводятся по мере надобности: в оригинале новую вводят прямо в
+ * поле и нажимают Enter, отдельного справочника для этого открывать не надо.
+ */
+export function saveCategories(db: SqlDriver, productId: Id, names: string[]): void {
+  db.tx(() => {
+    const ids = names
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => ensureCategory(db, name));
+
+    db.run('DELETE FROM product_categories WHERE product_id = ?', [productId]);
+    for (const id of ids) {
+      db.run(
+        'INSERT OR IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)',
+        [productId, id],
+      );
+    }
+
+    db.run('UPDATE products SET category_id = ? WHERE id = ?', [ids[0] ?? null, productId]);
   });
 }

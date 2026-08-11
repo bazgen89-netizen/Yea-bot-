@@ -66,6 +66,12 @@ export interface Product {
   free_price: number;
   /** Продаётся по цене магазина. */
   store_price: number;
+  /** Код товарной группы «Честного знака»: «01» — обувь, «12» — молоко. */
+  marking_type: string | null;
+  /** Система налогообложения: «04» — УСН Доход. */
+  tax_system: string | null;
+  /** Подакцизный товар. */
+  excisable: number;
   photo_uri: string | null;
   archived: number;
   created_at: string;

@@ -340,6 +340,37 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (set_id, product_id)
   );
   `,
+
+  // 11 — маркировка, налогообложение и акциз
+  `
+  -- Код товарной группы «Честного знака»: «01» — обувь, «12» — молочная
+  -- продукция. Хранится кодом, а не названием: названия групп меняются, коды
+  -- нет, и по коду товар опознаёт касса.
+  ALTER TABLE products ADD COLUMN marking_type TEXT;
+
+  -- Система налогообложения позиции: «02» — ОСНО, «04» — УСН Доход. У товара
+  -- своя, потому что в одном чеке встречаются позиции с разными режимами, и
+  -- касса печатает их разными фискальными документами.
+  ALTER TABLE products ADD COLUMN tax_system TEXT;
+
+  ALTER TABLE products ADD COLUMN excisable INTEGER NOT NULL DEFAULT 0;
+
+  -- Категорий у товара бывает несколько: чай может быть и «Пуэром», и
+  -- «Подарочным». Одной колонкой это не выразить, но и убрать её нельзя —
+  -- на products.category_id стоят отчёт по категориям, колонка справочника и
+  -- фильтры. Поэтому список отдельной таблицей, а в колонке — первая из них:
+  -- то, что показывают в строке справочника и по чему группируют отчёт.
+  CREATE TABLE product_categories (
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (product_id, category_id)
+  );
+
+  -- Перенос того, что уже проставлено: без него у всех заведённых товаров
+  -- список категорий оказался бы пустым, хотя категория у них есть.
+  INSERT INTO product_categories (product_id, category_id)
+  SELECT id, category_id FROM products WHERE category_id IS NOT NULL;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

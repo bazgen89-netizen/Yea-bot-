@@ -71,7 +71,9 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
           label={customers ? 'Импорт клиентов' : 'Импорт поставщиков'}
           tone="greenOutline"
           icon={<WebIcon.excel color={web.greenText} />}
-          soon
+          onPress={() =>
+            router.push(`/import?kind=${customers ? 'customers' : 'suppliers'}`)
+          }
         />
         <ToolButton
           label="Скачать в Excel"

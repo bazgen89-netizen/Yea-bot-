@@ -80,13 +80,20 @@ export interface PartyInput {
   email?: string | null;
   note?: string | null;
   discount_bp?: number;
+  /** День рождения строкой, как в выгрузке: «13/07/2006». */
+  birthday?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  /** Кто завёл карточку. */
+  created_by?: string | null;
 }
 
 export function createCounterparty(db: SqlDriver, input: PartyInput): Id {
   db.run(
     `INSERT INTO counterparties
-       (kind, name, phone, email, note, discount_bp, created_at, search_text)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (kind, name, phone, email, note, discount_bp,
+        birthday, gender, address, created_by, created_at, search_text)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.kind,
       input.name.trim(),
@@ -94,6 +101,10 @@ export function createCounterparty(db: SqlDriver, input: PartyInput): Id {
       emptyToNull(input.email),
       emptyToNull(input.note),
       input.discount_bp ?? 0,
+      emptyToNull(input.birthday),
+      emptyToNull(input.gender),
+      emptyToNull(input.address),
+      emptyToNull(input.created_by),
       new Date().toISOString(),
       searchText(input),
     ],
@@ -104,7 +115,8 @@ export function createCounterparty(db: SqlDriver, input: PartyInput): Id {
 export function updateCounterparty(db: SqlDriver, id: Id, input: PartyInput): void {
   db.run(
     `UPDATE counterparties SET
-       kind = ?, name = ?, phone = ?, email = ?, note = ?, discount_bp = ?, search_text = ?
+       kind = ?, name = ?, phone = ?, email = ?, note = ?, discount_bp = ?,
+       birthday = ?, gender = ?, address = ?, search_text = ?
      WHERE id = ?`,
     [
       input.kind,
@@ -113,6 +125,9 @@ export function updateCounterparty(db: SqlDriver, id: Id, input: PartyInput): vo
       emptyToNull(input.email),
       emptyToNull(input.note),
       input.discount_bp ?? 0,
+      emptyToNull(input.birthday),
+      emptyToNull(input.gender),
+      emptyToNull(input.address),
       searchText(input),
       id,
     ],

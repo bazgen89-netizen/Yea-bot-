@@ -71,6 +71,12 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
         { label: 'Счета', icon: 'accounts', href: '/accounts', needs: 'accounts' },
         { label: 'Сотрудники', icon: 'staff', href: '/staff', needs: 'staff' },
         { label: 'Корзина', icon: 'trash', dim: true, href: '/trash' },
+        { label: 'Загрузить товары из файла', icon: 'gear', href: '/import?kind=products' },
+        {
+          label: 'Загрузить клиентов из файла',
+          icon: 'gear',
+          href: '/import?kind=customers',
+        },
       ],
     },
     {

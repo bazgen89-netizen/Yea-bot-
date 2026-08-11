@@ -116,7 +116,7 @@ export function CatalogTable() {
           label="Импорт товаров"
           tone="greenOutline"
           icon={<WebIcon.excel color={web.greenText} />}
-          soon
+          onPress={() => router.push('/import?kind=products')}
         />
       </Toolbar>
 

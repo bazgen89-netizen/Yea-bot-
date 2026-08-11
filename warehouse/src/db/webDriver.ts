@@ -1,6 +1,5 @@
 import type { SqlDriver, SqlParam } from './driver';
 import { migrate } from './schema';
-import { seedCatalog } from './seed';
 
 /**
  * База для браузера — на sql.js вместо expo-sqlite.
@@ -130,7 +129,8 @@ export async function openWebDatabase(): Promise<SqlDriver> {
 
   const driver = createWebDriver(db, save);
   migrate(driver);
-  seedCatalog(driver);
+  // Пример данных при запуске не грузится: программой пользуется не один
+  // магазин, и чужой каталог в свежей установке пришлось бы вычищать руками.
   save();
 
   return driver;

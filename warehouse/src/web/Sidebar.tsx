@@ -61,9 +61,12 @@ export function Sidebar() {
             onGo={go}
           />
         ))}
-      </ScrollView>
 
-      <View style={styles.footer}>
+        {/* «Что нового» и остальное — часть того же прокручиваемого списка,
+            отделённая чертой. Прижатым книзу блоком они наезжали на «Корзину»:
+            на экране 900 точек оба оказывались на одной высоте. */}
+        <View style={styles.divider} />
+
         {MENU_FOOTER.map((entry) => (
           <Row
             key={entry.label}
@@ -74,7 +77,7 @@ export function Sidebar() {
             badge={entry.label === 'Что нового' ? 3 : undefined}
           />
         ))}
-      </View>
+      </ScrollView>
 
       <BottomBar small={small} onToggle={() => setSmall((current) => !current)} />
     </View>
@@ -322,20 +325,28 @@ const styles = StyleSheet.create({
   },
   createSmall: { marginHorizontal: 10 },
   createLabel: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 14 },
+  // `.item-block > .item`: отступ 12, поля 0 5px 1px, скругление 4.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 18,
-    paddingLeft: 26,
-    paddingRight: 18,
-    height: 50,
+    paddingHorizontal: 12,
+    marginHorizontal: 5,
+    marginBottom: 1,
+    borderRadius: 4,
+    height: 48,
   },
   rowSmall: { paddingLeft: 0, paddingRight: 0, justifyContent: 'center' },
-  rowActive: { backgroundColor: web.sidebarActive },
-  rowHover: { backgroundColor: '#F7F7F7' },
+  // Активный и наведённый — его же значения: 8 % и 3 % чёрного, а не серый
+  // из палитры. На белом фоне разница видна, и «примерно такой же серый»
+  // читается как другой оттенок.
+  rowActive: { backgroundColor: 'rgba(0,0,0,0.08)' },
+  rowHover: { backgroundColor: 'rgba(0,0,0,0.03)' },
   rowIcon: { width: 22, alignItems: 'center' },
-  // .ui.menu — 1rem при базе 14, то есть ровно 14 пикселей.
-  rowLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.sidebarText },
+  // `.item-block { font-size: 13px }` — свой размер, а не 14 из Semantic UI,
+  // и начертание 500. Четырнадцать я взял из общего правила, не заметив,
+  // что его собственная таблица стилей это правило перебивает.
+  rowLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, fontWeight: '500', color: web.sidebarText },
   badge: {
     position: 'absolute',
     left: -8,
@@ -352,7 +363,12 @@ const styles = StyleSheet.create({
   child: { justifyContent: 'center', paddingLeft: 66, paddingRight: 18, height: 38, flexDirection: 'row', alignItems: 'center', gap: 8 },
   // Вложенный пункт — .857em от того же корня: 12 пикселей.
   childLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 12, color: web.sidebarChild },
-  footer: { borderTopWidth: 1, borderTopColor: web.sidebarBorder, paddingVertical: 6 },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(34,36,38,0.15)',
+    marginVertical: 8,
+    marginHorizontal: 5,
+  },
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
+import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createSale } from '../../db/sales';
@@ -30,6 +31,9 @@ export function Cashier() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Id | null>(null);
   const [menu, setMenu] = useState(false);
+  // Открытый раздел кассы. 'sale' — сама продажа, всё остальное рисуется
+  // поверх неё, не уводя с экрана кассы.
+  const [view, setView] = useState<CashierView>('sale');
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
@@ -173,7 +177,24 @@ export function Cashier() {
         </Pressable>
       </View>
 
-      <CashierMenu visible={menu} onClose={() => setMenu(false)} />
+      <CashierMenu visible={menu} onClose={() => setMenu(false)} onOpenView={setView} />
+
+      {view !== 'sale' ? (
+        <View style={styles.panel}>
+          <View style={styles.panelHead}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Назад к продаже"
+              onPress={() => setView('sale')}
+              style={styles.panelBack}
+            >
+              <Text style={styles.panelBackLabel}>‹</Text>
+            </Pressable>
+            <Text style={styles.panelTitle}>{VIEW_TITLE[view]}</Text>
+          </View>
+          <CashierPanel view={view} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -230,6 +251,26 @@ function today(now = new Date()): string {
 }
 
 const styles = StyleSheet.create({
+  /** Раздел кассы поверх продажи: корзина под ним остаётся набранной. */
+  panel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: pos.bg,
+  },
+  panelHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 56,
+    paddingHorizontal: 12,
+    backgroundColor: pos.bar,
+  },
+  panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  panelBackLabel: { fontFamily: pos.font, fontSize: 30, color: '#FFFFFF', lineHeight: 32 },
+  panelTitle: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
   screen: { flex: 1, backgroundColor: pos.bg },
   body: { flex: 1, flexDirection: 'row' },
 

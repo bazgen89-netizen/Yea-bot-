@@ -10,6 +10,7 @@ import {
   shiftReport,
 } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
+import type { CashierView } from './CashierViews';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
@@ -30,6 +31,8 @@ import { pos } from '../../ui/webTheme';
 
 interface Item {
   label: string;
+  /** Раздел, который откроется внутри кассы. */
+  view?: CashierView;
   icon: ReactNode;
   /** Куда вести. Пункты со своим действием обходятся без адреса. */
   href?: Href;
@@ -39,7 +42,16 @@ interface Item {
   tone?: 'danger';
 }
 
-export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function CashierMenu({
+  visible,
+  onClose,
+  onOpenView,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  /** Открыть раздел внутри кассы, не уходя с неё. */
+  onOpenView: (view: CashierView) => void;
+}) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
 
@@ -127,11 +139,11 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
       href: '/journal',
       hint: 'выберите чек',
     },
-    { label: 'История чеков', icon: <Icon.journal size={22} color={tint} />, href: '/journal' },
+    { label: 'История чеков', icon: <Icon.journal size={22} color={tint} />, view: 'receipts' },
     {
       label: 'Клиенты',
       icon: <WebIcon.parties size={22} color={tint} />,
-      href: { pathname: '/counterparties', params: { kind: 'customer' } },
+      view: 'clients',
     },
     { label: 'Долги', icon: <WebIcon.money size={22} color={tint} />, href: '/money' },
   ];
@@ -140,6 +152,7 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
     ? [
         {
           label: 'X-отчёт',
+          view: 'xreport' as const,
           icon: <WebIcon.reports size={22} color={tint} />,
           action: xReport,
           hint: 'без закрытия смены',
@@ -161,13 +174,13 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
       ];
 
   const rest: Item[] = [
-    { label: 'Смены и кассы', icon: <WebIcon.registers size={22} color={tint} />, href: '/shifts' },
-    { label: 'Товары', icon: <WebIcon.products size={22} color={tint} />, href: '/catalog' },
-    { label: 'Внесение и изъятие', icon: <WebIcon.money size={22} color={tint} />, href: '/money' },
+    { label: 'Смены и кассы', icon: <WebIcon.registers size={22} color={tint} />, view: 'shifts' },
+    { label: 'Товары', icon: <WebIcon.products size={22} color={tint} />, view: 'products' },
+    { label: 'Внесение и изъятие', icon: <WebIcon.money size={22} color={tint} />, view: 'money' },
     { label: 'Проверка документа', icon: <WebIcon.done size={22} color={tint} />, href: '/journal' },
     { label: 'События', icon: <WebIcon.whatsNew size={22} color={tint} />, href: '/journal' },
     { label: 'Оборудование', icon: <WebIcon.barcode size={22} color={tint} />, href: '/company' },
-    { label: 'Настройки', icon: <WebIcon.gear size={22} color={tint} />, href: '/company' },
+    { label: 'Настройки', icon: <WebIcon.gear size={22} color={tint} />, view: 'settings' },
   ];
 
   // Выход закреплён внизу панели, а не стоит последним в списке: список
@@ -185,19 +198,22 @@ export function CashierMenu({ visible, onClose }: { visible: boolean; onClose: (
       item.action();
       return;
     }
-    if (!item.href) return;
 
+    // Разделы кассы открываются внутри кассы. Раньше каждый пункт вёл на
+    // экран кабинета — «Товары» на справочник, «История чеков» в журнал, —
+    // и любое нажатие выбрасывало кассира из кассы. Чтобы пробить следующий
+    // чек, приходилось возвращаться. Касса — рабочее место, из неё не выходят
+    // за тем, чтобы посмотреть остаток.
+    if (item.view) {
+      onClose();
+      onOpenView(item.view);
+      return;
+    }
+
+    // Наружу ведёт единственный пункт — «Выйти в кабинет».
+    if (!item.href) return;
     const { href } = item;
     onClose();
-
-    // Касса лежит поверх группы вкладок, и переход в раздел этой группы
-    // прямо отсюда открывал её заново — то есть с начального экрана,
-    // с Главной. Поэтому сначала снимаем кассу, а раздел выбираем уже
-    // изнутри группы, как это делает боковое меню кабинета.
-    //
-    // Заодно уходит вторая беда: без этого каждый заход в кассу и обратно
-    // добавлял в стек ещё один экран, и «назад» приходилось жать по разу
-    // на каждый заход.
     setTimeout(() => {
       if (router.canGoBack()) router.back();
       setTimeout(() => router.navigate(href), 0);

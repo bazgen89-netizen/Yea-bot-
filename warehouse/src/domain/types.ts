@@ -48,6 +48,24 @@ export interface Product {
   expires_at: string | null;
   /** Скидка на товар в сотых долях процента: 500 = 5 %. */
   discount_bp: number;
+  /** Цена последней закупки, копейки. Отдельно от средней себестоимости. */
+  purchase_price: Kopecks;
+  country: string | null;
+  supplier_id: Id | null;
+  description: string | null;
+  /** Код для весов. */
+  plu_code: string | null;
+  gtin: string | null;
+  /** Продаётся долями единицы. */
+  weighted: number;
+  height_mm: number | null;
+  width_mm: number | null;
+  depth_mm: number | null;
+  weight_g: number | null;
+  /** Кассир может изменить цену в чеке. */
+  free_price: number;
+  /** Продаётся по цене магазина. */
+  store_price: number;
   photo_uri: string | null;
   archived: number;
   created_at: string;
@@ -58,6 +76,7 @@ export interface ProductWithStock extends Product {
   /** Остаток, тысячные. */
   stock: Milli;
   category_name: string | null;
+  supplier_name: string | null;
 }
 
 /** Клиент, поставщик или тот и другой сразу. */

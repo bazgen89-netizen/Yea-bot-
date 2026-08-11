@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
+import { ColumnPicker } from '../ColumnPicker';
 import { FilterPanel } from '../FilterPanel';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { listLocations, stockByLocation } from '../../db/locations';
@@ -29,8 +31,13 @@ export function CatalogTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   const filters = useCatalogFilters();
+
+  // Какие колонки показывать. Выбор запоминается: у него он тоже переживает
+  // перезагрузку, иначе настраивать таблицу пришлось бы каждое утро.
+  const [shown, setShown] = useState<string[]>(() => readColumns());
 
   const products = useQuery(
     (db) => listProducts(db, { search, presets: filters.presets }),
@@ -39,14 +46,23 @@ export function CatalogTable() {
   const locations = useQuery((db) => listLocations(db));
   const stock = useQuery((db) => stockByLocation(db));
 
+  // Показываемые колонки в том порядке, в каком они объявлены, а не в каком
+  // их отмечали: порядок столбцов — часть таблицы, а не история нажатий.
+  const picked = useMemo(
+    () => CATALOG_COLUMNS.filter((column) => shown.includes(column.key)),
+    [shown],
+  );
+
   const columns = useMemo<Column[]>(
     () => [
-      { key: 'name', title: 'Наименование', width: 430, sortable: true },
-      { key: 'code', title: 'Код', width: 96, sortable: true },
-      { key: 'sku', title: 'Артикул', width: 116, sortable: true },
-      { key: 'unit', title: 'Ед. изм.', width: 88, sortable: true },
-      { key: 'price', title: 'Цена продажи', width: 128, sortable: true },
-      { key: 'discount', title: 'Скидка, %', width: 100, sortable: true },
+      ...picked.map((column) => ({
+        key: column.key,
+        title: column.title,
+        width: column.width,
+        numeric: column.numeric,
+        sortable: true,
+      })),
+      // Остаток по каждому магазину — столько колонок, сколько точек заведено.
       ...locations.map((location) => ({
         key: `loc${location.id}`,
         title: location.name,
@@ -54,12 +70,12 @@ export function CatalogTable() {
         numeric: true,
       })),
     ],
-    [locations],
+    [picked, locations],
   );
 
   const pages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
   const current = Math.min(page, pages);
-  const shown = products.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const page1 = products.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   return (
     <View style={styles.screen}>
@@ -87,6 +103,10 @@ export function CatalogTable() {
           soon
         />
         <ToolButton
+          label={`Колонки: ${picked.length}`}
+          onPress={() => setColumnsOpen(true)}
+        />
+        <ToolButton
           label="Создать товар"
           tone="green"
           onPress={() => router.push({ pathname: '/product/[id]', params: { id: 'new' } })}
@@ -105,12 +125,13 @@ export function CatalogTable() {
           <HeadRow columns={columns} lead={<Checkbox />} />
 
           <ScrollView style={styles.body}>
-            {shown.map((product) => (
+            {page1.map((product) => (
               <ProductRow
                 key={product.id}
                 product={product}
-                columns={columns}
+                picked={picked}
                 locations={locations.map((location) => location.id)}
+                widths={columns}
                 stock={stock.get(product.id)}
                 onPress={() =>
                   router.push({ pathname: '/product/[id]', params: { id: String(product.id) } })
@@ -118,7 +139,7 @@ export function CatalogTable() {
               />
             ))}
 
-            {shown.length === 0 ? (
+            {page1.length === 0 ? (
               <Text style={styles.empty}>
                 {search ? 'Ничего не нашлось' : 'В справочнике пока нет товаров'}
               </Text>
@@ -131,6 +152,25 @@ export function CatalogTable() {
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
         filters={filters}
+      />
+
+      <ColumnPicker
+        visible={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        shown={shown}
+        onToggle={(key) => {
+          setShown((current2) => {
+            const next = current2.includes(key)
+              ? current2.filter((item) => item !== key)
+              : [...current2, key];
+            writeColumns(next);
+            return next;
+          });
+        }}
+        onReset={() => {
+          setShown(DEFAULT_COLUMNS);
+          writeColumns(DEFAULT_COLUMNS);
+        }}
       />
 
       <Pager page={current} pages={pages} onPage={setPage} />
@@ -153,47 +193,56 @@ export function CatalogTable() {
 
 function ProductRow({
   product,
-  columns,
+  picked,
+  widths,
   locations,
   stock,
   onPress,
 }: {
   product: ProductWithStock;
-  columns: Column[];
+  picked: typeof CATALOG_COLUMNS;
+  widths: Column[];
   locations: number[];
   stock: Map<number, number> | undefined;
   onPress: () => void;
 }) {
-  const [name, code, sku, unit, price, discount] = columns;
-
   return (
     <Row onPress={onPress}>
       <Checkbox />
 
-      <View style={[styles.nameCell, { width: name.width }]}>
-        <View style={styles.thumb}>
-          {product.photo_uri ? (
-            <Image source={{ uri: product.photo_uri }} style={styles.thumbImage} />
-          ) : (
-            <WebIcon.products size={19} color="#C4C7CA" />
-          )}
-        </View>
-        <Text style={styles.link} numberOfLines={3}>
-          {product.name}
-        </Text>
-      </View>
+      {picked.map((column, index) => {
+        // Первая колонка несёт картинку и ссылку — по ней открывают товар.
+        if (index === 0) {
+          return (
+            <View key={column.key} style={[styles.nameCell, { width: column.width }]}>
+              <View style={styles.thumb}>
+                {product.photo_uri ? (
+                  <Image source={{ uri: product.photo_uri }} style={styles.thumbImage} />
+                ) : (
+                  <WebIcon.products size={19} color="#C4C7CA" />
+                )}
+              </View>
+              <Text style={styles.link} numberOfLines={3}>
+                {column.value(product)}
+              </Text>
+            </View>
+          );
+        }
 
-      <Text style={[webText.cellNumber, { width: code.width }]}>{codeOf(product)}</Text>
-      <Text style={[webText.cellNumber, { width: sku.width }]} numberOfLines={1}>
-        {product.sku ?? ''}
-      </Text>
-      <Text style={[webText.cell, { width: unit.width }]}>{product.unit}</Text>
-      <Text style={[webText.cellNumber, { width: price.width }]}>
-        {formatMoneyWeb(product.sale_price)}
-      </Text>
-      <Text style={[webText.cellNumber, { width: discount.width }]}>
-        {product.discount_bp ? product.discount_bp / 100 : 0}
-      </Text>
+        return (
+          <Text
+            key={column.key}
+            style={[
+              column.numeric ? webText.cellNumber : webText.cell,
+              { width: column.width },
+              column.numeric && styles.right,
+            ]}
+            numberOfLines={1}
+          >
+            {column.value(product)}
+          </Text>
+        );
+      })}
 
       {locations.map((id, index) => {
         const qty = stock?.get(id) ?? 0;
@@ -203,7 +252,7 @@ function ProductRow({
             style={[
               webText.cellNumber,
               styles.right,
-              { width: columns[6 + index].width },
+              { width: widths[picked.length + index]?.width ?? 168 },
               qty < 0 && { color: web.danger },
             ]}
           >
@@ -213,6 +262,28 @@ function ProductRow({
       })}
     </Row>
   );
+}
+
+/**
+ * Выбор колонок хранится в том же месте, что настройки: это настройка одного
+ * человека, а не данные склада.
+ */
+function readColumns(): string[] {
+  try {
+    const saved = globalThis.localStorage?.getItem(COLUMNS_KEY);
+    const parsed = saved ? (JSON.parse(saved) as string[]) : null;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_COLUMNS;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
+function writeColumns(columns: string[]): void {
+  try {
+    globalThis.localStorage?.setItem(COLUMNS_KEY, JSON.stringify(columns));
+  } catch {
+    // Приватный режим браузера запрещает запись — выбор просто не запомнится.
+  }
 }
 
 /**

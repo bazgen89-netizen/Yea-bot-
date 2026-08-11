@@ -11,9 +11,12 @@ const STOCK_SUBQUERY = `
 `;
 
 const SELECT_PRODUCT = `
-  SELECT p.*, ${STOCK_SUBQUERY}, c.name AS category_name
+  SELECT p.*, ${STOCK_SUBQUERY},
+         c.name AS category_name,
+         s.name AS supplier_name
   FROM products p
-  LEFT JOIN categories c ON c.id = p.category_id
+  LEFT JOIN categories c      ON c.id = p.category_id
+  LEFT JOIN counterparties s  ON s.id = p.supplier_id
 `;
 
 /**
@@ -182,11 +185,11 @@ export function findByBarcode(db: SqlDriver, barcode: string): ProductWithStock 
  * по названию и цене, и требовать от них ставку НДС значило бы усложнить
  * каждое из этих мест ради поля, которое они не знают.
  */
-export type ProductInput = Omit<
-  Product,
-  'id' | 'created_at' | 'archived' | 'kind' | 'code' | 'vat_bp' | 'expires_at' | 'discount_bp'
-> &
-  Partial<Pick<Product, 'kind' | 'code' | 'vat_bp' | 'expires_at' | 'discount_bp'>>;
+type Required = 'name' | 'sku' | 'barcode' | 'category_id' | 'unit'
+  | 'cost_price' | 'sale_price' | 'min_qty' | 'photo_uri';
+
+export type ProductInput = Pick<Product, Required> &
+  Partial<Omit<Product, Required | 'id' | 'created_at' | 'archived'>>;
 
 /** Значения колонок в порядке, общем для INSERT и UPDATE. */
 function columns(input: ProductInput): SqlParam[] {
@@ -204,6 +207,19 @@ function columns(input: ProductInput): SqlParam[] {
     input.vat_bp ?? null,
     emptyToNull(input.expires_at),
     input.discount_bp ?? 0,
+    input.purchase_price ?? 0,
+    emptyToNull(input.country),
+    input.supplier_id ?? null,
+    emptyToNull(input.description),
+    emptyToNull(input.plu_code),
+    emptyToNull(input.gtin),
+    input.weighted ?? 0,
+    input.height_mm ?? null,
+    input.width_mm ?? null,
+    input.depth_mm ?? null,
+    input.weight_g ?? null,
+    input.free_price ?? 0,
+    input.store_price ?? 0,
     emptyToNull(input.photo_uri),
     searchText(input),
   ];
@@ -223,6 +239,19 @@ const COLUMN_NAMES = [
   'vat_bp',
   'expires_at',
   'discount_bp',
+  'purchase_price',
+  'country',
+  'supplier_id',
+  'description',
+  'plu_code',
+  'gtin',
+  'weighted',
+  'height_mm',
+  'width_mm',
+  'depth_mm',
+  'weight_g',
+  'free_price',
+  'store_price',
   'photo_uri',
   'search_text',
 ];

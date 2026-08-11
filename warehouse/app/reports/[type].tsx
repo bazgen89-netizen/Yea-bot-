@@ -2,7 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { reportById } from '../../src/db/reportTypes';
+import { REPORTS, reportById } from '../../src/db/reportTypes';
 import { periodFor, type PeriodKind } from '../../src/db/reports';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { saveFile } from '../../src/ui/download';
@@ -27,6 +27,12 @@ const PERIODS: Option<PeriodKind>[] = [
   { value: 'quarter', label: 'квартал' },
   { value: 'year', label: 'год' },
 ];
+
+/** Список отчётов для выпадающего списка в панели. */
+const REPORT_OPTIONS: Option<string>[] = REPORTS.map((report) => ({
+  value: report.id,
+  label: report.title,
+}));
 
 export default function ReportScreen() {
   const router = useRouter();
@@ -62,6 +68,8 @@ export default function ReportScreen() {
     title: column.title,
     width: column.width,
     numeric: column.numeric,
+    help: column.help,
+    report: true,
   }));
 
   async function download() {
@@ -83,18 +91,44 @@ export default function ReportScreen() {
 
       <Toolbar>
         {desktop ? null : <Text style={phoneText.heading}>{report.title}</Text>}
-        <Dropdown value={kind} options={PERIODS} onChange={setKind} width={150} label="Период" />
-        <ToolButton label="Выгрузить в CSV" tone="blueOutline" onPress={download} />
+        {/* Отчёт переключается прямо здесь, не возвращаясь к плиткам —
+            так это устроено у него: список отчётов первым элементом панели. */}
+        <Dropdown
+          value={report.id}
+          options={REPORT_OPTIONS}
+          onChange={(id) => router.replace({ pathname: '/reports/[type]', params: { type: id } })}
+          width={232}
+          label="Отчёт"
+        />
+        <Dropdown value={kind} options={PERIODS} onChange={setKind} width={150} label="дата" />
+        <ToolButton label="Фильтр" tone="plain" onPress={download} />
         <ToolButton label="Все отчёты" onPress={() => router.replace('/reports')} />
       </Toolbar>
-
-      <Text style={styles.note}>{report.note}</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
           <HeadRow columns={columns} />
 
           <ScrollView>
+            {/* «ИТОГ» стоит первой строкой, а не последней: в отчёте на
+                семьсот строк итог внизу пришлось бы искать прокруткой. */}
+            {total ? (
+              <View style={styles.totalRow}>
+                {total.map((cell, index) => (
+                  <Text
+                    key={index}
+                    style={[
+                      styles.totalCell,
+                      { width: report.columns[index]?.width ?? 160 },
+                      report.columns[index]?.numeric && styles.right,
+                    ]}
+                  >
+                    {cell}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
             {rows.map((line, index) => (
               <Row key={index}>
                 {line.map((cell, cellIndex) => (
@@ -115,23 +149,6 @@ export default function ReportScreen() {
 
             {rows.length === 0 ? (
               <Text style={styles.empty}>За выбранный период данных нет</Text>
-            ) : null}
-
-            {total ? (
-              <View style={styles.totalRow}>
-                {total.map((cell, index) => (
-                  <Text
-                    key={index}
-                    style={[
-                      styles.totalCell,
-                      { width: report.columns[index]?.width ?? 160 },
-                      report.columns[index]?.numeric && styles.right,
-                    ]}
-                  >
-                    {cell}
-                  </Text>
-                ))}
-              </View>
             ) : null}
           </ScrollView>
         </View>

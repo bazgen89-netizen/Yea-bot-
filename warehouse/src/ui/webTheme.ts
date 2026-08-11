@@ -136,10 +136,21 @@ export const webText = StyleSheet.create({
   metric: { fontFamily: WEB_FONT, fontSize: 28, color: web.text, fontVariant: ['tabular-nums'] as const },
   metricLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
   /**
-   * Заголовок колонки: `.ui.table thead th` — 14 пикселей, начертание 700,
-   * `text-transform: none`. Прописные с разрядкой были моей выдумкой.
+   * Заголовок колонки в справочнике и журналах: 14 пикселей, начертание 700,
+   * обычным регистром — так у него в `.ui.table thead th`.
    */
   column: { fontFamily: WEB_FONT, fontSize: 14, color: 'rgba(0,0,0,0.87)', fontWeight: '700' },
+  /**
+   * Заголовок колонки в отчётах — другой: прописные, синие, без полужирного.
+   * Две разные шапки в одном приложении выглядят ошибкой, но у него они
+   * действительно разные, и повторяем то, что есть.
+   */
+  reportColumn: {
+    fontFamily: WEB_FONT,
+    fontSize: 13,
+    color: web.link,
+    textTransform: 'uppercase' as const,
+  },
   cell: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   cellNumber: { fontFamily: WEB_FONT, fontSize: 14, color: web.text, fontVariant: ['tabular-nums'] as const },
   /** Название товара, номер документа — 15 пикселей, крупнее остальных ячеек. */

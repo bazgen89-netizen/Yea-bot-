@@ -96,8 +96,12 @@ export interface Column {
   key: string;
   title: string;
   width: number;
+  /** Шапка отчёта — прописные синие; в справочнике и журналах она другая. */
+  report?: boolean;
   /** Числовые колонки прижимаются вправо. */
   numeric?: boolean;
+  /** Кружок «?» рядом с названием — подсказка, как считается колонка. */
+  help?: boolean;
   /** Подчёркнутый заголовок — по этой колонке можно сортировать. */
   sortable?: boolean;
 }
@@ -108,16 +112,19 @@ export function HeadRow({ columns, lead }: { columns: Column[]; lead?: ReactNode
       {lead}
       {columns.map((column) => (
         <View key={column.key} style={{ width: column.width }}>
-          <Text
-            style={[
-              webText.column,
-              column.numeric && styles.right,
-              column.sortable && styles.sortable,
-            ]}
-            numberOfLines={1}
-          >
-            {column.title}
-          </Text>
+          <View style={[styles.headCell, column.numeric && styles.headCellRight]}>
+            <Text
+              style={[
+                column.report ? webText.reportColumn : webText.column,
+                column.numeric && styles.right,
+                column.sortable && styles.sortable,
+              ]}
+              numberOfLines={1}
+            >
+              {column.title}
+            </Text>
+            {column.help ? <Text style={styles.help}>?</Text> : null}
+          </View>
         </View>
       ))}
     </View>
@@ -220,6 +227,21 @@ const styles = StyleSheet.create({
   },
   right: { textAlign: 'right' },
   sortable: { textDecorationLine: 'underline' },
+  headCell: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headCellRight: { justifyContent: 'flex-end' },
+  /** Кружок с вопросом — у него он серый, тонкой рамкой, 11 пикселей. */
+  help: {
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#C7CBCF',
+    color: '#9AA0A6',
+    fontFamily: WEB_FONT,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

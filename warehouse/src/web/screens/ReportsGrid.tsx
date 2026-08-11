@@ -52,21 +52,19 @@ const tiles: Tile[] = REPORTS.map((report) => ({
  * делаем вид, что у нас их три.
  */
 const BUILDER = [
-  { name: 'Продажи', ready: true, reports: ['product', 'categories', 'day', 'week', 'month'] },
-  { name: 'Склад', ready: false, reports: [] as string[] },
-  { name: 'Финансы', ready: false, reports: [] as string[] },
+  { name: 'Продажи', ready: true },
+  { name: 'Склад', ready: false },
+  { name: 'Финансы', ready: false },
 ];
 
 export function ReportsGrid() {
   const [tab, setTab] = useState('Продажи');
-  const current = BUILDER.find((item) => item.name === tab) ?? BUILDER[0];
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={webText.pageTitle}>Выберите тип отчёта</Text>
 
       <View style={styles.divider} />
-      <Grid tiles={tiles} />
 
       <View style={styles.tabs}>
         {BUILDER.map((item) => (
@@ -85,7 +83,8 @@ export function ReportsGrid() {
         ))}
       </View>
 
-      <Grid tiles={current.reports.map((id) => tiles.find((tile) => tile.id === id)!).filter(Boolean)} />
+      {/* Плитки идут под конструктором, а не над ним: так на его экране. */}
+      <Grid tiles={tiles} />
     </ScrollView>
   );
 }

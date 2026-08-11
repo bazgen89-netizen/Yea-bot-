@@ -17,7 +17,13 @@ import { ROLE_LABEL, type Role } from '../domain/permissions';
 import { formatQtyWeb } from '../domain/qty';
 
 /**
- * Отчёты кабинета.
+ * Отчёты кабинета — одиннадцать, ровно как на его экране «Выберите тип отчёта».
+ *
+ * «Оценки склада» среди них нет: в исходном приложении это не отчёт, а
+ * отдельный экран справочника (`/catalog/stock`). Я её сюда однажды добавил
+ * по ошибке — плитка была, а у него такой плитки не существует.
+ *
+ * Прежнее описание:
  *
  * Состав, порядок и колонки — те же, что в исходном приложении: они читаются
  * из его собственного кода (`reports.menu` в бандле кабинета), где у каждого
@@ -36,6 +42,8 @@ export interface ReportColumn {
   title: string;
   width: number;
   numeric?: boolean;
+  /** Кружок «?» рядом с названием — у него он стоит не у всех колонок. */
+  help?: boolean;
 }
 
 export interface ReportDefinition {
@@ -45,15 +53,29 @@ export interface ReportDefinition {
   note: string;
   columns: ReportColumn[];
   rows: (db: SqlDriver, period: Period) => string[][];
-  /** Итоговая строка снизу; пусто — итога нет. */
+  /**
+   * Строка «ИТОГ». В исходном приложении она стоит **первой**, а не внизу:
+   * в отчёте на семьсот строк итог внизу пришлось бы искать прокруткой.
+   */
   total?: (db: SqlDriver, period: Period) => string[] | null;
+  /** По какой колонке отчёт открывается отсортированным. */
+  sortColumn?: number;
 }
 
 const money = (value: number) => formatMoneyWeb(value);
 
-/** Доля в процентах: маржа и наценка в отчётах по продажам. */
+/**
+ * Рентабельность — прибыль к себестоимости продаж, в процентах.
+ *
+ * Так её считает исходное приложение: в его отчёте по категориям итог
+ * 118 814,92 прибыли на 13 292,66 себестоимости показан как 894 %, а
+ * убыточный «Белый чай» (−4 753,51 на 8 035,18) — как −59 %.
+ *
+ * При нулевой себестоимости показывает 0 %, а не прочерк: у него в строках
+ * «Матэ» и «в зале», где себестоимости нет, стоит именно ноль.
+ */
 function percent(part: number, whole: number): string {
-  if (whole === 0) return '—';
+  if (whole === 0) return '0%';
   return `${Math.round((part / whole) * 100)}%`;
 }
 
@@ -70,97 +92,147 @@ function salesOver(kind: 'day' | 'week' | 'month'): ReportDefinition['rows'] {
 
     return buckets.map((b) => [
       b.label,
-      String(b.receipts),
       money(b.revenue),
+      // Возвраты в сводке по дням пока не отделены от продаж: чек с возвратом
+      // из выручки исключается целиком. Столбцы есть, чтобы отчёт совпадал
+      // по составу, но заполнить их правдой сейчас нечем — и ноль честнее
+      // выдуманного числа.
+      money(0),
       money(b.revenue - b.profit),
+      money(0),
       money(b.profit),
-      percent(b.profit, b.revenue),
+      String(b.receipts),
     ]);
   };
 }
 
+/**
+ * Колонки отчётов по дням, неделям и месяцам — его собственные, включая
+ * возвраты отдельными столбцами: «Сумма возврата» и «Себест. возвратов».
+ */
 const PERIOD_COLUMNS: ReportColumn[] = [
-  { title: 'Период', width: 240 },
-  { title: 'Продаж', width: 110, numeric: true },
-  { title: 'Выручка', width: 160, numeric: true },
-  { title: 'Себестоимость', width: 170, numeric: true },
-  { title: 'Прибыль', width: 160, numeric: true },
-  { title: 'Маржа', width: 110, numeric: true },
+  { title: 'Наименование', width: 450 },
+  { title: 'Сумма продаж', width: 200, numeric: true },
+  { title: 'Сумма возврата', width: 210, numeric: true },
+  { title: 'Себест. продаж', width: 210, numeric: true },
+  { title: 'Себест. возвратов', width: 240, numeric: true },
+  { title: 'Прибыль', width: 200, numeric: true, help: true },
+  { title: 'Продажи', width: 180, numeric: true },
 ];
 
 function periodTotal(db: SqlDriver, period: Period): string[] {
   const s = salesSummary(db, period);
   return [
-    'Итого',
-    String(s.receipts),
+    'ИТОГ',
     money(s.revenue),
+    money(0),
     money(s.cost),
+    money(0),
     money(s.profit),
-    percent(s.profit, s.revenue),
+    String(s.receipts),
   ];
 }
 
 /**
- * Колонки отчётов по продажам — те же, что подсказывает исходное приложение:
- * выручка без возвратов, прибыль как выручка минус себестоимость, число
- * продаж, количество единиц, маржа (прибыль к выручке) и наценка (прибыль
- * к себестоимости).
+ * Колонки отчёта по категориям — его собственные, вплоть до сокращений:
+ * «Себест. продаж», «Продано», «Рентабельность». Названия важны не меньше
+ * чисел: по ним человек находит нужный столбец, не читая всю шапку.
  */
-const SALES_COLUMNS: ReportColumn[] = [
-  { title: 'Наименование', width: 320 },
-  { title: 'Выручка', width: 150, numeric: true },
-  { title: 'Прибыль', width: 150, numeric: true },
-  { title: 'Продаж', width: 110, numeric: true },
-  { title: 'Количество', width: 140, numeric: true },
-  { title: 'Маржа', width: 100, numeric: true },
-  { title: 'Наценка', width: 110, numeric: true },
+const CATEGORY_COLUMNS: ReportColumn[] = [
+  { title: 'Наименование', width: 430 },
+  { title: 'Выручка', width: 200, numeric: true, help: true },
+  { title: 'Прибыль', width: 200, numeric: true, help: true },
+  { title: 'Себест. продаж', width: 260, numeric: true },
+  { title: 'Продажи', width: 200, numeric: true, help: true },
+  { title: 'Продано', width: 200, numeric: true, help: true },
+  { title: 'Рентабельность', width: 200, numeric: true },
+];
+
+/** Отчёт по товарам: то же плюс штрихкод и артикул. */
+const PRODUCT_COLUMNS: ReportColumn[] = [
+  { title: 'Наименование', width: 430 },
+  { title: 'Штрих-код', width: 200 },
+  { title: 'Артикул', width: 180 },
+  { title: 'Выручка', width: 200, numeric: true, help: true },
+  { title: 'Прибыль', width: 200, numeric: true, help: true },
+  { title: 'Себест. продаж', width: 260, numeric: true },
+  { title: 'Продажи', width: 200, numeric: true, help: true },
+  { title: 'Продано', width: 200, numeric: true, help: true },
+  { title: 'Рентабельность', width: 200, numeric: true },
 ];
 
 export const REPORTS: ReportDefinition[] = [
   {
     id: 'product',
     title: 'Продажи по товарам',
-    note: 'Сумма продаж товара без учёта возвратов, прибыль, маржа и наценка.',
-    columns: SALES_COLUMNS,
+    note: 'Сумма продаж товара без учёта возвратов, прибыль и рентабельность.',
+    columns: PRODUCT_COLUMNS,
+    // Отсортировано по прибыли — так этот отчёт открывается у него.
+    sortColumn: 4,
     rows: (db, period) =>
       topProducts(db, period, 1000).map((p) => [
         p.name,
+        p.barcode ?? '',
+        p.sku ?? '',
         money(p.revenue),
         money(p.profit),
+        money(p.revenue - p.profit),
         String(p.sales),
-        `${formatQtyWeb(p.qty)} ${p.unit}`,
-        percent(p.profit, p.revenue),
+        formatQtyWeb(p.qty),
         percent(p.profit, p.revenue - p.profit),
       ]),
+    total: (db, period) => {
+      const s = salesSummary(db, period);
+      return ['ИТОГ', '', '', money(s.revenue), money(s.profit), money(s.cost),
+        String(s.receipts), '', percent(s.profit, s.cost)];
+    },
   },
   {
     id: 'categories',
     title: 'Продажи по категориям',
     note: 'То же по категориям товара. Товары без категории идут отдельной строкой.',
-    columns: SALES_COLUMNS,
+    columns: CATEGORY_COLUMNS,
+    sortColumn: 2,
     rows: (db, period) =>
       salesByCategory(db, period).map((c) => [
         c.name,
         money(c.revenue),
         money(c.profit),
+        money(c.revenue - c.profit),
         String(c.sales),
         formatQtyWeb(c.qty),
-        percent(c.profit, c.revenue),
         percent(c.profit, c.revenue - c.profit),
       ]),
+    total: (db, period) => {
+      const s = salesSummary(db, period);
+      return ['ИТОГ', money(s.revenue), money(s.profit), money(s.cost),
+        String(s.receipts), '', percent(s.profit, s.cost)];
+    },
   },
   {
     id: 'set',
     title: 'Продажи по комплектам',
-    note: 'Комплектов в справочнике пока нет — товар из нескольких других не заводится.',
+    note: 'То же по комплектам: выручка, число продаж, средняя цена и сколько продано.',
     columns: [
-      { title: 'Комплект', width: 320 },
-      { title: 'Выручка', width: 160, numeric: true },
-      { title: 'Продаж', width: 120, numeric: true },
-      { title: 'Средняя цена', width: 170, numeric: true },
-      { title: 'Количество', width: 140, numeric: true },
+      { title: 'Наименование', width: 500 },
+      { title: 'Штрих-код', width: 200 },
+      { title: 'Артикул', width: 200 },
+      { title: 'Выручка', width: 200, numeric: true, help: true },
+      { title: 'Продажи', width: 190, numeric: true, help: true },
+      { title: 'Средняя цена', width: 200, numeric: true, help: true },
+      { title: 'Продано', width: 190, numeric: true },
     ],
-    rows: () => [],
+    sortColumn: 3,
+    rows: (db, period) =>
+      topProducts(db, period, 1000, 'set').map((p) => [
+        p.name,
+        p.barcode ?? '',
+        p.sku ?? '',
+        money(p.revenue),
+        String(p.sales),
+        money(p.sales > 0 ? Math.round(p.revenue / p.sales) : 0),
+        formatQtyWeb(p.qty),
+      ]),
   },
   {
     id: 'day',
@@ -191,11 +263,11 @@ export const REPORTS: ReportDefinition[] = [
     title: 'Отчёт по движению',
     note: 'Остаток на начало периода, поступило, выбыло и остаток на конец — по каждому товару.',
     columns: [
-      { title: 'Товар', width: 340 },
-      { title: 'На начало', width: 160, numeric: true },
-      { title: 'Поступило', width: 160, numeric: true },
-      { title: 'Выбыло', width: 160, numeric: true },
-      { title: 'На конец', width: 160, numeric: true },
+      { title: 'Наименование', width: 450 },
+      { title: 'На начало', width: 200, numeric: true },
+      { title: 'Поступило', width: 200, numeric: true },
+      { title: 'Выбыло', width: 200, numeric: true },
+      { title: 'На конец', width: 200, numeric: true },
     ],
     rows: (db, period) =>
       motionByProduct(db, period).map((row) => [
@@ -211,13 +283,13 @@ export const REPORTS: ReportDefinition[] = [
     title: 'Отчёт по агентам',
     note: 'Клиенты и поставщики: продажи, возвраты, средний чек и движение денег.',
     columns: [
-      { title: 'Контрагент', width: 300 },
-      { title: 'Продаж', width: 110, numeric: true },
-      { title: 'Сумма продаж', width: 170, numeric: true },
-      { title: 'Возвратов', width: 130, numeric: true },
-      { title: 'Средний чек', width: 160, numeric: true },
-      { title: 'Приход', width: 150, numeric: true },
-      { title: 'Расход', width: 150, numeric: true },
+      { title: 'Наименование', width: 430 },
+      { title: 'Продажи', width: 180, numeric: true, help: true },
+      { title: 'Сумма продаж', width: 210, numeric: true },
+      { title: 'Возвраты', width: 190, numeric: true },
+      { title: 'Средний чек', width: 210, numeric: true, help: true },
+      { title: 'Приход', width: 190, numeric: true },
+      { title: 'Расход', width: 190, numeric: true },
     ],
     rows: (db, period) =>
       agentsReport(db, period).map((a) => [
@@ -235,8 +307,8 @@ export const REPORTS: ReportDefinition[] = [
     title: 'Финансовый отчёт',
     note: 'Выручка, себестоимость, прибыль и скидки за период — одной сводкой.',
     columns: [
-      { title: 'Показатель', width: 340 },
-      { title: 'Значение', width: 220, numeric: true },
+      { title: 'Наименование', width: 450 },
+      { title: 'Значение', width: 260, numeric: true },
     ],
     rows: (db, period) => {
       const s = salesSummary(db, period);
@@ -256,13 +328,13 @@ export const REPORTS: ReportDefinition[] = [
     title: 'Отчёт по сотрудникам',
     note: 'Кто сколько пробил. Чеки, пробитые до появления сотрудников, ни за кем не числятся.',
     columns: [
-      { title: 'Сотрудник', width: 300 },
-      { title: 'Продаж', width: 130, numeric: true },
-      { title: 'Возвратов', width: 140, numeric: true },
-      { title: 'Сумма продаж', width: 170, numeric: true },
-      { title: 'Средний чек', width: 170, numeric: true },
-      { title: 'Сумма скидок', width: 170, numeric: true },
-      { title: 'Позиций в чеке', width: 170, numeric: true },
+      { title: 'Наименование', width: 400 },
+      { title: 'Продажи', width: 180, numeric: true, help: true },
+      { title: 'Возвраты', width: 190, numeric: true },
+      { title: 'Сумма продаж', width: 210, numeric: true },
+      { title: 'Средний чек', width: 210, numeric: true, help: true },
+      { title: 'Сумма скидок', width: 210, numeric: true },
+      { title: 'Позиций в чеке', width: 220, numeric: true, help: true },
     ],
     rows: (db, period) =>
       staffReport(db, period).map((row) => [
@@ -276,34 +348,15 @@ export const REPORTS: ReportDefinition[] = [
       ]),
   },
   {
-    id: 'stock',
-    title: 'Оценка склада',
-    note: 'Во сколько оценивается склад и что мешает верить этой оценке.',
-    columns: [
-      { title: 'Показатель', width: 340 },
-      { title: 'Значение', width: 240, numeric: true },
-    ],
-    rows: (db) => {
-      const s = stockOverview(db);
-      return [
-        ['Количество товара', `${formatQtyWeb(s.quantity)} ед.`],
-        ['Стоимость в розничных ценах', money(s.retailValue)],
-        ['Стоимость по себестоимости', money(s.costValue)],
-        ['Позиций с себестоимостью 0', String(s.zeroCost)],
-        ['Позиций с остатком меньше 0', String(s.negative)],
-      ];
-    },
-  },
-  {
     id: 'accounts',
     title: 'Отчёт по счетам',
     note: 'Остаток каждого счёта: чеки, документы прихода и расхода, переводы.',
     columns: [
-      { title: 'Счёт', width: 280 },
-      { title: 'С продаж', width: 160, numeric: true },
-      { title: 'Приход', width: 150, numeric: true },
-      { title: 'Расход', width: 150, numeric: true },
-      { title: 'Остаток', width: 170, numeric: true },
+      { title: 'Наименование', width: 400 },
+      { title: 'С продаж', width: 200, numeric: true },
+      { title: 'Приход', width: 190, numeric: true },
+      { title: 'Расход', width: 190, numeric: true },
+      { title: 'Остаток', width: 210, numeric: true },
     ],
     rows: (db) =>
       accountBalances(db).map((a) => [
@@ -315,7 +368,7 @@ export const REPORTS: ReportDefinition[] = [
       ]),
     total: (db) => {
       const total = accountBalances(db).reduce((sum, a) => sum + a.balance, 0);
-      return ['Итого', '', '', '', money(total)];
+      return ['ИТОГ', '', '', '', money(total)];
     },
   },
 ];

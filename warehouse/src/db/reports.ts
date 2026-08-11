@@ -86,6 +86,8 @@ export interface TopProduct {
   product_id: Id;
   name: string;
   unit: string;
+  barcode: string | null;
+  sku: string | null;
   /** Продано, тысячные. */
   qty: number;
   /** В скольких чеках товар встретился. */
@@ -96,11 +98,25 @@ export interface TopProduct {
   profit: number;
 }
 
-export function topProducts(db: SqlDriver, period: Period, limit = 10): TopProduct[] {
+/**
+ * Продажи по товарам.
+ *
+ * `kind` отбирает вид позиции: отчёт по комплектам — это тот же запрос,
+ * но только по комплектам. Отдельным запросом он отличался бы одной
+ * строчкой и разошёлся бы с этим при первой же правке.
+ */
+export function topProducts(
+  db: SqlDriver,
+  period: Period,
+  limit = 10,
+  kind?: string,
+): TopProduct[] {
   return db.all<TopProduct>(
     `SELECT i.product_id,
             p.name,
             p.unit,
+            p.barcode,
+            p.sku,
             SUM(i.qty)                                     AS qty,
             COUNT(DISTINCT i.sale_id)                      AS sales,
             CAST(ROUND(SUM(i.qty * i.price) / 1000.0) AS INTEGER)                  AS revenue,
@@ -109,13 +125,14 @@ export function topProducts(db: SqlDriver, period: Period, limit = 10): TopProdu
      JOIN sales s    ON s.id = i.sale_id
      JOIN products p ON p.id = i.product_id
      WHERE s.created_at >= ? AND s.created_at < ?
+       AND (? IS NULL OR p.kind = ?)
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
        )
      GROUP BY i.product_id
      ORDER BY revenue DESC
      LIMIT ?`,
-    [period.from, period.to, limit],
+    [period.from, period.to, kind ?? null, kind ?? null, limit],
   );
 }
 

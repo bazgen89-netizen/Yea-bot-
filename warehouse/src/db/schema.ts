@@ -281,6 +281,65 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_sales_staff ON sales(staff_id);
   `,
+
+  // 10 — поля товара из исходного приложения, которых не хватало
+  `
+  -- Цена закупки — то, что заплатили поставщику в последний раз.
+  -- Отдельно от себестоимости: себестоимость там считается по среднему и
+  -- меняется с каждой закупкой, а цена закупки — число из последней накладной.
+  -- Одним полем их держать нельзя: по одному считают прибыль, по другому
+  -- решают, не подорожал ли товар.
+  ALTER TABLE products ADD COLUMN purchase_price INTEGER NOT NULL DEFAULT 0;
+
+  ALTER TABLE products ADD COLUMN country     TEXT;
+  ALTER TABLE products ADD COLUMN supplier_id INTEGER REFERENCES counterparties(id);
+  ALTER TABLE products ADD COLUMN description TEXT;
+
+  -- Код для весов: на весах набирают его, а не штрихкод.
+  ALTER TABLE products ADD COLUMN plu_code TEXT;
+  ALTER TABLE products ADD COLUMN gtin     TEXT;
+
+  -- Весовой товар продаётся долями единицы, штучный — только целыми.
+  ALTER TABLE products ADD COLUMN weighted INTEGER NOT NULL DEFAULT 0;
+
+  -- Габариты и вес, тысячные (миллиметры и граммы).
+  ALTER TABLE products ADD COLUMN height_mm INTEGER;
+  ALTER TABLE products ADD COLUMN width_mm  INTEGER;
+  ALTER TABLE products ADD COLUMN depth_mm  INTEGER;
+  ALTER TABLE products ADD COLUMN weight_g  INTEGER;
+
+  -- Кассир может поменять цену в чеке; товар продаётся по цене магазина.
+  ALTER TABLE products ADD COLUMN free_price  INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE products ADD COLUMN store_price INTEGER NOT NULL DEFAULT 0;
+
+  -- Цена продажи в отдельном магазине. Строки заводятся только для тех точек,
+  -- где цена отличается от общей: иначе у каждого товара висели бы семь
+  -- одинаковых строк, и «поменял цену» пришлось бы делать семь раз.
+  CREATE TABLE product_prices (
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    price       INTEGER NOT NULL,
+    PRIMARY KEY (product_id, location_id)
+  );
+
+  -- Упаковка: «коробка — 12 шт». Их несколько на товар.
+  CREATE TABLE product_packs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name       TEXT    NOT NULL,
+    qty        INTEGER NOT NULL
+  );
+
+  CREATE INDEX idx_packs_product ON product_packs(product_id);
+
+  -- Состав комплекта: из каких товаров он собран.
+  CREATE TABLE product_set_items (
+    set_id     INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    qty        INTEGER NOT NULL,
+    PRIMARY KEY (set_id, product_id)
+  );
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

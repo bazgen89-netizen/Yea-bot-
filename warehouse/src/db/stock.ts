@@ -91,6 +91,17 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
     for (const line of input.lines) {
       if (line.qty <= 0) throw new Error(`Количество должно быть больше нуля: ${line.name}`);
 
+      // Себестоимость усредняется до записи движения: усреднять надо то, что
+      // лежало на складе раньше, с тем, что приехало сейчас. Если считать
+      // после записи, привезённое попадёт в расчёт дважды.
+      if (kind === 'purchase' && line.price > 0) {
+        averageCost(db, line.product_id, line.qty, line.price);
+        db.run('UPDATE products SET purchase_price = ? WHERE id = ?', [
+          line.price,
+          line.product_id,
+        ]);
+      }
+
       db.run(
         `INSERT INTO stock_moves (product_id, qty_delta, reason, doc_id, price, location_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -104,17 +115,43 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
           now,
         ],
       );
-
-      // Закупка по новой цене обновляет закупочную цену товара: следующая продажа
-      // должна считать прибыль по тому, что реально заплачено поставщику.
-      // Оприходование цену не трогает — там она взята из головы, а не из счёта.
-      if (kind === 'purchase' && line.price > 0) {
-        db.run('UPDATE products SET cost_price = ? WHERE id = ?', [line.price, line.product_id]);
-      }
     }
 
     return docId;
   });
+}
+
+/**
+ * Пересчёт себестоимости по среднему — так же, как в исходном приложении.
+ * Его собственное объяснение: «себестоимость считается по среднему и
+ * корректируется при каждой закупке товара или оприходовании».
+ *
+ * Считается до записи движения этой закупки: усредняется то, что лежало на
+ * складе раньше, с тем, что приехало сейчас.
+ *
+ *   новая = (остаток × старая + пришло × цена) / (остаток + пришло)
+ *
+ * Отрицательный остаток в расчёт не берётся: товар «минус двести» с ценой
+ * дал бы отрицательную себестоимость, а такой не бывает — при минусе просто
+ * запоминаем цену последней закупки.
+ */
+function averageCost(db: SqlDriver, productId: Id, incoming: number, price: number): void {
+  const row = db.get<{ cost_price: number }>(
+    'SELECT cost_price FROM products WHERE id = ?',
+    [productId],
+  );
+  if (!row) return;
+
+  // Остаток по всем магазинам: себестоимость у товара одна и не зависит от
+  // того, на какой полке он лежит.
+  const before = getStock(db, productId);
+
+  const cost =
+    before > 0
+      ? Math.round((before * row.cost_price + incoming * price) / (before + incoming))
+      : price;
+
+  db.run('UPDATE products SET cost_price = ? WHERE id = ?', [cost, productId]);
 }
 
 export interface TransferInput {

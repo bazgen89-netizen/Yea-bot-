@@ -54,12 +54,35 @@ describe('виды складских документов', () => {
       .cost_price).toBe(200000);
   });
 
-  it('закупка по новой цене переписывает закупочную цену', () => {
+  it('закупка запоминает цену накладной и усредняет себестоимость', () => {
     const id = product();
+    // Товар заведён с себестоимостью 2000,00, на складе пусто.
     postDoc(db, { type: 'purchase', lines: [line(id, 3000, 250000)] });
 
-    expect(db.get<{ cost_price: number }>('SELECT cost_price FROM products WHERE id = ?', [id])!
-      .cost_price).toBe(250000);
+    const after = db.get<{ cost_price: number; purchase_price: number }>(
+      'SELECT cost_price, purchase_price FROM products WHERE id = ?',
+      [id],
+    )!;
+
+    // Склад был пуст — усреднять не с чем, себестоимость равна цене закупки.
+    expect(after.cost_price).toBe(250000);
+    expect(after.purchase_price).toBe(250000);
+  });
+
+  it('вторая закупка по другой цене даёт среднюю себестоимость', () => {
+    const id = product();
+    postDoc(db, { type: 'purchase', lines: [line(id, 1000, 200000)] });
+    postDoc(db, { type: 'purchase', lines: [line(id, 1000, 300000)] });
+
+    const after = db.get<{ cost_price: number; purchase_price: number }>(
+      'SELECT cost_price, purchase_price FROM products WHERE id = ?',
+      [id],
+    )!;
+
+    // Килограмм по 2000,00 и килограмм по 3000,00 — в среднем 2500,00.
+    expect(after.cost_price).toBe(250000);
+    // А цена закупки — из последней накладной, без усреднения.
+    expect(after.purchase_price).toBe(300000);
   });
 
   it('возврат закупки списывает товар', () => {

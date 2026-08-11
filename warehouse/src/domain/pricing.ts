@@ -38,12 +38,18 @@ export function priceWithDiscount(price: Kopecks, discountBp: Bp): Kopecks {
 }
 
 /**
- * Наценка — прибыль к себестоимости: сколько накинули сверху закупки.
- * При нулевой себестоимости не определена: делить не на что.
+ * Наценка — сколько накинули сверху **цены закупки**.
+ *
+ * Именно закупки, а не себестоимости: в исходном приложении товар с ценой
+ * закупки 17,00 и ценой продажи 59,90 показывает наценку 252,35 %, а это
+ * ровно (59,90 − 17,00) / 17,00. Себестоимость там своя, средняя по складу,
+ * и наценку от неё не считают.
+ *
+ * При нулевой закупке не определена: делить не на что.
  */
-export function markupBp(cost: Kopecks, sale: Kopecks): Bp | null {
-  if (cost === 0) return null;
-  return Math.round(((sale - cost) / cost) * 10000);
+export function markupBp(purchase: Kopecks, sale: Kopecks): Bp | null {
+  if (purchase === 0) return null;
+  return Math.round(((sale - purchase) / purchase) * 10000);
 }
 
 /**
@@ -55,9 +61,9 @@ export function marginBp(cost: Kopecks, sale: Kopecks): Bp | null {
   return Math.round(((sale - cost) / sale) * 10000);
 }
 
-/** Цена продажи, дающая заданную наценку к себестоимости. */
-export function priceFromMarkup(cost: Kopecks, bp: Bp): Kopecks {
-  return cost + Math.round((cost * bp) / 10000);
+/** Цена продажи, дающая заданную наценку к цене закупки. */
+export function priceFromMarkup(purchase: Kopecks, bp: Bp): Kopecks {
+  return purchase + Math.round((purchase * bp) / 10000);
 }
 
 /**

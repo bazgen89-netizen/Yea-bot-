@@ -131,9 +131,13 @@ describe('приход и списание', () => {
     expect(getStock(db, id)).toBe(3500);
   });
 
-  it('приход по новой цене обновляет закупочную цену товара', () => {
+  it('закупка усредняет себестоимость с тем, что уже лежит на складе', () => {
     const id = makeProduct({ cost_price: 200000 });
-    postDoc(db, { type: 'receipt', lines: [docLine(id, 1000, 250000)] });
+    // Кладём килограмм по старой цене, потом кладём килограмм по новой.
+    postDoc(db, { type: 'receipt', lines: [docLine(id, 1000, 200000)] });
+    postDoc(db, { type: 'receipt', lines: [docLine(id, 1000, 300000)] });
+
+    // Среднее по складу, а не цена последней накладной.
     expect(getProduct(db, id)?.cost_price).toBe(250000);
   });
 

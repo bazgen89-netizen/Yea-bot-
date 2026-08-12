@@ -169,6 +169,9 @@ export function CashierMenu({
 
   const go = (item: Item) => {
     if (item.action) {
+      // Меню закрывается до действия, а не после: открытие и закрытие смены
+      // показывают своё окно, и меню осталось бы висеть поверх него.
+      onClose();
       item.action();
       return;
     }

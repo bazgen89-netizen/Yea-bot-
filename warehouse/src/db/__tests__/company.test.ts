@@ -140,10 +140,56 @@ describe('настройки компании', () => {
   });
 
   it('сохраняются поверх прежних', () => {
-    saveSettings(db, { ...getSettings(db), inn: '123456789012' });
-    saveSettings(db, { ...getSettings(db), inn: '210987654321' });
+    saveSettings(db, { ...getSettings(db), taxNumber: '123456789012' });
+    saveSettings(db, { ...getSettings(db), taxNumber: '210987654321' });
 
-    expect(getSettings(db).inn).toBe('210987654321');
+    expect(getSettings(db).taxNumber).toBe('210987654321');
     expect(db.all('SELECT * FROM app_state WHERE key = ?', ['company_settings'])).toHaveLength(1);
+  });
+});
+
+describe('лояльность и реквизиты', () => {
+  it('сохраняются и переживают перезагрузку', () => {
+    saveSettings(db, {
+      ...getSettings(db),
+      requisites: [
+        { key: 'ИНН', value: '5702001741' },
+        { key: 'ОГРН', value: '1025700000000' },
+      ],
+      taxes: [{ name: 'НДС 20 %', code: '1', rate_bp: 2000 }],
+      vatPayer: true,
+      bonusOn: true,
+      bonusPerRubles: 100,
+      bonusEarned: 1,
+      bonusLimitBp: 3000,
+      presetDiscounts: [500, 1000],
+      discountRules: [{ from: 1000000, discount_bp: 500 }],
+    });
+
+    const back = getSettings(db);
+    expect(back.requisites).toHaveLength(2);
+    expect(back.requisites[0]).toEqual({ key: 'ИНН', value: '5702001741' });
+    expect(back.taxes[0].rate_bp).toBe(2000);
+    expect(back.vatPayer).toBe(true);
+    expect(back.bonusOn).toBe(true);
+    expect(back.bonusLimitBp).toBe(3000);
+    expect(back.presetDiscounts).toEqual([500, 1000]);
+    expect(back.discountRules[0]).toEqual({ from: 1000000, discount_bp: 500 });
+  });
+
+  it('старые настройки без новых полей не ломаются', () => {
+    // Настройки лежат одним JSON: у того, кто обновился, новых ключей в нём
+    // нет, и они должны прийти из умолчаний, а не оказаться undefined.
+    db.run(
+      `INSERT INTO app_state (key, value) VALUES ('company_settings', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [JSON.stringify({ name: 'Старая чайная', phone: '+7 999' })],
+    );
+
+    const back = getSettings(db);
+    expect(back.name).toBe('Старая чайная');
+    expect(back.requisites).toEqual([]);
+    expect(back.taxes).toEqual([]);
+    expect(back.bonusPerRubles).toBe(100);
   });
 });

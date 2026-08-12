@@ -9,42 +9,132 @@ import type { SqlDriver } from './driver';
  * ещё одна строка.
  */
 
-export interface CompanySettings {
-  /** Основные. */
+/** Строка реквизита: «ИНН → 5702001741». */
+export interface Requisite {
+  key: string;
+  value: string;
+}
+
+/** Налог компании: как он называется, его код и ставка. */
+export interface Tax {
   name: string;
+  code: string;
+  /** Ставка в сотых долях процента: 2000 = 20 %. */
+  rate_bp: number;
+}
+
+/**
+ * Правило накопительной скидки: с какой суммы покупок какая скидка.
+ * Обе величины целые — сумма в копейках, скидка в сотых долях процента.
+ */
+export interface DiscountRule {
+  from: number;
+  discount_bp: number;
+}
+
+export interface CompanySettings {
+  /** Настройки компании. */
+  name: string;
+  country: string;
+  currency: string;
+  /** Как показывать валюту: «руб», «₽», «RUB». */
+  currencyView: string;
   phone: string;
   email: string;
   site: string;
-  /** Реквизиты. */
+
+  /**
+   * Реквизиты.
+   *
+   * Часть полей отдельными строками, часть — списком «название → номер».
+   * Список нужен потому, что набор реквизитов у разных форм собственности
+   * разный: у ИП нет КПП, у бюджетников есть ОКТМО и КБК. Фиксировать их
+   * колонками значило бы переписывать экран под каждую новую строку.
+   */
   legalName: string;
-  inn: string;
-  kpp: string;
-  address: string;
-  bank: string;
-  account: string;
-  /** Налоги. */
+  legalFullName: string;
+  legalAddress: string;
+  actualAddress: string;
+  taxNumber: string;
+  requisites: Requisite[];
+  directorTitle: string;
+  directorName: string;
+  accountantName: string;
+  vatPayer: boolean;
+
+  /** Налоги — список, как у него, а не одна ставка на всю компанию. */
+  taxes: Tax[];
+  /** Система налогообложения по умолчанию и ставка для новых товаров. */
   taxSystem: string;
   vat: string;
+
   /** Email-отчёт. */
+  reportOn: boolean;
   reportEmail: string;
   reportTime: string;
+  timezone: string;
+
+  /** Лояльность: бонусная программа. */
+  bonusOn: boolean;
+  /** Курс начисления: сколько рублей чека дают сколько бонусов. */
+  bonusPerRubles: number;
+  bonusEarned: number;
+  /** Курс списания: сколько бонусов равны скольким рублям скидки. */
+  bonusSpend: number;
+  bonusSpendRubles: number;
+  /** Каким процентом чека можно платить бонусами. */
+  bonusLimitBp: number;
+  /** Бонусы новому покупателю и в день рождения, копейки. */
+  bonusStart: number;
+  bonusBirthday: number;
+
+  /** Лояльность: скидки. */
+  presetDiscounts: number[];
+  discountRules: DiscountRule[];
 }
 
 const DEFAULTS: CompanySettings = {
   name: 'WAYSTEA',
+  country: 'Россия',
+  currency: 'RUB',
+  currencyView: 'руб',
   phone: '',
   email: 'waystea@gmail.com',
   site: '',
+
   legalName: '',
-  inn: '',
-  kpp: '',
-  address: '',
-  bank: '',
-  account: '',
+  legalFullName: '',
+  legalAddress: '',
+  actualAddress: '',
+  taxNumber: '',
+  requisites: [],
+  directorTitle: '',
+  directorName: '',
+  accountantName: '',
+  vatPayer: false,
+
+  taxes: [],
   taxSystem: 'УСН «Доходы»',
   vat: 'Без НДС',
+
+  reportOn: false,
   reportEmail: 'waystea@gmail.com',
   reportTime: '21:00',
+  timezone: 'Europe/Moscow',
+
+  bonusOn: false,
+  // «Каждые 100 ₽ в чеке = 1 бонус на счет» — их формулировка и их же
+  // значения по умолчанию.
+  bonusPerRubles: 100,
+  bonusEarned: 1,
+  bonusSpend: 1,
+  bonusSpendRubles: 1,
+  bonusLimitBp: 5000,
+  bonusStart: 0,
+  bonusBirthday: 0,
+
+  presetDiscounts: [],
+  discountRules: [],
 };
 
 const KEY = 'company_settings';

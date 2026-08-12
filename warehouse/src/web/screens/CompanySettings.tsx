@@ -15,6 +15,7 @@ import { SEED_CLIENTS, SEED_PRODUCTS } from '../../db/seed';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { pickFile, saveFile } from '../../ui/download';
+import { parsePercent } from '../../domain/pricing';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 /**
@@ -70,39 +71,170 @@ export function CompanySettings() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {tab === 'main' ? (
-          <Block title="Основные">
-            <WebField label="Название" value={draft.name} onChange={(name) => set({ name })} />
+          <Block title="Настройки компании">
+            <WebField
+              label="Наименование организации"
+              value={draft.name}
+              onChange={(name) => set({ name })}
+            />
+            <WebField label="Страна" value={draft.country} onChange={(country) => set({ country })} />
+            <WebField
+              label="Основная валюта"
+              value={draft.currency}
+              onChange={(currency) => set({ currency })}
+            />
+            <WebField
+              label="Отображение валюты"
+              value={draft.currencyView}
+              onChange={(currencyView) => set({ currencyView })}
+            />
             <WebField label="Телефон" value={draft.phone} onChange={(phone) => set({ phone })} />
             <WebField label="Email" value={draft.email} onChange={(email) => set({ email })} />
-            <WebField label="Сайт" value={draft.site} onChange={(site) => set({ site })} />
+            <WebField label="Cайт" value={draft.site} onChange={(site) => set({ site })} />
           </Block>
         ) : null}
 
         {tab === 'legal' ? (
           <Block title="Реквизиты">
             <WebField
-              label="Юридическое лицо"
+              label="Наименование организации"
               value={draft.legalName}
               onChange={(legalName) => set({ legalName })}
             />
-            <WebField label="ИНН" value={draft.inn} onChange={(inn) => set({ inn })} />
-            <WebField label="КПП" value={draft.kpp} onChange={(kpp) => set({ kpp })} />
+            <WebField
+              label="Полное наименование организации"
+              value={draft.legalFullName}
+              onChange={(legalFullName) => set({ legalFullName })}
+            />
             <WebField
               label="Юридический адрес"
-              value={draft.address}
-              onChange={(address) => set({ address })}
+              value={draft.legalAddress}
+              onChange={(legalAddress) => set({ legalAddress })}
             />
-            <WebField label="Банк" value={draft.bank} onChange={(bank) => set({ bank })} />
             <WebField
-              label="Расчётный счёт"
-              value={draft.account}
-              onChange={(account) => set({ account })}
+              label="Фактический адрес"
+              value={draft.actualAddress}
+              onChange={(actualAddress) => set({ actualAddress })}
+            />
+            <WebField
+              label="Налоговый номер компании"
+              value={draft.taxNumber}
+              onChange={(taxNumber) => set({ taxNumber })}
+            />
+
+            {/* Реквизиты списком «название → номер»: у ИП нет КПП, у
+                бюджетников есть ОКТМО и КБК. Колонками их не перечислить. */}
+            <Text style={styles.subTitle}>Реквизиты организации</Text>
+            {draft.requisites.map((item, index) => (
+              <View key={index} style={styles.pair}>
+                <View style={styles.pairHalf}>
+                  <WebField
+                    label="Наименование реквизита (например: ИНН)"
+                    value={item.key}
+                    onChange={(key) => set({ requisites: replaceAt(draft.requisites, index, { ...item, key }) })}
+                  />
+                </View>
+                <View style={styles.pairHalf}>
+                  <WebField
+                    label="Номер реквизита (например: 5702001741)"
+                    value={item.value}
+                    onChange={(value) => set({ requisites: replaceAt(draft.requisites, index, { ...item, value }) })}
+                  />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Убрать реквизит"
+                  onPress={() => set({ requisites: draft.requisites.filter((_, at) => at !== index) })}
+                  style={styles.removeCell}
+                >
+                  <Text style={styles.removeMark}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Text
+              accessibilityRole="link"
+              style={styles.addLink}
+              onPress={() => set({ requisites: [...draft.requisites, { key: '', value: '' }] })}
+            >
+              добавить еще
+            </Text>
+            <Text style={styles.note}>Используются для печатных форм.</Text>
+
+            <WebField
+              label="Должность руководителя"
+              value={draft.directorTitle}
+              onChange={(directorTitle) => set({ directorTitle })}
+            />
+            <WebField
+              label="ФИО руководителя"
+              value={draft.directorName}
+              onChange={(directorName) => set({ directorName })}
+            />
+            <WebField
+              label="ФИО бухгалтера"
+              value={draft.accountantName}
+              onChange={(accountantName) => set({ accountantName })}
+            />
+            <WebToggle
+              label="Плательщик НДС"
+              on={draft.vatPayer}
+              onChange={(vatPayer) => set({ vatPayer })}
             />
           </Block>
         ) : null}
 
         {tab === 'taxes' ? (
-          <Block title="Налоги">
+          <Block title="Список налогов">
+            {/* У него налоги — список, а не одна ставка на всю компанию: в
+                одном чеке встречаются позиции с разными ставками. */}
+            {draft.taxes.map((tax, index) => (
+              <View key={index} style={styles.pair}>
+                <View style={styles.pairHalf}>
+                  <WebField
+                    label="Наименование"
+                    value={tax.name}
+                    onChange={(name) => set({ taxes: replaceAt(draft.taxes, index, { ...tax, name }) })}
+                  />
+                </View>
+                <View style={styles.pairThird}>
+                  <WebField
+                    label="Код налога"
+                    value={tax.code}
+                    onChange={(code) => set({ taxes: replaceAt(draft.taxes, index, { ...tax, code }) })}
+                  />
+                </View>
+                <View style={styles.pairThird}>
+                  <WebField
+                    label="Процент"
+                    value={String(tax.rate_bp / 100)}
+                    onChange={(text) =>
+                      set({
+                        taxes: replaceAt(draft.taxes, index, {
+                          ...tax,
+                          rate_bp: parsePercent(text) ?? 0,
+                        }),
+                      })
+                    }
+                  />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Убрать налог"
+                  onPress={() => set({ taxes: draft.taxes.filter((_, at) => at !== index) })}
+                  style={styles.removeCell}
+                >
+                  <Text style={styles.removeMark}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Text
+              accessibilityRole="link"
+              style={styles.addLink}
+              onPress={() => set({ taxes: [...draft.taxes, { name: '', code: '', rate_bp: 0 }] })}
+            >
+              добавить еще
+            </Text>
+
             <WebSelect
               label="Система налогообложения"
               value={draft.taxSystem}
@@ -123,11 +255,21 @@ export function CompanySettings() {
         ) : null}
 
         {tab === 'report' ? (
-          <Block title="Email отчет">
+          <Block title="Ежедневный отчет на электронную почту по продажам и складу">
+            <WebToggle
+              label={draft.reportOn ? 'Рассылка включена' : 'Рассылка выключена'}
+              on={draft.reportOn}
+              onChange={(reportOn) => set({ reportOn })}
+            />
             <WebField
               label="Куда слать отчёт"
               value={draft.reportEmail}
               onChange={(reportEmail) => set({ reportEmail })}
+            />
+            <WebField
+              label="Часовой пояс"
+              value={draft.timezone}
+              onChange={(timezone) => set({ timezone })}
             />
             <WebField
               label="Во сколько"
@@ -152,6 +294,37 @@ export function CompanySettings() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+/** Заменяет один элемент списка — короче, чем `map` с индексом на каждом поле. */
+function replaceAt<T>(list: T[], index: number, item: T): T[] {
+  return list.map((current, at) => (at === index ? item : current));
+}
+
+/** Переключатель — тот же, что в карточке товара: дорожка 49×21. */
+function WebToggle({
+  label,
+  on,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={label}
+      onPress={() => onChange(!on)}
+      style={styles.toggleRow}
+    >
+      <View style={[styles.track, on && styles.trackOn]}>
+        <View style={[styles.knob, on && styles.knobOn]} />
+      </View>
+      <Text style={styles.toggleLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -283,6 +456,26 @@ function WebSelect({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  subTitle: { fontFamily: WEB_FONT, fontSize: 15, fontWeight: '700', color: web.text, marginTop: 10 },
+  pair: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  pairHalf: { flex: 1 },
+  pairThird: { width: 190 },
+  removeCell: { width: 34, height: 38, alignItems: 'center', justifyContent: 'center' },
+  removeMark: { fontFamily: WEB_FONT, fontSize: 22, color: web.textMuted },
+  addLink: { fontFamily: WEB_FONT, fontSize: 14, color: web.link, marginTop: 4 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
+  track: { width: 49, height: 21, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.05)' },
+  trackOn: { backgroundColor: web.link },
+  knob: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(34,36,38,0.15)',
+  },
+  knobOn: { marginLeft: 30 },
+  toggleLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   tabs: {
     flexDirection: 'row',
     gap: 4,

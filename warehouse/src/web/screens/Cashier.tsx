@@ -7,7 +7,7 @@ import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createSale, OutOfStockError } from '../../db/sales';
-import { openShiftAnywhere } from '../../db/shifts';
+import { listRegisters, openShift, openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { Id, PaymentMethod, ProductWithStock } from '../../domain/types';
@@ -39,7 +39,26 @@ export function Cashier() {
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
+  const registers = useQuery((database) => listRegisters(database));
   const shop = locations[0]?.name ?? 'Магазин';
+
+  /**
+   * Открыть смену прямо из кассы.
+   *
+   * Кассу открывают на свободной кассе — той, где смены ещё нет. Если все
+   * заняты, значит смена уже идёт где-то ещё, и об этом надо сказать, а не
+   * молча ничего не сделать.
+   */
+  function openShiftNow() {
+    const free = registers.find((register) => register.open_shift_id === null);
+    if (!free) {
+      say('Нет свободной кассы', 'Смена уже открыта на другой кассе.');
+      return;
+    }
+
+    openShift(db, { registerId: free.id, cashier: 'waystea' });
+    refresh();
+  }
 
   /**
    * Нажали «ПРОДАЖА».
@@ -192,7 +211,26 @@ export function Cashier() {
             <WebIcon.gear size={18} color="#8E8E93" />
           </View>
 
-          {cart.lines.length === 0 ? (
+          {/* Пока смена закрыта, продавать нечего — и вместо пустого чека
+              справа стоит предложение её открыть. У него для этого отдельный
+              экран, на который касса сама уводит: продажа без смены не имеет
+              смысла, и узнать об этом кассир должен до того, как набрал чек. */}
+          {!shift ? (
+            <View style={styles.emptyReceipt}>
+              <WebIcon.lockClosed size={54} color="#C7C7CC" />
+              <Text style={styles.shiftClosedTitle}>Смена закрыта</Text>
+              <Text style={styles.shiftClosedNote}>
+                Чтобы продавать, откройте смену. Чеки будут копиться в ней, пока её не закроют.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={openShiftNow}
+                style={({ pressed }) => [styles.openShift, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.openShiftLabel}>Открыть смену</Text>
+              </Pressable>
+            </View>
+          ) : cart.lines.length === 0 ? (
             <View style={styles.emptyReceipt}>
               <Text style={styles.emptyReceiptText}>Выберите товары</Text>
             </View>
@@ -453,8 +491,25 @@ const styles = StyleSheet.create({
   },
   recommendLabel: { fontSize: 16, color: pos.text },
 
-  emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   emptyReceiptText: { fontSize: 34, color: '#C7C7CC' },
+  shiftClosedTitle: { fontFamily: pos.font, fontSize: 26, color: pos.text },
+  shiftClosedNote: {
+    fontFamily: pos.font,
+    fontSize: 15,
+    color: pos.muted,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 320,
+  },
+  openShift: {
+    marginTop: 8,
+    paddingHorizontal: 34,
+    paddingVertical: 15,
+    borderRadius: 4,
+    backgroundColor: pos.green,
+  },
+  openShiftLabel: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
 
   receipt: { flex: 1 },
   receiptRow: {

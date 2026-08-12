@@ -3,7 +3,7 @@ import { createTestDriver } from '../testDriver';
 import { ensureLocation } from '../locations';
 import { createMoneyDoc } from '../money';
 import { createProduct } from '../products';
-import { createSale } from '../sales';
+import { createSale, refundSale } from '../sales';
 import { postDoc } from '../stock';
 import {
   closeShift,
@@ -111,5 +111,47 @@ describe('смена', () => {
 
     closeShift(db, shiftId, 0);
     expect(listRegisters(db)[0].open_shift_id).toBeNull();
+  });
+});
+
+describe('смена: колонки кабинета', () => {
+  it('возвраты считаются отдельно от выручки', () => {
+    const register = ensureRegister(db, 'Касса');
+    const shiftId = openShift(db, { registerId: register, cashier: 'Аня' });
+
+    const tea = createProduct(db, {
+      name: 'Шу пуэр',
+      sku: null,
+      barcode: null,
+      category_id: null,
+      unit: 'шт',
+      cost_price: 5000,
+      sale_price: 10000,
+      min_qty: 0,
+      photo_uri: null,
+    });
+    postDoc(db, { type: 'purchase', lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'шт', qty: 10000, price: 5000 }] });
+
+    const first = createSale(db, {
+      discount: 0,
+      payment: 'cash',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'шт', qty: 2000, price: 10000, cost_price: 5000, stock: 10000 }],
+    });
+    createSale(db, {
+      discount: 0,
+      payment: 'card',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'шт', qty: 1000, price: 10000, cost_price: 5000, stock: 8000 }],
+    });
+
+    refundSale(db, first);
+
+    const report = shiftReport(db, shiftId);
+
+    // Возвращённый чек обнуляется, поэтому в сумме продаж остаётся только
+    // второй — а возврат виден отдельной парой чисел.
+    expect(report.returns).toBe(1);
+    expect(report.returnsSum).toBe(20000);
+    expect(report.revenue).toBe(10000);
+    expect(report.shift.cashier).toBe('Аня');
   });
 });

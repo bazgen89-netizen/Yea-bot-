@@ -17,7 +17,31 @@ function selectParties(where: string[], params: SqlParam[], order = 'p.name COLL
       SELECT p.*,
              COALESCE(SUM(s.total), 0) AS purchases,
              COUNT(s.id)               AS receipts,
-             MAX(s.created_at)         AS last_sale_at
+             MAX(s.created_at)         AS last_sale_at,
+             -- Возвраты и деньги — подзапросами, а не ещё двумя соединениями:
+             -- две таблицы «многие ко многим» в одном GROUP BY перемножили бы
+             -- строки, и суммы покупок выросли бы в разы.
+             (SELECT COUNT(DISTINCT m.sale_id)
+                FROM stock_moves m JOIN sales r ON r.id = m.sale_id
+               WHERE m.reason = 'return' AND r.customer_id = p.id) AS returns,
+             (SELECT COALESCE(SUM(CAST(ROUND(m.qty_delta * m.price / 1000.0) AS INTEGER)), 0)
+                FROM stock_moves m JOIN sales r ON r.id = m.sale_id
+               WHERE m.reason = 'return' AND r.customer_id = p.id) AS returns_sum,
+             (SELECT COALESCE(SUM(amount), 0) FROM money_docs d
+               WHERE d.counterparty_id = p.id AND d.type = 'income')  AS debit_sum,
+             (SELECT COALESCE(SUM(amount), 0) FROM money_docs d
+               WHERE d.counterparty_id = p.id AND d.type = 'expense') AS credit_sum,
+             -- Закупки у поставщика: сами документы и их суммы по движениям.
+             (SELECT COUNT(*) FROM docs k
+               WHERE k.counterparty_id = p.id AND k.subtype = 'purchase') AS purchases_count,
+             (SELECT COALESCE(SUM(CAST(ROUND(m.qty_delta * m.price / 1000.0) AS INTEGER)), 0)
+                FROM docs k JOIN stock_moves m ON m.doc_id = k.id
+               WHERE k.counterparty_id = p.id AND k.subtype = 'purchase') AS purchases_sum,
+             (SELECT COUNT(*) FROM docs k
+               WHERE k.counterparty_id = p.id AND k.subtype = 'purchase_return') AS purchase_returns,
+             (SELECT COALESCE(SUM(CAST(ROUND(-m.qty_delta * m.price / 1000.0) AS INTEGER)), 0)
+                FROM docs k JOIN stock_moves m ON m.doc_id = k.id
+               WHERE k.counterparty_id = p.id AND k.subtype = 'purchase_return') AS purchase_returns_sum
       FROM counterparties p
       LEFT JOIN sales s ON s.customer_id = p.id
       ${whereSql}

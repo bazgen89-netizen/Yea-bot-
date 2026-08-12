@@ -2,7 +2,9 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { Dropdown } from '../Dropdown';
+import { partySets, SET_LABEL, type PartyColumn, type PartySet } from '../partyColumns';
+import { HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { listCounterparties } from '../../db/counterparties';
 import type { CounterpartyWithTotals, PartyKind } from '../../domain/types';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -12,22 +14,21 @@ import { web, webText, WEB_FONT } from '../../ui/webTheme';
 /** 3184 клиента дают 64 страницы — ровно как в исходном приложении. */
 const PAGE_SIZE = 50;
 
-const COLUMNS: Column[] = [
-  { key: 'name', title: 'Клиент', width: 320, sortable: true },
-  { key: 'phone', title: 'Телефон', width: 180 },
-  { key: 'email', title: 'Email', width: 220 },
-  { key: 'birthday', title: 'День рождения', width: 170, sortable: true },
-  { key: 'gender', title: 'Пол', width: 120, sortable: true },
-  { key: 'note', title: 'Описание', width: 260 },
-  { key: 'address', title: 'Адрес', width: 180 },
-  { key: 'by', title: 'Добавил', width: 160 },
-];
-
-/** «Клиенты» и «Поставщики» — таблица кабинета. */
+/**
+ * «Клиенты» и «Поставщики» — таблица кабинета.
+ *
+ * Колонок не один набор, а несколько: у него сверху выпадающий список, и он
+ * переключает всю таблицу — «Информация», «Лояльность», «Статистика».
+ * См. `partyColumns`.
+ */
 export function PartiesTable({ kind }: { kind: PartyKind }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [set, setSet] = useState<PartySet>('basic');
+
+  const sets = useMemo(() => partySets(kind), [kind]);
+  const columns = sets.find((item) => item.key === set)?.columns ?? sets[0].columns;
 
   const parties = useQuery(
     (db) => listCounterparties(db, { kind, search }),
@@ -62,7 +63,13 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
           placeholder="поиск"
           width={278}
         />
-        <ToolButton label="Информация" tone="blueOutline" soon />
+        <Dropdown
+          value={set}
+          onChange={setSet}
+          options={sets.map((item) => ({ value: item.key, label: SET_LABEL[item.key] }))}
+          width={190}
+          label="Набор колонок"
+        />
         {customers ? (
           <ToolButton label="Настройка системы лояльности" tone="orangeOutline" soon />
         ) : null}
@@ -84,13 +91,21 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
-          <HeadRow columns={COLUMNS} />
+          <HeadRow
+            columns={columns.map((column) => ({
+              key: column.key,
+              title: column.title,
+              width: column.width,
+              numeric: column.numeric,
+            }))}
+          />
 
           <ScrollView>
             {shown.map((party) => (
               <PartyRow
                 key={party.id}
                 party={party}
+                columns={columns}
                 onPress={() =>
                   router.push({ pathname: '/counterparty/[id]', params: { id: String(party.id) } })
                 }
@@ -113,39 +128,45 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
 
 function PartyRow({
   party,
+  columns,
   onPress,
 }: {
   party: CounterpartyWithTotals;
+  columns: PartyColumn[];
   onPress: () => void;
 }) {
-  const [name, phone, email, birthday, gender, note, address, by] = COLUMNS;
-
   return (
     <Row onPress={onPress}>
-      <View style={[styles.nameCell, { width: name.width }]}>
-        <WebIcon.parties size={15} color={web.link} />
-        <Text style={webText.link} numberOfLines={2}>
-          {party.name}
-        </Text>
-      </View>
+      {columns.map((column, index) => {
+        // Первая колонка несёт значок и ссылку — по ней открывают карточку.
+        if (index === 0) {
+          return (
+            <View key={column.key} style={[styles.nameCell, { width: column.width }]}>
+              <WebIcon.parties size={15} color={web.link} />
+              <Text style={webText.link} numberOfLines={2}>
+                {column.value(party)}
+              </Text>
+            </View>
+          );
+        }
 
-      <Text style={[webText.link, { width: phone.width }]} numberOfLines={1}>
-        {party.phone ?? ''}
-      </Text>
-      <Text style={[webText.link, { width: email.width }]} numberOfLines={1}>
-        {party.email ?? ''}
-      </Text>
-      <Text style={[webText.cell, { width: birthday.width }]}>{party.birthday ?? '-'}</Text>
-      <Text style={[webText.cell, { width: gender.width }]}>{party.gender ?? ''}</Text>
-      <Text style={[webText.cell, { width: note.width }]} numberOfLines={2}>
-        {party.note ?? ''}
-      </Text>
-      <Text style={[webText.cell, { width: address.width }]} numberOfLines={1}>
-        {party.address ?? ''}
-      </Text>
-      <Text style={[webText.link, { width: by.width }]} numberOfLines={1}>
-        {party.created_by ?? ''}
-      </Text>
+        // Телефон и почта — тоже ссылки: по ним звонят и пишут.
+        const link = column.key === 'phone' || column.key === 'email';
+
+        return (
+          <Text
+            key={column.key}
+            style={[
+              link ? webText.link : column.numeric ? webText.cellNumber : webText.cell,
+              { width: column.width },
+              column.numeric && styles.right,
+            ]}
+            numberOfLines={2}
+          >
+            {column.value(party)}
+          </Text>
+        );
+      })}
     </Row>
   );
 }
@@ -153,6 +174,7 @@ function PartyRow({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   nameCell: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  right: { textAlign: 'right' },
   total: { fontFamily: WEB_FONT, fontSize: 16, color: web.text, marginHorizontal: 6 },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

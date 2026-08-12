@@ -104,6 +104,15 @@ export interface Counterparty {
   address: string | null;
   /** Кто завёл карточку — имя сотрудника или магазина строкой. */
   created_by: string | null;
+  /** Номер карты лояльности. */
+  discount_card: string | null;
+  /** 'discount' — скидка процентом, 'bonus' — бонусный счёт, null — ничего. */
+  loyalty_type: string | null;
+  /** Бонусный счёт, копейки: бонус приравнен к рублю. */
+  bonus_balance: Kopecks;
+  bonus_spent: Kopecks;
+  /** Кешбэк в сотых долях процента. */
+  cashback_bp: number;
   archived: number;
   created_at: string;
 }
@@ -116,6 +125,17 @@ export interface CounterpartyWithTotals extends Counterparty {
   receipts: number;
   /** Дата последней покупки или null. */
   last_sale_at: string | null;
+  /** Сколько чеков вернули и на какую сумму. */
+  returns: number;
+  returns_sum: Kopecks;
+  /** Деньги, пришедшие от него и ушедшие ему, копейки. */
+  debit_sum: Kopecks;
+  credit_sum: Kopecks;
+  /** Закупки у поставщика: сколько документов и на какую сумму. */
+  purchases_count: number;
+  purchases_sum: Kopecks;
+  purchase_returns: number;
+  purchase_returns_sum: Kopecks;
 }
 
 /** Что документ делает со складом: приходует, списывает или выравнивает. */

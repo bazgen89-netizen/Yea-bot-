@@ -9,6 +9,11 @@ export interface DocInput {
    */
   type: DocKind | DocType;
   counterparty?: string | null;
+  /**
+   * Контрагент ссылкой. Имя остаётся для подписи документа, а по ссылке
+   * считается статистика поставщика — имена меняются и повторяются.
+   */
+  counterpartyId?: Id | null;
   note?: string | null;
   /** Магазин, в котором проводится документ. */
   locationId?: Id | null;
@@ -74,12 +79,14 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
 
   return db.tx(() => {
     db.run(
-      `INSERT INTO docs (type, subtype, counterparty, note, location_id, staff_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO docs (type, subtype, counterparty, counterparty_id, note,
+                         location_id, staff_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         docType,
         kind,
         input.counterparty?.trim() || null,
+        input.counterpartyId ?? null,
         input.note?.trim() || null,
         input.locationId ?? null,
         currentStaffId(db),

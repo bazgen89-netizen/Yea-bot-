@@ -20,6 +20,10 @@ export interface Register {
 }
 
 export interface RegisterWithState extends Register {
+  /** Кассиры, работавшие на этой кассе, через запятую. */
+  cashiers: string | null;
+  /** Наличные на начало открытой смены, копейки; 0 — смены нет. */
+  opening_cash: Kopecks;
   location_name: string | null;
   /** Номер открытой смены или null. */
   open_shift_id: Id | null;
@@ -31,7 +35,13 @@ export function listRegisters(db: SqlDriver): RegisterWithState[] {
     `SELECT r.*,
             (SELECT l.name FROM locations l WHERE l.id = r.location_id) AS location_name,
             s.id        AS open_shift_id,
-            s.opened_at AS opened_at
+            s.opened_at AS opened_at,
+            -- Кассиры кассы — те, кто на ней уже работал: отдельной привязки
+            -- сотрудника к кассе у нас нет, а список из смен — настоящий.
+            (SELECT GROUP_CONCAT(DISTINCT h.cashier) FROM shifts h
+              WHERE h.register_id = r.id AND h.cashier IS NOT NULL) AS cashiers,
+            -- Сколько денег в ящике: наличные открытой смены на сейчас.
+            COALESCE(s.opening_cash, 0) AS opening_cash
      FROM registers r
      LEFT JOIN shifts s ON s.register_id = r.id AND s.closed_at IS NULL
      WHERE r.archived = 0
@@ -127,6 +137,10 @@ export interface ShiftReport {
   card: Kopecks;
   transfer: Kopecks;
   receipts: number;
+  /** Сколько чеков этой смены вернули. */
+  returns: number;
+  /** Сумма возвращённого, копейки. */
+  returnsSum: Kopecks;
   /** Внесения и изъятия деньгами за смену, копейки. */
   moneyIn: Kopecks;
   moneyOut: Kopecks;
@@ -166,6 +180,18 @@ export function shiftReport(db: SqlDriver, shiftId: Id): ShiftReport {
     [shiftId],
   );
 
+  // Возвраты считаются по движениям, а не по чекам: при возврате суммы чека
+  // обнуляются, чтобы выручка за период не включала возвращённое. Само же
+  // возвращённое никуда не девается, и в смене его надо показать.
+  const returns = db.get<{ count: number; sum: number }>(
+    `SELECT COUNT(DISTINCT m.sale_id) AS count,
+            COALESCE(SUM(CAST(ROUND(m.qty_delta * m.price / 1000.0) AS INTEGER)), 0) AS sum
+     FROM stock_moves m
+     JOIN sales s ON s.id = m.sale_id
+     WHERE m.reason = 'return' AND s.shift_id = ?`,
+    [shiftId],
+  );
+
   // Из ящика деньги уходят и приходят не только чеками: инкассация, размен.
   const money = db.get<{ moneyIn: number; moneyOut: number }>(
     `SELECT COALESCE(SUM(CASE WHEN type = 'income'  THEN amount END), 0) AS moneyIn,
@@ -190,6 +216,8 @@ export function shiftReport(db: SqlDriver, shiftId: Id): ShiftReport {
     card: sales?.card ?? 0,
     transfer: sales?.transfer ?? 0,
     receipts: sales?.receipts ?? 0,
+    returns: returns?.count ?? 0,
+    returnsSum: returns?.sum ?? 0,
     moneyIn,
     moneyOut,
     expectedCash,

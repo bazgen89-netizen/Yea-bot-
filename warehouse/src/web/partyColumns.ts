@@ -1,0 +1,221 @@
+import { formatMoneyWeb } from '../domain/money';
+import { formatPercent } from '../domain/pricing';
+import type { CounterpartyWithTotals, PartyKind } from '../domain/types';
+
+/**
+ * Наборы колонок у контрагентов.
+ *
+ * У него список контрагентов показывается не одной таблицей, а несколькими:
+ * сверху выпадающий список, и он переключает весь набор колонок. У клиентов
+ * наборов три — «Информация», «Лояльность», «Статистика»; у поставщиков два —
+ * «Информация» и «Статистика».
+ *
+ * Это не украшение. В «Информации» нет ни одной суммы, в «Статистике» нет ни
+ * одного адреса: два разных вопроса — «кто это» и «сколько он принёс» — и
+ * смешивать их в одной таблице значит заставлять листать вбок мимо
+ * ненужного.
+ *
+ * Подписи из его словаря. Чего нет: «Долг по продажам», «Долг по возвратам»
+ * и «Баланс» — мы не ведём долги, и три колонки нулей ничего не сказали бы.
+ */
+
+export interface PartyColumn {
+  key: string;
+  title: string;
+  width: number;
+  numeric?: boolean;
+  value: (party: CounterpartyWithTotals) => string;
+}
+
+export type PartySet = 'basic' | 'loyalty' | 'stats';
+
+export const SET_LABEL: Record<PartySet, string> = {
+  basic: 'Информация',
+  loyalty: 'Лояльность',
+  stats: 'Статистика',
+};
+
+/** Первые три колонки общие у всех наборов — у него они тоже общие. */
+const START: PartyColumn[] = [
+  { key: 'name', title: 'Наименование', width: 320, value: (p) => p.name },
+  { key: 'phone', title: 'Телефон', width: 170, value: (p) => p.phone ?? '' },
+  { key: 'email', title: 'Email', width: 210, value: (p) => p.email ?? '' },
+];
+
+const dash = (value: string | null) => value ?? '—';
+
+const BASIC_CUSTOMER: PartyColumn[] = [
+  ...START,
+  { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
+  { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender) },
+  { key: 'note', title: 'Описание', width: 240, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: 200, value: (p) => p.address ?? '' },
+  { key: 'by', title: 'Добавил', width: 160, value: (p) => p.created_by ?? '' },
+  { key: 'created', title: 'Создан', width: 150, value: (p) => day(p.created_at) },
+];
+
+const BASIC_SUPPLIER: PartyColumn[] = [
+  ...START,
+  { key: 'note', title: 'Описание', width: 260, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: 220, value: (p) => p.address ?? '' },
+  { key: 'by', title: 'Добавил', width: 170, value: (p) => p.created_by ?? '' },
+  { key: 'created', title: 'Создан', width: 150, value: (p) => day(p.created_at) },
+];
+
+const LOYALTY: PartyColumn[] = [
+  ...START,
+  { key: 'card', title: 'Номер карты лояльности', width: 220, value: (p) => dash(p.discount_card) },
+  {
+    key: 'type',
+    title: 'Система лояльности',
+    width: 200,
+    value: (p) => LOYALTY_LABEL[p.loyalty_type ?? ''] ?? '—',
+  },
+  { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
+  {
+    key: 'discount',
+    title: 'Скидка',
+    width: 120,
+    numeric: true,
+    value: (p) => (p.discount_bp ? formatPercent(p.discount_bp) : '—'),
+  },
+  {
+    key: 'bonus',
+    title: 'Бонусов',
+    width: 140,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.bonus_balance),
+  },
+  {
+    key: 'bonusSpent',
+    title: 'Потрачено бонусов',
+    width: 190,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.bonus_spent),
+  },
+  {
+    key: 'cashback',
+    title: 'Кешбэк',
+    width: 130,
+    numeric: true,
+    value: (p) => (p.cashback_bp ? formatPercent(p.cashback_bp) : '—'),
+  },
+];
+
+const STATS_CUSTOMER: PartyColumn[] = [
+  ...START,
+  { key: 'sales', title: 'Кол-во продаж', width: 160, numeric: true, value: (p) => String(p.receipts) },
+  {
+    key: 'salesSum',
+    title: 'Сумма продаж',
+    width: 170,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.purchases),
+  },
+  {
+    key: 'debit',
+    title: 'Сумма приходов',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.debit_sum),
+  },
+  {
+    key: 'avg',
+    title: 'Средний чек',
+    width: 160,
+    numeric: true,
+    value: (p) => (p.receipts ? formatMoneyWeb(Math.round(p.purchases / p.receipts)) : '—'),
+  },
+  {
+    key: 'returns',
+    title: 'Кол-во возвратов продаж',
+    width: 230,
+    numeric: true,
+    value: (p) => String(p.returns),
+  },
+  {
+    key: 'returnsSum',
+    title: 'Сумма возврата',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.returns_sum),
+  },
+  {
+    key: 'credit',
+    title: 'Сумма расходов',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.credit_sum),
+  },
+];
+
+const STATS_SUPPLIER: PartyColumn[] = [
+  ...START,
+  {
+    key: 'purchases',
+    title: 'Количество закупок',
+    width: 200,
+    numeric: true,
+    value: (p) => String(p.purchases_count),
+  },
+  {
+    key: 'purchasesSum',
+    title: 'Сумма закупок',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.purchases_sum),
+  },
+  {
+    key: 'credit',
+    title: 'Сумма расходов',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.credit_sum),
+  },
+  {
+    key: 'purchaseReturns',
+    title: 'Количество возвратов закупок',
+    width: 260,
+    numeric: true,
+    value: (p) => String(p.purchase_returns),
+  },
+  {
+    key: 'purchaseReturnsSum',
+    title: 'Сумма возвратов закупок',
+    width: 230,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.purchase_returns_sum),
+  },
+  {
+    key: 'debit',
+    title: 'Сумма приходов',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.debit_sum),
+  },
+];
+
+export const LOYALTY_LABEL: Record<string, string> = {
+  discount: 'Скидка',
+  bonus: 'Бонусы',
+};
+
+/** Какие наборы есть у этого вида контрагента и что в каждом. */
+export function partySets(kind: PartyKind): { key: PartySet; columns: PartyColumn[] }[] {
+  if (kind === 'supplier') {
+    return [
+      { key: 'basic', columns: BASIC_SUPPLIER },
+      { key: 'stats', columns: STATS_SUPPLIER },
+    ];
+  }
+
+  return [
+    { key: 'basic', columns: BASIC_CUSTOMER },
+    { key: 'loyalty', columns: LOYALTY },
+    { key: 'stats', columns: STATS_CUSTOMER },
+  ];
+}
+
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString('ru-RU');
+}

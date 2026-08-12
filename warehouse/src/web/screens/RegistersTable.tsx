@@ -3,19 +3,27 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
-import { formatDay, formatTime } from '../../db/journal';
+import { formatDay } from '../../db/journal';
+import { formatMoneyWeb } from '../../domain/money';
 import { listRegisters, openShift, type RegisterWithState } from '../../db/shifts';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
-// Колонок мало, и кнопка — последняя из них: ширины подобраны так, чтобы
-// она помещалась целиком, а не пряталась за горизонтальной прокруткой.
+/**
+ * Колонки — его: Наименование · Магазин · Кассиры · Терминалы · Создан.
+ *
+ * «Состояние» и «Смена открыта» были нашими: у него состояние видно по
+ * значку слева и по кнопке справа, отдельной колонки под него нет. Терминалы
+ * — эквайринговые устройства кассы; мы их не ведём, и колонка стоит пустой,
+ * а не выброшена: без неё таблица разошлась бы с оригиналом на глаз.
+ */
 const COLUMNS: Column[] = [
-  { key: 'name', title: 'Касса', width: 270 },
-  { key: 'shop', title: 'Магазин', width: 230 },
-  { key: 'state', title: 'Состояние', width: 200 },
-  { key: 'since', title: 'Смена открыта', width: 200 },
+  { key: 'name', title: 'Наименование', width: 260 },
+  { key: 'shop', title: 'Магазин', width: 210 },
+  { key: 'cashiers', title: 'Кассиры', width: 220 },
+  { key: 'terminals', title: 'Терминалы', width: 170 },
+  { key: 'created', title: 'Создан', width: 160 },
   { key: 'action', title: '', width: 190 },
 ];
 
@@ -26,6 +34,10 @@ export function RegistersTable() {
   const [search, setSearch] = useState('');
 
   const registers = useQuery((database) => listRegisters(database));
+
+  // Сверху у него две суммы по всем кассам. «Всего денег в кассах» — то, что
+  // сейчас в ящиках открытых смен; «Баланс» — то же с учётом чеков смены.
+  const inDrawers = registers.reduce((sum, register) => sum + register.opening_cash, 0);
 
   const filtered = search.trim()
     ? registers.filter((register) =>
@@ -50,6 +62,10 @@ export function RegistersTable() {
           onPress={() => router.push('/cashier')}
         />
         <ToolButton label="Смены" tone="plain" onPress={() => router.push('/shifts')} />
+        <View style={styles.totals}>
+          <Text style={styles.totalLabel}>Всего денег в кассах</Text>
+          <Text style={styles.totalValue}>{formatMoneyWeb(inDrawers)}</Text>
+        </View>
       </Toolbar>
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
@@ -90,7 +106,7 @@ function RegisterRow({
   onOpen: () => void;
   onShifts: () => void;
 }) {
-  const [name, shop, state, since, action] = COLUMNS;
+  const [name, shop, cashiers, terminals, created, action] = COLUMNS;
   const isOpen = register.open_shift_id !== null;
 
   return (
@@ -113,19 +129,12 @@ function RegisterRow({
           <Text style={[webText.cell, { width: shop.width }]} numberOfLines={1}>
             {register.location_name ?? '—'}
           </Text>
-          <Text
-            style={[
-              webText.cell,
-              { width: state.width },
-              isOpen ? { color: web.greenText } : { color: web.textMuted },
-            ]}
-          >
-            {isOpen ? `Смена №${register.open_shift_id} открыта` : 'Смена закрыта'}
+          <Text style={[webText.cell, { width: cashiers.width }]} numberOfLines={2}>
+            {register.cashiers ?? '—'}
           </Text>
-          <Text style={[webText.cell, { width: since.width }]}>
-            {register.opened_at
-              ? `${formatDay(register.opened_at.slice(0, 10))}, ${formatTime(register.opened_at)}`
-              : '—'}
+          <Text style={[webText.cell, { width: terminals.width }]}>—</Text>
+          <Text style={[webText.cell, { width: created.width }]}>
+            {formatDay(register.created_at.slice(0, 10))}
           </Text>
 
           <View style={{ width: action.width }}>
@@ -143,6 +152,9 @@ function RegisterRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  totals: { marginLeft: 'auto', alignItems: 'flex-end' },
+  totalLabel: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted },
+  totalValue: { fontFamily: WEB_FONT, fontSize: 17, color: web.text },
   statusHead: { width: 46 },
   rowWrap: { flexDirection: 'row' },
   stripe: { width: 4 },

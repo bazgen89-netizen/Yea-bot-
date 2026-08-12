@@ -371,6 +371,38 @@ export const MIGRATIONS: string[] = [
   INSERT INTO product_categories (product_id, category_id)
   SELECT id, category_id FROM products WHERE category_id IS NOT NULL;
   `,
+
+  // 12 — лояльность контрагента
+  `
+  -- Номер карты лояльности: по нему клиента находят на кассе, когда он не
+  -- помнит телефон.
+  ALTER TABLE counterparties ADD COLUMN discount_card TEXT;
+
+  -- Какая система на клиенте: 'discount' — скидка процентом, 'bonus' —
+  -- бонусный счёт. Пусто — никакой.
+  ALTER TABLE counterparties ADD COLUMN loyalty_type TEXT;
+
+  -- Бонусный счёт, копейки: бонус приравнен к рублю, и держать его в других
+  -- единицах значило бы пересчитывать при каждой оплате.
+  ALTER TABLE counterparties ADD COLUMN bonus_balance INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE counterparties ADD COLUMN bonus_spent   INTEGER NOT NULL DEFAULT 0;
+
+  -- Кешбэк в сотых долях процента: 500 = 5 %.
+  ALTER TABLE counterparties ADD COLUMN cashback_bp INTEGER NOT NULL DEFAULT 0;
+
+  -- Контрагент документа ссылкой, а не именем.
+  --
+  -- Именем он лежал с самого начала, и это мешало посчитать закупки
+  -- поставщика: имена меняются, повторяются и пишутся по-разному. Старая
+  -- колонка остаётся — по ней подписаны уже заведённые документы.
+  ALTER TABLE docs ADD COLUMN counterparty_id INTEGER REFERENCES counterparties(id);
+
+  UPDATE docs SET counterparty_id = (
+    SELECT c.id FROM counterparties c WHERE c.name = docs.counterparty
+  ) WHERE counterparty IS NOT NULL;
+
+  CREATE INDEX idx_docs_counterparty ON docs(counterparty_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

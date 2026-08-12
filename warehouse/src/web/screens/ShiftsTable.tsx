@@ -10,16 +10,36 @@ import { WebIcon } from '../../ui/icons';
 import { say } from '../../ui/alert';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
+/**
+ * Колонки — его, все шестнадцать и в его порядке.
+ *
+ * Было девять, и они были свои: «Чеков», «Картой», «Расхождение». У него
+ * смена расписана подробнее, и это не прихоть — по ней сверяют ящик: сколько
+ * было на начало, сколько внесли, сколько изъяли, сколько осталось на конец.
+ * Без этих четырёх колонок расхождение видно, а откуда оно взялось — нет.
+ *
+ * «Расхождение» осталось семнадцатым: у него такой колонки нет, но у нас
+ * закрытие смены спрашивает пересчитанные наличные, и прятать результат
+ * сверки было бы странно.
+ */
 const COLUMNS: Column[] = [
-  { key: 'shift', title: 'Смена', width: 150 },
-  { key: 'register', title: 'Касса', width: 250 },
-  { key: 'opened', title: 'Открыта', width: 190 },
-  { key: 'closed', title: 'Закрыта', width: 190 },
-  { key: 'receipts', title: 'Чеков', width: 100, numeric: true },
-  { key: 'revenue', title: 'Выручка, руб', width: 170, numeric: true },
-  { key: 'cash', title: 'Наличными, руб', width: 180, numeric: true },
-  { key: 'card', title: 'Картой, руб', width: 170, numeric: true },
-  { key: 'diff', title: 'Расхождение, руб', width: 190, numeric: true },
+  { key: 'opened', title: 'Открыта', width: 170 },
+  { key: 'closed', title: 'Закрыта', width: 170 },
+  { key: 'cashier', title: 'Кассир', width: 150 },
+  { key: 'register', title: 'Касса', width: 210 },
+  { key: 'store', title: 'Магазин', width: 210 },
+  { key: 'revenue', title: 'Выручка, руб', width: 160, numeric: true },
+  { key: 'sales', title: 'Продажи', width: 110, numeric: true },
+  { key: 'salesSum', title: 'Сумма продаж', width: 160, numeric: true },
+  { key: 'cash', title: 'Наличные', width: 150, numeric: true },
+  { key: 'cashless', title: 'Безналичные', width: 150, numeric: true },
+  { key: 'returns', title: 'Возвраты', width: 120, numeric: true },
+  { key: 'returnsSum', title: 'Сумма возврата', width: 170, numeric: true },
+  { key: 'openMoney', title: 'Начало смены, руб', width: 190, numeric: true },
+  { key: 'debit', title: 'Сумма всех взносов', width: 190, numeric: true },
+  { key: 'credit', title: 'Сумма расходов', width: 180, numeric: true },
+  { key: 'closeMoney', title: 'Конец смены, руб', width: 190, numeric: true },
+  { key: 'diff', title: 'Расхождение, руб', width: 180, numeric: true },
 ];
 
 /**
@@ -129,8 +149,34 @@ export function ShiftsTable() {
 }
 
 function ShiftRow({ report }: { report: ShiftReport }) {
-  const [shift, register, opened, closed, receipts, revenue, cash, card, diff] = COLUMNS;
   const isOpen = report.shift.closed_at === null;
+  const { shift } = report;
+
+  // Выручка — продажи за вычетом возвращённого. Сумма продаж — то же без
+  // вычета: две разные колонки, и путать их нельзя.
+  const revenue = report.revenue - report.returnsSum;
+
+  const cells: (string | number)[] = [
+    when(shift.opened_at),
+    shift.closed_at ? when(shift.closed_at) : 'открыта',
+    shift.cashier ?? '—',
+    report.register_name,
+    report.location_name ?? '—',
+    formatMoneyWeb(revenue),
+    report.receipts,
+    formatMoneyWeb(report.revenue),
+    formatMoneyWeb(report.cash),
+    formatMoneyWeb(report.card + report.transfer),
+    report.returns,
+    formatMoneyWeb(report.returnsSum),
+    formatMoneyWeb(shift.opening_cash),
+    formatMoneyWeb(report.moneyIn),
+    formatMoneyWeb(report.moneyOut),
+    // Пока смена открыта, конца у неё нет — показываем то, что должно быть
+    // в ящике на сейчас.
+    formatMoneyWeb(shift.closing_cash ?? report.expectedCash),
+    report.difference === null ? '—' : formatMoneyWeb(report.difference),
+  ];
 
   return (
     <View style={styles.rowWrap}>
@@ -146,38 +192,20 @@ function ShiftRow({ report }: { report: ShiftReport }) {
             )}
           </View>
 
-          <Text style={[webText.link, { width: shift.width }]}>№{report.shift.id}</Text>
-          <Text style={[webText.cell, { width: register.width }]} numberOfLines={1}>
-            {report.register_name}
-          </Text>
-          <Text style={[webText.cell, { width: opened.width }]}>
-            {when(report.shift.opened_at)}
-          </Text>
-          <Text style={[webText.cell, { width: closed.width }]}>
-            {report.shift.closed_at ? when(report.shift.closed_at) : 'открыта'}
-          </Text>
-          <Text style={[webText.cellNumber, styles.right, { width: receipts.width }]}>
-            {report.receipts}
-          </Text>
-          <Text style={[webText.cellNumber, styles.right, { width: revenue.width }]}>
-            {formatMoneyWeb(report.revenue)}
-          </Text>
-          <Text style={[webText.cellNumber, styles.right, { width: cash.width }]}>
-            {formatMoneyWeb(report.cash)}
-          </Text>
-          <Text style={[webText.cellNumber, styles.right, { width: card.width }]}>
-            {formatMoneyWeb(report.card)}
-          </Text>
-          <Text
-            style={[
-              webText.cellNumber,
-              styles.right,
-              { width: diff.width },
-              report.difference ? { color: web.danger } : null,
-            ]}
-          >
-            {report.difference === null ? '—' : formatMoneyWeb(report.difference)}
-          </Text>
+          {COLUMNS.map((column, index) => (
+            <Text
+              key={column.key}
+              style={[
+                column.numeric ? webText.cellNumber : webText.cell,
+                column.numeric && styles.right,
+                { width: column.width },
+                column.key === 'diff' && report.difference ? { color: web.danger } : null,
+              ]}
+              numberOfLines={1}
+            >
+              {cells[index]}
+            </Text>
+          ))}
         </Row>
       </View>
     </View>

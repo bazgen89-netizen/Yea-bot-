@@ -375,15 +375,32 @@ export interface MoveWithContext extends StockMove {
   product_name: string;
   unit: string;
   counterparty: string | null;
+  /** В каком магазине двигался товар. */
+  location_name: string | null;
+  /** Кто провёл документ или пробил чек. */
+  author: string | null;
+  /** Номер документа или чека. */
+  document_id: Id | null;
 }
 
 /** История движений товара — «откуда взялись эти 3 штуки». */
 export function listMoves(db: SqlDriver, productId: Id, limit = 100): MoveWithContext[] {
   return db.all<MoveWithContext>(
-    `SELECT m.*, p.name AS product_name, p.unit, d.counterparty
+    `SELECT m.*, p.name AS product_name, p.unit, d.counterparty,
+            -- В каком магазине двигался товар. У движений, записанных до
+            -- появления магазинов, точки нет — там останется пусто.
+            (SELECT l.name FROM locations l WHERE l.id = m.location_id) AS location_name,
+            -- Кто это сделал: у документа свой автор, у чека свой.
+            COALESCE(
+              (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+              (SELECT f.name FROM staff f WHERE f.id = s.staff_id)
+            ) AS author,
+            -- Номер документа или чека — по нему движение можно открыть.
+            COALESCE(m.doc_id, m.sale_id) AS document_id
      FROM stock_moves m
      JOIN products p ON p.id = m.product_id
-     LEFT JOIN docs d ON d.id = m.doc_id
+     LEFT JOIN docs  d ON d.id = m.doc_id
+     LEFT JOIN sales s ON s.id = m.sale_id
      WHERE m.product_id = ?
      ORDER BY m.id DESC
      LIMIT ?`,

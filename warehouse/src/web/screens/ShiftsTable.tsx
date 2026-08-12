@@ -9,6 +9,7 @@ import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { say } from '../../ui/alert';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { ShiftView } from './ShiftView';
 
 /**
  * Колонки — его, все шестнадцать и в его порядке.
@@ -52,6 +53,8 @@ const COLUMNS: Column[] = [
 export function ShiftsTable() {
   const { db, refresh } = useDatabase();
   const [search, setSearch] = useState('');
+  // Открытая смена — панель справа, поверх списка: так же, как товар.
+  const [open2, setOpen2] = useState<number | null>(null);
 
   const shifts = useQuery((database) => listShifts(database));
   const registers = useQuery((database) => listRegisters(database));
@@ -127,13 +130,19 @@ export function ShiftsTable() {
         <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
       </Toolbar>
 
+      {open2 !== null ? <ShiftView id={open2} onClose={() => setOpen2(null)} /> : null}
+
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
           <HeadRow columns={COLUMNS} lead={<View style={styles.statusHead} />} />
 
           <ScrollView>
             {filtered.map((report) => (
-              <ShiftRow key={report.shift.id} report={report} />
+              <ShiftRow
+                key={report.shift.id}
+                report={report}
+                onPress={() => setOpen2(report.shift.id)}
+              />
             ))}
 
             {filtered.length === 0 ? (
@@ -148,7 +157,7 @@ export function ShiftsTable() {
   );
 }
 
-function ShiftRow({ report }: { report: ShiftReport }) {
+function ShiftRow({ report, onPress }: { report: ShiftReport; onPress: () => void }) {
   const isOpen = report.shift.closed_at === null;
   const { shift } = report;
 
@@ -183,7 +192,7 @@ function ShiftRow({ report }: { report: ShiftReport }) {
       <View style={[styles.stripe, { backgroundColor: isOpen ? web.green : web.stripeDoc }]} />
 
       <View style={styles.rowInner}>
-        <Row>
+        <Row onPress={onPress}>
           <View style={styles.status}>
             {isOpen ? (
               <WebIcon.lockOpen size={17} color={web.greenText} />

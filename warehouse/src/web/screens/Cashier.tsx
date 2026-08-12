@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
+import { CashierPayment } from './CashierPayment';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
-import { createSale } from '../../db/sales';
+import { createSale, OutOfStockError } from '../../db/sales';
 import { openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
-import type { Id, ProductWithStock } from '../../domain/types';
+import type { Id, PaymentMethod, ProductWithStock } from '../../domain/types';
 import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
@@ -29,6 +31,7 @@ export function Cashier() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Id | null>(null);
   const [menu, setMenu] = useState(false);
+  const [paying, setPaying] = useState(false);
   // Открытый раздел кассы. 'sale' — сама продажа, всё остальное рисуется
   // поверх неё, не уводя с экрана кассы.
   const [view, setView] = useState<CashierView>('sale');
@@ -38,17 +41,71 @@ export function Cashier() {
   const shift = useQuery((database) => openShiftAnywhere(database));
   const shop = locations[0]?.name ?? 'Магазин';
 
-  const pay = () => {
-    if (cart.lines.length === 0) return;
-    createSale(db, {
-      discount: cart.discount,
-      payment: 'cash',
-      lines: cart.lines,
-      locationId: locations[0]?.id ?? null,
-    });
+  /**
+   * Нажали «ПРОДАЖА».
+   *
+   * Раньше здесь чек проводился сразу и молча: способ оплаты был всегда
+   * наличными, сдача не считалась, а на любой ошибке — не открыта смена, не
+   * хватает остатка — исключение уходило в пустоту, и со стороны это выглядело
+   * так, будто касса «не поняла» и сбросила чек.
+   */
+  const startPay = () => {
+    if (cart.lines.length === 0) {
+      say('Чек пуст', 'Выберите товары на витрине.');
+      return;
+    }
+
+    // Смена — первое, что проверяем: чек без смены некуда положить, и её
+    // отсутствие надо назвать, а не молчать.
+    if (!shift) {
+      say(
+        'Смена закрыта',
+        'Чтобы продавать, откройте смену: «Меню» слева внизу → «Открыть смену».',
+      );
+      return;
+    }
+
+    setPaying(true);
+  };
+
+  const pay = (payment: PaymentMethod, tendered: number): void => {
+    try {
+      createSale(db, {
+        discount: cart.discount,
+        payment,
+        lines: cart.lines,
+        locationId: locations[0]?.id ?? null,
+      });
+    } catch (error) {
+      setPaying(false);
+
+      // Не хватает остатка — говорим, чего именно и сколько: кассир должен
+      // понять, какой товар убрать из чека, а не гадать.
+      if (error instanceof OutOfStockError) {
+        say(
+          'Не хватает остатка',
+          error.details
+            .map(
+              (issue) =>
+                `${issue.name}: в чеке ${formatQty(issue.requested)}, на складе ${formatQty(issue.available)}`,
+            )
+            .join('\n'),
+        );
+        return;
+      }
+
+      say('Чек не проведён', String(error));
+      return;
+    }
+
+    const rest = payment === 'cash' ? tendered - cart.totals.total : 0;
+
     cart.clear();
     setSelected(null);
+    setPaying(false);
     refresh();
+
+    if (rest > 0) say('Чек пробит', `Сдача ${formatMoneyWeb(rest)} руб.`);
   };
 
   return (
@@ -79,6 +136,28 @@ export function Cashier() {
                 product={product}
                 selected={selected === product.id}
                 onPress={() => {
+                  // Остаток проверяется при нажатии, а не при оплате: узнать,
+                  // что товара нет, кассир должен сразу, а не после того, как
+                  // назвал покупателю сумму.
+                  if (product.kind !== 'service' && product.stock <= 0) {
+                    say(
+                      'Товара нет на остатке',
+                      `«${product.name}» — остаток ${formatQty(product.stock)} ${product.unit}. ` +
+                        'Оприходуйте товар или проведите инвентаризацию.',
+                    );
+                    return;
+                  }
+
+                  const inCart = cart.lines.find((line) => line.product_id === product.id);
+                  if (product.kind !== 'service' && (inCart?.qty ?? 0) + 1000 > product.stock) {
+                    say(
+                      'Больше нет',
+                      `«${product.name}»: на складе ${formatQty(product.stock)} ${product.unit}, ` +
+                        'столько уже в чеке.',
+                    );
+                    return;
+                  }
+
                   setSelected(product.id);
                   cart.add(product, 1000);
                 }}
@@ -167,7 +246,7 @@ export function Cashier() {
 
         <Pressable
           accessibilityRole="button"
-          onPress={pay}
+          onPress={startPay}
           style={({ pressed }) => [styles.sellBar, pressed && { opacity: 0.9 }]}
         >
           <Text style={styles.sellDots}>⋮</Text>
@@ -175,6 +254,13 @@ export function Cashier() {
           <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
         </Pressable>
       </View>
+
+      <CashierPayment
+        visible={paying}
+        total={cart.totals.total}
+        onClose={() => setPaying(false)}
+        onPay={pay}
+      />
 
       <CashierMenu visible={menu} onClose={() => setMenu(false)} onOpenView={setView} />
 

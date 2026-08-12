@@ -2,11 +2,12 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { REPORTS, reportById } from '../../src/db/reportTypes';
+import { REPORTS, reportById, type ReportDefinition } from '../../src/db/reportTypes';
 import { periodFor, type PeriodKind } from '../../src/db/reports';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { saveFile } from '../../src/ui/download';
 import { useDesktop } from '../../src/ui/useDesktop';
+import { WebIcon } from '../../src/ui/icons';
 import { web, webText } from '../../src/ui/webTheme';
 import { colors, spacing, text as phoneText } from '../../src/ui/theme';
 import { Dropdown, type Option } from '../../src/web/Dropdown';
@@ -42,6 +43,8 @@ export default function ReportScreen() {
 
   const report = reportById(params.type);
   const [kind, setKind] = useState<PeriodKind>('month');
+  // Таблица или график — переключатель у него стоит в той же панели.
+  const [view, setView] = useState<'table' | 'chart'>('table');
   const period = useMemo(() => periodFor(kind), [kind]);
 
   const rows = useQuery(
@@ -69,6 +72,12 @@ export default function ReportScreen() {
     width: column.width,
     numeric: column.numeric,
     help: column.help,
+    // Итог стоит в шапке, под названием колонки, — так у него. Отдельной
+    // строкой над таблицей он был нашим: у него её нет.
+    total: total?.[index],
+    // Полоска-график — только у отчётов по датам и только в числовых
+    // колонках: в «Наименовании» рисовать нечего.
+    chart: report.dates && column.numeric ? columnValues(rows, index) : undefined,
     report: true,
   }));
 
@@ -101,34 +110,36 @@ export default function ReportScreen() {
           label="Отчёт"
         />
         <Dropdown value={kind} options={PERIODS} onChange={setKind} width={150} label="дата" />
-        <ToolButton label="Фильтр" tone="plain" onPress={download} />
+        {report.dates ? (
+          <Dropdown
+            value={view}
+            options={[
+              { value: 'table' as const, label: 'таблица' },
+              { value: 'chart' as const, label: 'график' },
+            ]}
+            onChange={setView}
+            width={140}
+            label="отображение"
+          />
+        ) : null}
+        <ToolButton
+          label="Скачать в Excel"
+          icon={<WebIcon.excel color={web.text} />}
+          onPress={download}
+        />
         <ToolButton label="Все отчёты" onPress={() => router.replace('/reports')} />
       </Toolbar>
 
+      {report.dates && view === 'chart' ? (
+        <ReportChart report={report} rows={rows} />
+      ) : null}
+
+      {report.dates && view === 'chart' ? null : (
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
           <HeadRow columns={columns} />
 
           <ScrollView>
-            {/* «ИТОГ» стоит первой строкой, а не последней: в отчёте на
-                семьсот строк итог внизу пришлось бы искать прокруткой. */}
-            {total ? (
-              <View style={styles.totalRow}>
-                {total.map((cell, index) => (
-                  <Text
-                    key={index}
-                    style={[
-                      styles.totalCell,
-                      { width: report.columns[index]?.width ?? 160 },
-                      report.columns[index]?.numeric && styles.right,
-                    ]}
-                  >
-                    {cell}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-
             {rows.map((line, index) => (
               <Row key={index}>
                 {line.map((cell, cellIndex) => (
@@ -153,11 +164,63 @@ export default function ReportScreen() {
           </ScrollView>
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }
 
+/** Столбец таблицы числами — из него рисуется полоска в шапке и большой график. */
+function columnValues(rows: string[][], index: number): number[] {
+  return rows.map((line) => {
+    // В ячейках уже отформатированные строки: «1,300.00», «12», «45%».
+    // Разбираем обратно — держать рядом второй, «сырой» набор значило бы
+    // иметь два источника правды об одном столбце.
+    const clean = String(line[index] ?? '').replace(/\s|,|%|₽/g, '');
+    const value = Number(clean);
+    return Number.isFinite(value) ? value : 0;
+  });
+}
+
+/**
+ * Крупный график отчёта по датам — то, что показывает переключатель
+ * «отображение». По оси названия строк, столбцы — выбранная колонка.
+ */
+function ReportChart({ report, rows }: { report: ReportDefinition; rows: string[][] }) {
+  // Числовых колонок несколько; показываем первую — у него график тоже
+  // строится по одной, а не по всем сразу.
+  const index = report.columns.findIndex((column) => column.numeric);
+  if (index < 0 || rows.length === 0) {
+    return <Text style={styles.empty}>За выбранный период данных нет</Text>;
+  }
+
+  const values = columnValues(rows, index);
+  const peak = Math.max(...values, 1);
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator>
+      <View style={styles.chart}>
+        {rows.map((line, at) => (
+          <View key={at} style={styles.chartSlot}>
+            <Text style={styles.chartValue}>{line[index]}</Text>
+            <View
+              style={[styles.chartBar, { height: Math.max(2, (values[at] / peak) * 240) }]}
+            />
+            <Text style={styles.chartLabel} numberOfLines={2}>
+              {line[0]}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, padding: 26, minHeight: 340 },
+  chartSlot: { width: 64, alignItems: 'center', gap: 6 },
+  chartValue: { fontSize: 11, color: web.textMuted },
+  chartBar: { width: '100%', backgroundColor: web.link, borderRadius: 2 },
+  chartLabel: { fontSize: 11, color: web.text, textAlign: 'center' },
   screen: { flex: 1, backgroundColor: web.bg },
   missing: { flex: 1, backgroundColor: web.bg, padding: 26, gap: 20, alignItems: 'flex-start' },
   note: { fontSize: 14, color: web.textMuted, paddingHorizontal: 22, paddingBottom: 14 },

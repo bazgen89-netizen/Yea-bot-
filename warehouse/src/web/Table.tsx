@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { MiniChart } from './MiniChart';
 import { visiblePages } from './pagination';
+import { say } from '../ui/alert';
 import { WebIcon } from '../ui/icons';
 import { web, webText, WEB_FONT } from '../ui/webTheme';
 
@@ -100,8 +102,12 @@ export interface Column {
   report?: boolean;
   /** Числовые колонки прижимаются вправо. */
   numeric?: boolean;
-  /** Кружок «?» рядом с названием — подсказка, как считается колонка. */
-  help?: boolean;
+  /** Кружок «?» рядом с названием: текст подсказки, как считается колонка. */
+  help?: string;
+  /** Итог по колонке — у него он стоит прямо в шапке, под названием. */
+  total?: string;
+  /** Значения для полоски-графика в шапке: у него так в отчётах по датам. */
+  chart?: number[];
   /** Подчёркнутый заголовок — по этой колонке можно сортировать. */
   sortable?: boolean;
 }
@@ -123,8 +129,30 @@ export function HeadRow({ columns, lead }: { columns: Column[]; lead?: ReactNode
             >
               {column.title}
             </Text>
-            {column.help ? <Text style={styles.help}>?</Text> : null}
+            {column.help ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Как считается «${column.title}»`}
+                onPress={() => say(column.title, column.help)}
+                hitSlop={6}
+              >
+                <Text style={styles.help}>?</Text>
+              </Pressable>
+            ) : null}
           </View>
+
+          {column.chart ? <MiniChart values={column.chart} /> : null}
+
+          {/* Итог под названием — так у него: сумма по колонке видна сразу,
+              не приходится искать её строкой в таблице. */}
+          {column.total !== undefined ? (
+            <Text
+              style={[styles.headTotal, column.numeric && styles.right]}
+              numberOfLines={1}
+            >
+              {column.total}
+            </Text>
+          ) : null}
         </View>
       ))}
     </View>
@@ -230,6 +258,14 @@ const styles = StyleSheet.create({
   headCell: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headCellRight: { justifyContent: 'flex-end' },
   /** Кружок с вопросом — у него он серый, тонкой рамкой, 11 пикселей. */
+  headTotal: {
+    fontFamily: WEB_FONT,
+    fontSize: 14,
+    color: web.text,
+    fontWeight: '700',
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+  },
   help: {
     width: 17,
     height: 17,

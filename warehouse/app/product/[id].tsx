@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View,  } from 'react-native';
 
 import {
-  archiveProduct,
   createProduct,
   ensureCategory,
   getProduct,
@@ -39,7 +38,7 @@ import { CatalogTable } from '../../src/web/screens/CatalogTable';
 import { useScanner } from '../../src/state/ScannerProvider';
 import { Badge, Button, Card, Choice, Field, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
-import { confirm, say } from '../../src/ui/alert';
+import { say } from '../../src/ui/alert';
 
 const REASON_LABEL: Record<MoveReason, string> = {
   receipt: 'Приход',
@@ -373,26 +372,18 @@ function ProductPhone() {
       {product && product.kind !== 'service' ? <StockCard productId={product.id} /> : null}
       {product && product.kind !== 'service' ? <HistoryCard productId={product.id} /> : null}
 
-      {product ? (
+      {/* Архивированный товар можно вернуть — это единственная кнопка, что
+          здесь осталась. «В архив» отсюда убрана: она стояла под каждым
+          товаром без объяснения, и было непонятно, что она делает и зачем.
+          Убирают товар из карточки в кабинете, где кнопка называется
+          «Удалить» и спрашивает подтверждение. */}
+      {product?.archived ? (
         <Button
-          title={product.archived ? 'Вернуть из архива' : 'В архив'}
-          variant={product.archived ? 'secondary' : 'danger'}
+          title="Вернуть из архива"
+          variant="secondary"
           onPress={() => {
-            if (product.archived) {
-              restoreProduct(db, product.id);
-              refresh();
-              return;
-            }
-            confirm(
-              'Убрать товар в архив?',
-              'Товар исчезнет из списков и кассы, но останется в истории продаж.',
-              'В архив',
-              () => {
-                archiveProduct(db, product.id);
-                refresh();
-                router.back();
-              },
-            );
+            restoreProduct(db, product.id);
+            refresh();
           }}
         />
       ) : null}

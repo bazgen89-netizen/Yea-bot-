@@ -188,11 +188,13 @@ function History({ productId }: { productId: Id }) {
 
   return (
     <Table
-      head={['Документ', 'Дата', 'Количество']}
+      head={['Документ', 'Дата', 'Магазин', 'Кто', 'Количество']}
       first
       rows={moves.map((move) => [
-        REASON_LABEL[move.reason],
+        `${REASON_LABEL[move.reason]}${move.document_id ? ` #${move.document_id}` : ''}`,
         new Date(move.created_at).toLocaleString('ru-RU'),
+        move.location_name ?? '—',
+        move.author ?? move.counterparty ?? '—',
         `${move.qty_delta > 0 ? '+' : ''}${formatQty(move.qty_delta)} ${move.unit}`,
       ])}
     />

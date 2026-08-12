@@ -43,7 +43,12 @@ export interface ReportColumn {
   width: number;
   numeric?: boolean;
   /** Кружок «?» рядом с названием — у него он стоит не у всех колонок. */
-  help?: boolean;
+  /**
+   * Пояснение под кружком «?» — как считается колонка. Тексты его: у него
+   * у каждой такой колонки висит своя подсказка, и без неё «Рентабельность»
+   * и «Маржинальность» неотличимы на глаз.
+   */
+  help?: string;
 }
 
 export interface ReportDefinition {
@@ -54,12 +59,18 @@ export interface ReportDefinition {
   columns: ReportColumn[];
   rows: (db: SqlDriver, period: Period) => string[][];
   /**
-   * Строка «ИТОГ». В исходном приложении она стоит **первой**, а не внизу:
-   * в отчёте на семьсот строк итог внизу пришлось бы искать прокруткой.
+   * Итог по колонкам. У него он стоит не строкой в таблице, а прямо в шапке,
+   * под названием колонки: сумма видна сразу, искать её прокруткой не надо.
    */
   total?: (db: SqlDriver, period: Period) => string[] | null;
   /** По какой колонке отчёт открывается отсортированным. */
   sortColumn?: number;
+  /**
+   * Отчёт по датам: строки — дни, недели или месяцы подряд. У таких у него в
+   * шапке каждой числовой колонки стоит полоска-график, и переключатель
+   * «таблица / график» показывает их крупно.
+   */
+  dates?: boolean;
 }
 
 const money = (value: number) => formatMoneyWeb(value);
@@ -116,8 +127,8 @@ const PERIOD_COLUMNS: ReportColumn[] = [
   { title: 'Сумма возврата', width: 210, numeric: true },
   { title: 'Себест. продаж', width: 210, numeric: true },
   { title: 'Себест. возвратов', width: 240, numeric: true },
-  { title: 'Прибыль', width: 200, numeric: true, help: true },
-  { title: 'Продажи', width: 180, numeric: true },
+  { title: 'Прибыль', width: 200, numeric: true, help: 'Выручка минус себестоимость продаж' },
+  { title: 'Продажи', width: 180, numeric: true, help: 'Количество продаж товара' },
 ];
 
 function periodTotal(db: SqlDriver, period: Period): string[] {
@@ -140,12 +151,12 @@ function periodTotal(db: SqlDriver, period: Period): string[] {
  */
 const CATEGORY_COLUMNS: ReportColumn[] = [
   { title: 'Наименование', width: 430 },
-  { title: 'Выручка', width: 200, numeric: true, help: true },
-  { title: 'Прибыль', width: 200, numeric: true, help: true },
+  { title: 'Выручка', width: 200, numeric: true, help: 'Сумма продаж товара без учета возвратов' },
+  { title: 'Прибыль', width: 200, numeric: true, help: 'Выручка минус себестоимость продаж' },
   { title: 'Себест. продаж', width: 260, numeric: true },
-  { title: 'Продажи', width: 200, numeric: true, help: true },
-  { title: 'Продано', width: 200, numeric: true, help: true },
-  { title: 'Рентабельность', width: 200, numeric: true },
+  { title: 'Продажи', width: 200, numeric: true, help: 'Количество продаж товара' },
+  { title: 'Продано', width: 200, numeric: true, help: 'Количество единиц проданного товара' },
+  { title: 'Рентабельность', width: 200, numeric: true, help: 'Отношение прибыли к себестоимости' },
 ];
 
 /** Отчёт по товарам: то же плюс штрихкод и артикул. */
@@ -153,12 +164,12 @@ const PRODUCT_COLUMNS: ReportColumn[] = [
   { title: 'Наименование', width: 430 },
   { title: 'Штрих-код', width: 200 },
   { title: 'Артикул', width: 180 },
-  { title: 'Выручка', width: 200, numeric: true, help: true },
-  { title: 'Прибыль', width: 200, numeric: true, help: true },
+  { title: 'Выручка', width: 200, numeric: true, help: 'Сумма продаж товара без учета возвратов' },
+  { title: 'Прибыль', width: 200, numeric: true, help: 'Выручка минус себестоимость продаж' },
   { title: 'Себест. продаж', width: 260, numeric: true },
-  { title: 'Продажи', width: 200, numeric: true, help: true },
-  { title: 'Продано', width: 200, numeric: true, help: true },
-  { title: 'Рентабельность', width: 200, numeric: true },
+  { title: 'Продажи', width: 200, numeric: true, help: 'Количество продаж товара' },
+  { title: 'Продано', width: 200, numeric: true, help: 'Количество единиц проданного товара' },
+  { title: 'Рентабельность', width: 200, numeric: true, help: 'Отношение прибыли к себестоимости' },
 ];
 
 export const REPORTS: ReportDefinition[] = [
@@ -217,10 +228,10 @@ export const REPORTS: ReportDefinition[] = [
       { title: 'Наименование', width: 500 },
       { title: 'Штрих-код', width: 200 },
       { title: 'Артикул', width: 200 },
-      { title: 'Выручка', width: 200, numeric: true, help: true },
-      { title: 'Продажи', width: 190, numeric: true, help: true },
-      { title: 'Средняя цена', width: 200, numeric: true, help: true },
-      { title: 'Продано', width: 190, numeric: true },
+      { title: 'Выручка', width: 200, numeric: true, help: 'Сумма продаж товара без учета возвратов' },
+      { title: 'Продажи', width: 190, numeric: true, help: 'Количество продаж товара' },
+      { title: 'Средняя цена', width: 200, numeric: true, help: 'Выручка, делённая на количество проданного' },
+      { title: 'Продано', width: 190, numeric: true, help: 'Количество единиц проданного товара' },
     ],
     sortColumn: 3,
     rows: (db, period) =>
@@ -236,6 +247,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     id: 'day',
+    dates: true,
     title: 'Продажи по дням',
     note: 'Выручка, себестоимость и прибыль по каждому дню периода.',
     columns: PERIOD_COLUMNS,
@@ -244,6 +256,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     id: 'week',
+    dates: true,
     title: 'Продажи по неделям',
     note: 'То же по неделям. Неделя считается с понедельника.',
     columns: PERIOD_COLUMNS,
@@ -252,6 +265,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     id: 'month',
+    dates: true,
     title: 'Продажи по месяцам',
     note: 'То же по календарным месяцам.',
     columns: PERIOD_COLUMNS,
@@ -284,10 +298,10 @@ export const REPORTS: ReportDefinition[] = [
     note: 'Клиенты и поставщики: продажи, возвраты, средний чек и движение денег.',
     columns: [
       { title: 'Наименование', width: 430 },
-      { title: 'Продажи', width: 180, numeric: true, help: true },
+      { title: 'Продажи', width: 180, numeric: true, help: 'Количество продаж товара' },
       { title: 'Сумма продаж', width: 210, numeric: true },
       { title: 'Возвраты', width: 190, numeric: true },
-      { title: 'Средний чек', width: 210, numeric: true, help: true },
+      { title: 'Средний чек', width: 210, numeric: true, help: 'Сумма продаж, делённая на их количество' },
       { title: 'Приход', width: 190, numeric: true },
       { title: 'Расход', width: 190, numeric: true },
     ],
@@ -329,12 +343,12 @@ export const REPORTS: ReportDefinition[] = [
     note: 'Кто сколько пробил. Чеки, пробитые до появления сотрудников, ни за кем не числятся.',
     columns: [
       { title: 'Наименование', width: 400 },
-      { title: 'Продажи', width: 180, numeric: true, help: true },
+      { title: 'Продажи', width: 180, numeric: true, help: 'Количество продаж товара' },
       { title: 'Возвраты', width: 190, numeric: true },
       { title: 'Сумма продаж', width: 210, numeric: true },
-      { title: 'Средний чек', width: 210, numeric: true, help: true },
+      { title: 'Средний чек', width: 210, numeric: true, help: 'Сумма продаж, делённая на их количество' },
       { title: 'Сумма скидок', width: 210, numeric: true },
-      { title: 'Позиций в чеке', width: 220, numeric: true, help: true },
+      { title: 'Позиций в чеке', width: 220, numeric: true },
     ],
     rows: (db, period) =>
       staffReport(db, period).map((row) => [

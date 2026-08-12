@@ -208,6 +208,9 @@ export function Chips({
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState('');
+  // Список раскрыт. Открывается по нажатию на поле и по стрелке справа: у него
+  // категорию выбирают из готовых, а не набирают по памяти — набор нужен
+  // только тогда, когда такой категории ещё нет.
   const [open, setOpen] = useState(false);
 
   const add = (name: string) => {
@@ -254,11 +257,25 @@ export function Chips({
           placeholderTextColor={web.textMuted}
           style={styles.chipInput}
         />
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={open ? 'Свернуть список' : 'Показать список'}
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((current) => !current)}
+          hitSlop={8}
+        >
+          {open ? (
+            <WebIcon.chevronUp size={16} color={web.textMuted} />
+          ) : (
+            <WebIcon.chevronDown size={16} color={web.textMuted} />
+          )}
+        </Pressable>
       </View>
 
-      {open && left.length > 0 ? (
+      {open ? (
         <View style={styles.suggest}>
-          {left.slice(0, 8).map((option) => (
+          {left.slice(0, 12).map((option) => (
             <Pressable
               key={option}
               accessibilityRole="button"
@@ -266,11 +283,37 @@ export function Chips({
                 add(option);
                 setOpen(false);
               }}
-              style={styles.suggestItem}
+              style={(state) => [
+                styles.suggestItem,
+                (state as { hovered?: boolean }).hovered && styles.suggestHover,
+              ]}
             >
               <Text style={styles.suggestText}>{option}</Text>
             </Pressable>
           ))}
+
+          {/* Новая категория заводится тут же — но отдельной строкой, а не
+              молча по Enter: видно, что она новая, а не выбрана из списка. */}
+          {draft.trim() && !options.some((o) => o.toLowerCase() === draft.trim().toLowerCase()) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                add(draft);
+                setOpen(false);
+              }}
+              style={styles.suggestItem}
+            >
+              <Text style={styles.suggestNew}>Создать «{draft.trim()}»</Text>
+            </Pressable>
+          ) : null}
+
+          {left.length === 0 && !draft.trim() ? (
+            <Text style={styles.suggestEmpty}>
+              {options.length === 0
+                ? 'Категорий пока нет — наберите название, чтобы завести первую'
+                : 'Все категории уже выбраны'}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -406,6 +449,7 @@ const styles = StyleSheet.create({
   },
   suggest: {
     marginTop: 4,
+    maxHeight: 300,
     borderWidth: 1,
     borderColor: FORM_BORDER,
     borderRadius: 4,
@@ -413,7 +457,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   suggestItem: { paddingHorizontal: 12, paddingVertical: 9 },
+  suggestHover: { backgroundColor: web.rowHover },
   suggestText: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  suggestNew: { fontFamily: WEB_FONT, fontSize: 14, color: web.link },
+  suggestEmpty: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted, padding: 12 },
 
   formLink: { fontFamily: WEB_FONT, fontSize: 13, color: web.link },
 

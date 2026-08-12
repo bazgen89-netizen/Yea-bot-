@@ -103,7 +103,9 @@ copyFileSync(products, productsBackup);
 writeFileSync(products, JSON.stringify(cleanProducts));
 
 try {
-  execSync('npm run web:build', { cwd: root, stdio: 'inherit' });
+  // DEMO=1 обязательно: обычная сборка приходит пустой, и показывать по
+  // ссылке было бы нечего — ни таблиц, ни отчётов, ни кассы.
+  execSync('npm run web:build', { cwd: root, stdio: 'inherit', env: { ...process.env, DEMO: '1' } });
   mkdirSync(`${root}/dist-demo`, { recursive: true });
   renameSync(`${root}/dist/index.html`, `${root}/dist-demo/index.html`);
   console.log('\nГотово: dist-demo/index.html');

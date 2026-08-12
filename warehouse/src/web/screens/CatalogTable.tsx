@@ -16,6 +16,7 @@ import { useCatalogFilters } from '../../state/catalogFilters';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { ProductCard } from './ProductCard';
 
 /** Сколько строк на странице. При 661 товаре выходит семь страниц — как в исходном. */
 const PAGE_SIZE = 100;
@@ -26,9 +27,14 @@ const PAGE_SIZE = 100;
  * Колонки остатков заводятся по магазинам из базы: сколько точек завели,
  * столько и колонок. Захардкодить их нельзя — у другого магазина набор свой.
  */
-export function CatalogTable() {
+export function CatalogTable({ openId }: { openId?: string } = {}) {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  // Какой товар открыт в панели справа. Не переход по адресу: у него список
+  // остаётся виден слева, а страница не перезагружается — иначе после
+  // закрытия карточки пришлось бы заново листать до нужной страницы и
+  // набирать поиск.
+  const [open, setOpen] = useState<string | null>(openId ?? null);
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -109,7 +115,7 @@ export function CatalogTable() {
         <ToolButton
           label="Создать товар"
           tone="green"
-          onPress={() => router.push({ pathname: '/product/[id]', params: { id: 'new' } })}
+          onPress={() => setOpen('new')}
         />
         <ToolButton label="" icon={<WebIcon.folderPlus color={web.text} />} soon />
         <ToolButton
@@ -133,9 +139,7 @@ export function CatalogTable() {
                 locations={locations.map((location) => location.id)}
                 widths={columns}
                 stock={stock.get(product.id)}
-                onPress={() =>
-                  router.push({ pathname: '/product/[id]', params: { id: String(product.id) } })
-                }
+                onPress={() => setOpen(String(product.id))}
               />
             ))}
 
@@ -173,13 +177,15 @@ export function CatalogTable() {
         }}
       />
 
+      {open !== null ? <ProductCard id={open} onClose={() => setOpen(null)} /> : null}
+
       <Pager page={current} pages={pages} onPage={setPage} />
 
       <View style={styles.createRow}>
         <Text style={styles.createSign}>⊞</Text>
         <Text
           style={styles.createLabel}
-          onPress={() => router.push({ pathname: '/product/[id]', params: { id: 'new' } })}
+          onPress={() => setOpen('new')}
         >
           Создать новый товар или услугу
         </Text>

@@ -32,12 +32,17 @@ export type CashierView =
   | 'xreport'
   | 'settings';
 
-/** Заголовок раздела — он же подпись в меню. */
+/**
+ * Заголовок раздела.
+ *
+ * Не все они стоят в меню: «Клиенты» открывает кнопка в чеке, а X-отчёт живёт
+ * внутри «Смен» — так же, как у него.
+ */
 export const VIEW_TITLE: Record<Exclude<CashierView, 'sale'>, string> = {
-  receipts: 'История чеков',
+  receipts: 'Журнал чеков',
   clients: 'Клиенты',
   products: 'Товары',
-  shifts: 'Смены и кассы',
+  shifts: 'Смены',
   money: 'Внесение и изъятие',
   xreport: 'X-отчёт',
   settings: 'Настройки',
@@ -116,23 +121,47 @@ function Products() {
   );
 }
 
+/**
+ * Смены: сперва итоги открытой, потом список прошлых.
+ *
+ * Итоги — это и есть X-отчёт, и отдельным пунктом меню он не нужен: у него
+ * они тоже показаны прямо на экране смены. Подписи его же — «Сумма продаж»,
+ * «Выручка с учетом возвратов», «Сумма на текущий момент».
+ */
 function Shifts() {
   const shifts = useQuery((db) => listShifts(db, 50));
+  const current = useQuery((db) => openShiftAnywhere(db));
+  const report = useQuery(
+    (db) => (current ? shiftReport(db, current.id) : null),
+    [current?.id],
+  );
 
   if (shifts.length === 0) return <Empty text="Смен ещё не открывали" />;
 
   return (
     <ScrollView style={styles.list}>
-      {shifts.map((report) => (
-        <View key={report.shift.id} style={styles.row}>
+      {report && current ? (
+        <View style={styles.stats}>
+          <Text style={styles.statsTitle}>Смена №{current.id} — {report.register_name}</Text>
+          <Line label="Количество продаж" value={String(report.receipts)} />
+          <Line label="Сумма продаж" value={formatMoneyWeb(report.revenue)} />
+          <Line label="Наличные" value={formatMoneyWeb(report.cash)} />
+          <Line label="Безналичные" value={formatMoneyWeb(report.card)} />
+          <Line label="Сумма на начало смены" value={formatMoneyWeb(current.opening_cash)} />
+          <Line label="Сумма на текущий момент" value={formatMoneyWeb(report.expectedCash)} />
+        </View>
+      ) : null}
+
+      {shifts.map((report2) => (
+        <View key={report2.shift.id} style={styles.row}>
           <View style={styles.rowMain}>
-            <Text style={styles.rowTitle}>Смена №{report.shift.id}</Text>
+            <Text style={styles.rowTitle}>Смена №{report2.shift.id}</Text>
             <Text style={styles.rowNote}>
-              {new Date(report.shift.opened_at).toLocaleString('ru-RU')}
-              {report.shift.closed_at ? ' — закрыта' : ' — открыта'}
+              {new Date(report2.shift.opened_at).toLocaleString('ru-RU')}
+              {report2.shift.closed_at ? ' — закрыта' : ' — открыта'}
             </Text>
           </View>
-          <Text style={styles.rowValue}>{report.register_name}</Text>
+          <Text style={styles.rowValue}>{report2.register_name}</Text>
         </View>
       ))}
     </ScrollView>
@@ -204,6 +233,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
+  stats: { padding: 20, gap: 4, backgroundColor: pos.tile, borderBottomWidth: 8, borderBottomColor: pos.bg },
+  statsTitle: { fontFamily: pos.font, fontSize: 17, color: pos.text, marginBottom: 8 },
   rowMain: { flex: 1, gap: 3 },
   rowTitle: { fontFamily: pos.font, fontSize: 16, color: pos.text },
   rowNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },

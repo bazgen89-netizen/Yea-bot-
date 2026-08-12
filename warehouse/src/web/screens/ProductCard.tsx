@@ -36,9 +36,10 @@ import {
 import { formatQty, parseQty } from '../../domain/qty';
 import { PRODUCT_KIND_HINT, PRODUCT_KIND_LABEL, type Id, type ProductKind } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
-import { say } from '../../ui/alert';
+import { confirm, say } from '../../ui/alert';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { Drawer, DrawerButton } from '../Drawer';
 import { Dropdown } from '../Dropdown';
 import {
   Chips,
@@ -52,7 +53,6 @@ import {
   TextBox,
   Toggle,
 } from '../Form';
-import { ToolButton, Toolbar } from '../Table';
 import { ProductView } from './ProductView';
 
 /**
@@ -80,8 +80,7 @@ interface PackDraft {
   qty: string;
 }
 
-export function ProductCard({ id }: { id: string }) {
-  const router = useRouter();
+export function ProductCard({ id, onClose }: { id: string; onClose: () => void }) {
   const { db, refresh } = useDatabase();
 
   const isNew = id === 'new';
@@ -266,7 +265,7 @@ export function ProductCard({ id }: { id: string }) {
       applyStock(savedId, input.unit);
 
       refresh();
-      router.back();
+      onClose();
     } catch (error) {
       const message = String(error);
       say(
@@ -302,31 +301,109 @@ export function ProductCard({ id }: { id: string }) {
     }
   }
 
+  // Существующий товар сперва показывается, а не открывается на правку.
+  // Панель при этом остаётся та же: у него переход «посмотрел → правлю» не
+  // закрывает панель и не перезагружает страницу, меняется только тело.
+  /**
+   * Клонирование — его кнопка со значком копии.
+   *
+   * Копия заводится без штрихкода, кода и артикула: все три уникальны, и
+   * второй товар с тем же кодом касса опознала бы неверно. Название получает
+   * пометку, чтобы копия не потерялась среди одинаковых строк.
+   */
+  function clone() {
+    if (!product) return;
+
+    const copy = createProduct(db, {
+      ...product,
+      name: `${product.name} (копия)`,
+      barcode: null,
+      code: null,
+      sku: null,
+    });
+
+    saveCategories(db, copy, savedCategories);
+    savePacks(db, copy, savedPacks);
+    if (product.kind === 'set') {
+      saveSetItems(
+        db,
+        copy,
+        savedSet.map((item) => ({ product_id: item.product_id, qty: item.qty })),
+      );
+    }
+
+    refresh();
+    say('Товар скопирован', 'Копия заведена без штрихкода — его нужно задать заново.');
+    onClose();
+  }
+
+  /**
+   * «Удалить» — на деле архив.
+   *
+   * Товар нельзя убрать насовсем: на него ссылаются позиции проданных чеков,
+   * и удаление сломало бы историю продаж и отчёты за прошлые периоды. Поэтому
+   * он исчезает из списков и кассы, но остаётся в истории.
+   */
+  function remove() {
+    if (!product) return;
+
+    confirm(
+      'Удалить товар?',
+      'Товар исчезнет из справочника и кассы, но останется в проданных чеках — иначе отчёты за прошлые месяцы перестали бы сходиться.',
+      'Удалить',
+      () => {
+        archiveProduct(db, product.id);
+        refresh();
+        onClose();
+      },
+    );
+  }
+
   if (productId && !editing) {
     return (
-      <ProductView id={productId} onClose={() => router.back()} onEdit={() => setEditing(true)} />
+      <Drawer
+        visible
+        onClose={onClose}
+        // Кнопки — его: «Редактировать» зелёная, рядом копия, «Удалить»
+        // красная и прижата вправо.
+        actions={
+          <>
+            <DrawerButton label="Редактировать" tone="green" onPress={() => setEditing(true)} />
+            {product?.archived ? (
+              <DrawerButton
+                label="Вернуть из архива"
+                tone="orangeOutline"
+                onPress={() => {
+                  restoreProduct(db, product.id);
+                  refresh();
+                }}
+              />
+            ) : (
+              <DrawerButton label="Клонировать товар" onPress={clone} />
+            )}
+            <DrawerButton label="Удалить" tone="dangerOutline" right onPress={remove} />
+          </>
+        }
+      >
+        <ProductView id={productId} />
+      </Drawer>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      <Toolbar>
-        <ToolButton label="Сохранить" tone="green" onPress={save} />
-        <ToolButton label="Отмена" onPress={() => router.back()} />
-        {product ? (
-          <ToolButton
-            label={product.archived ? 'Вернуть из архива' : 'В архив'}
-            tone="orangeOutline"
-            onPress={() => {
-              if (product.archived) restoreProduct(db, product.id);
-              else archiveProduct(db, product.id);
-              refresh();
-            }}
-          />
-        ) : null}
-      </Toolbar>
-
-      <ScrollView contentContainerStyle={styles.content}>
+    <Drawer
+      visible
+      onClose={onClose}
+      // Правку открывают из просмотра — слева стрелка «назад», а не крестик.
+      nested={!isNew}
+      actions={
+        <>
+          <DrawerButton label="Сохранить" tone="green" onPress={save} />
+          <DrawerButton label="Отмена" onPress={onClose} />
+        </>
+      }
+    >
+      <View style={styles.screen}>
         <Text style={webText.pageTitle}>{isNew ? 'Создание товара' : name || 'Товар'}</Text>
 
         <FormPanel>
@@ -849,8 +926,8 @@ export function ProductCard({ id }: { id: string }) {
             </Fields>
           ) : null}
         </FormPanel>
-      </ScrollView>
-    </View>
+      </View>
+    </Drawer>
   );
 }
 
@@ -1049,8 +1126,9 @@ function round2(value: number): number {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: web.pageBg },
-  content: { padding: 26, paddingBottom: 60, gap: 22 },
+  // Внутри панели заголовок стоит над листом формы, а не на сером поле:
+  // `.cs_container > .content .panel` у него теряет тень и поля страницы.
+  screen: { backgroundColor: '#FFFFFF', paddingTop: 22 },
   spacer: { flex: 1 },
 
   types: { flexDirection: 'row', gap: 14, marginBottom: 14 },

@@ -35,7 +35,7 @@ import {
 } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useDesktop } from '../../src/ui/useDesktop';
-import { ProductCard } from '../../src/web/screens/ProductCard';
+import { CatalogTable } from '../../src/web/screens/CatalogTable';
 import { useScanner } from '../../src/state/ScannerProvider';
 import { Badge, Button, Card, Choice, Field, Row } from '../../src/ui/components';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
@@ -55,7 +55,11 @@ export default function ProductScreen() {
   const desktop = useDesktop();
   const params = useLocalSearchParams<{ id: string; barcode?: string; type?: string }>();
 
-  if (desktop) return <ProductCard id={params.id} />;
+  // На широком экране карточка — панель поверх справочника, а не отдельная
+  // страница: у него так же. Поэтому здесь рисуется сам справочник, а панель
+  // над ним открывается сразу — тогда по ссылке из отчёта видно и товар, и
+  // список, из которого он.
+  if (desktop) return <CatalogTable openId={params.id} />;
 
   return <ProductPhone />;
 }

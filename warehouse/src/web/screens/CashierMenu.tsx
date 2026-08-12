@@ -1,14 +1,8 @@
 import { useRouter, type Href } from 'expo-router';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import {
-  closeShift,
-  listRegisters,
-  openShift,
-  openShiftAnywhere,
-  shiftReport,
-} from '../../db/shifts';
+import { closeShift, listRegisters, openShift, openShiftAnywhere, shiftReport } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import type { CashierView } from './CashierViews';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -17,28 +11,39 @@ import { Icon, WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
 /**
- * Меню кассира — панель, которую открывает кнопка слева внизу.
+ * Меню кассира — то, что открывает кнопка «Меню» слева внизу.
  *
- * Состав разделов взят из самого кассирского приложения: у него свои экраны
- * (продажа, возврат, история, клиенты, долги, смена, товары, проверка
- * документа, события, оборудование, настройки, выход), и это то, куда из
- * этого меню можно попасть.
+ * Состав снят с самого кассирского приложения (`/wpapp/`, версия 4.0.1): его
+ * код отдаётся без входа, и меню в нём — один список из десятка строк, который
+ * видно целиком. Разбор — `docs/меню-кассира.md`.
  *
- * Разделы, которых у нас пока нет отдельным экраном, ведут туда, где то же
- * самое уже есть: история чеков — в движение товара, клиенты — в справочник.
- * Пункт, ведущий в никуда, читался бы как поломка.
+ * До этого здесь было пятнадцать пунктов: Товары, Клиенты, Проверка
+ * документа, События, Оборудование и другие. В его меню их нет — они собраны
+ * из таблицы маршрутов, то есть из перечня экранов, которые в приложении
+ * существуют. Существовать и стоять в меню — не одно и то же: товары у него
+ * и так на витрине кассы, клиент добавляется кнопкой в чеке, оборудование
+ * лежит в настройках. Лишние строки не помогают, а заставляют читать список.
+ *
+ * Порядок и подписи — его, вплоть до сочетаний клавиш: Shift показывает
+ * цифры, цифра открывает раздел. Разница в двух местах, и обе намеренные:
+ *   — «Открыть смену». У него для этого отдельный экран, на который касса
+ *     сама уводит, пока смена закрыта. У нас его нет, и без пункта в меню
+ *     смену было бы не открыть вовсе.
+ *   — «Возврат долга». У него появляется, когда за клиентами числится долг.
+ *     Мы долги не ведём, и пункт, ведущий в пустоту, читался бы как поломка.
  */
 
 interface Item {
   label: string;
+  icon: ReactNode;
   /** Раздел, который откроется внутри кассы. */
   view?: CashierView;
-  icon: ReactNode;
-  /** Куда вести. Пункты со своим действием обходятся без адреса. */
+  /** Куда вести. Наружу ведёт единственный пункт — «Выйти в кабинет». */
   href?: Href;
-  hint?: string;
-  /** Собственное действие: открыть смену, снять X-отчёт. */
+  /** Собственное действие: открыть смену, закрыть смену. */
   action?: () => void;
+  /** Цифра быстрого вызова — та же, что у него. */
+  key?: string;
   tone?: 'danger';
 }
 
@@ -71,21 +76,6 @@ export function CashierMenu({
     openShift(db, { registerId: free.id, cashier: 'waystea' });
     refresh();
     say('Смена открыта', `${free.name}. Чеки будут копиться в ней, пока её не закроют.`);
-  }
-
-  function xReport() {
-    if (!report) return;
-    say(
-      `X-отчёт по смене №${report.shift.id}`,
-      [
-        `Касса: ${report.register_name}`,
-        `Чеков: ${report.receipts}`,
-        `Выручка: ${formatMoneyWeb(report.revenue)}`,
-        `Наличными: ${formatMoneyWeb(report.cash)}`,
-        `Картой: ${formatMoneyWeb(report.card)}`,
-        `Должно быть в кассе: ${formatMoneyWeb(report.expectedCash)}`,
-      ].join('\n'),
-    );
   }
 
   function finish() {
@@ -126,42 +116,31 @@ export function CashierMenu({
 
   const tint = pos.text;
 
-  const sale: Item[] = [
+  // Первым идёт выход — так же, как у него: это единственный пункт, который
+  // уводит из кассы, и он стоит отдельно от всего остального.
+  const exit: Item[] = [
     {
-      label: 'Продажа',
-      icon: <WebIcon.home size={22} color={tint} />,
-      action: onClose,
-      hint: 'текущий чек',
+      label: 'Выйти в кабинет',
+      icon: <WebIcon.chevronLeft size={22} color={tint} />,
+      href: '/',
+      key: '6',
     },
-    {
-      label: 'Возврат продажи',
-      icon: <WebIcon.goods size={22} color={tint} />,
-      href: '/journal',
-      hint: 'выберите чек',
-    },
-    { label: 'История чеков', icon: <Icon.journal size={22} color={tint} />, view: 'receipts' },
-    {
-      label: 'Клиенты',
-      icon: <WebIcon.parties size={22} color={tint} />,
-      view: 'clients',
-    },
-    { label: 'Долги', icon: <WebIcon.money size={22} color={tint} />, href: '/money' },
   ];
 
   const shiftItems: Item[] = shift
     ? [
         {
-          label: 'X-отчёт',
-          view: 'xreport' as const,
-          icon: <WebIcon.reports size={22} color={tint} />,
-          action: xReport,
-          hint: 'без закрытия смены',
+          label: 'Создать возврат',
+          icon: <WebIcon.goods size={22} color={tint} />,
+          view: 'receipts',
+          key: '4',
         },
         {
           label: 'Закрыть смену',
-          icon: <WebIcon.lockClosed size={22} color={tint} />,
+          icon: <WebIcon.lockClosed size={22} color="#D32F2F" />,
           action: finish,
-          hint: `смена №${shift.id}`,
+          key: '5',
+          tone: 'danger',
         },
       ]
     : [
@@ -169,29 +148,24 @@ export function CashierMenu({
           label: 'Открыть смену',
           icon: <WebIcon.lockOpen size={22} color={tint} />,
           action: start,
-          hint: 'сейчас закрыта',
         },
       ];
 
   const rest: Item[] = [
-    { label: 'Смены и кассы', icon: <WebIcon.registers size={22} color={tint} />, view: 'shifts' },
-    { label: 'Товары', icon: <WebIcon.products size={22} color={tint} />, view: 'products' },
-    { label: 'Внесение и изъятие', icon: <WebIcon.money size={22} color={tint} />, view: 'money' },
-    { label: 'Проверка документа', icon: <WebIcon.done size={22} color={tint} />, href: '/journal' },
-    { label: 'События', icon: <WebIcon.whatsNew size={22} color={tint} />, href: '/journal' },
-    { label: 'Оборудование', icon: <WebIcon.barcode size={22} color={tint} />, href: '/company' },
-    { label: 'Настройки', icon: <WebIcon.gear size={22} color={tint} />, view: 'settings' },
+    ...(shift
+      ? [
+          {
+            label: 'Журнал чеков',
+            icon: <Icon.journal size={22} color={tint} />,
+            view: 'receipts' as const,
+          },
+        ]
+      : []),
+    { label: 'Смены', icon: <WebIcon.calendar size={22} color={tint} />, view: 'shifts', key: '2' },
+    { label: 'Настройки', icon: <WebIcon.gear size={22} color={tint} />, view: 'settings', key: '1' },
   ];
 
-  // Выход закреплён внизу панели, а не стоит последним в списке: список
-  // прокручивается, и единственный способ уйти из кассы не должен требовать
-  // сначала до него доскроллить.
-  const exit: Item = {
-    label: 'Выйти в кабинет',
-    icon: <WebIcon.chevronLeft size={22} color={tint} />,
-    href: '/',
-    tone: 'danger',
-  };
+  const groups = [exit, shiftItems, rest];
 
   const go = (item: Item) => {
     if (item.action) {
@@ -199,18 +173,14 @@ export function CashierMenu({
       return;
     }
 
-    // Разделы кассы открываются внутри кассы. Раньше каждый пункт вёл на
-    // экран кабинета — «Товары» на справочник, «История чеков» в журнал, —
-    // и любое нажатие выбрасывало кассира из кассы. Чтобы пробить следующий
-    // чек, приходилось возвращаться. Касса — рабочее место, из неё не выходят
-    // за тем, чтобы посмотреть остаток.
+    // Разделы кассы открываются внутри кассы: касса — рабочее место, из неё
+    // не выходят затем, чтобы посмотреть чек.
     if (item.view) {
       onClose();
       onOpenView(item.view);
       return;
     }
 
-    // Наружу ведёт единственный пункт — «Выйти в кабинет».
     if (!item.href) return;
     const { href } = item;
     onClose();
@@ -219,6 +189,27 @@ export function CashierMenu({
       setTimeout(() => router.navigate(href), 0);
     }, 0);
   };
+
+  // Цифра открывает раздел, пока меню на экране — как у него. Esc закрывает.
+  useEffect(() => {
+    if (!visible) return;
+
+    const all = groups.flat();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      const item = all.find((entry) => entry.key === event.key);
+      if (item) {
+        event.preventDefault();
+        go(item);
+      }
+    };
+
+    globalThis.addEventListener?.('keydown', onKey);
+    return () => globalThis.removeEventListener?.('keydown', onKey);
+  });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -233,22 +224,27 @@ export function CashierMenu({
         />
 
         <View style={styles.panel}>
-          <View style={styles.head}>
-            <Icon.menu size={24} color="#FFFFFF" />
-            <Text style={styles.headTitle}>Меню</Text>
+          {/* Наверху — кто работает и в какой роли. У него это первая строка
+              списка, а не заголовок: за одной кассой стоят по очереди, и
+              видеть, под кем открыта смена, важнее названия меню. */}
+          <View style={styles.who}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarLetter}>W</Text>
+            </View>
+            <View style={styles.whoText}>
+              <Text style={styles.whoName}>waystea</Text>
+              <Text style={styles.whoRole}>Владелец</Text>
+            </View>
           </View>
 
           <ScrollView>
-            <Group items={sale} onPick={go} />
-            <Divider />
-            <Group items={shiftItems} onPick={go} />
-            <Divider />
-            <Group items={rest} onPick={go} />
+            {groups.map((items, index) => (
+              <View key={index}>
+                <Divider />
+                <Group items={items} onPick={go} />
+              </View>
+            ))}
           </ScrollView>
-
-          <View style={styles.footer}>
-            <Group items={[exit]} onPick={go} />
-          </View>
         </View>
       </View>
     </Modal>
@@ -269,12 +265,10 @@ function Group({ items, onPick }: { items: Item[]; onPick: (item: Item) => void 
           ]}
         >
           <View style={styles.itemIcon}>{item.icon}</View>
-          <View style={styles.itemText}>
-            <Text style={[styles.itemLabel, item.tone === 'danger' && { color: '#D32F2F' }]}>
-              {item.label}
-            </Text>
-            {item.hint ? <Text style={styles.itemHint}>{item.hint}</Text> : null}
-          </View>
+          <Text style={[styles.itemLabel, item.tone === 'danger' && styles.danger]}>
+            {item.label}
+          </Text>
+          {item.key ? <Text style={styles.itemKey}>{item.key}</Text> : null}
         </Pressable>
       ))}
     </View>
@@ -293,30 +287,36 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'flex-start',
   },
+  // 240 — минимальная ширина его списка. Панель у него узкая: пунктов мало,
+  // и растягивать её не на что.
   panel: {
-    width: 380,
+    minWidth: 280,
     maxHeight: '92%',
+    paddingVertical: 8,
     backgroundColor: '#FFFFFF',
     borderTopRightRadius: 4,
     // Затемнение позиционировано абсолютно и потому рисуется поверх обычного
     // потока — без этого оно накрывало бы саму панель и съедало её нажатия.
     zIndex: 1,
   },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    height: 64,
-    paddingHorizontal: 20,
+  who: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingBottom: 12 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: pos.bar,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headTitle: { color: '#FFFFFF', fontSize: 20, fontFamily: pos.font },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, height: 56 },
+  avatarLetter: { color: '#FFFFFF', fontSize: 18, fontFamily: pos.font },
+  whoText: { flex: 1 },
+  whoName: { fontSize: 16, fontWeight: '500', color: pos.text, fontFamily: pos.font },
+  whoRole: { fontSize: 13, color: pos.muted, fontFamily: pos.font },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, height: 48 },
   itemHover: { backgroundColor: pos.bg },
   itemIcon: { width: 26, alignItems: 'center' },
-  itemText: { flex: 1 },
-  itemLabel: { fontSize: 17, color: pos.text, fontFamily: pos.font },
-  itemHint: { fontSize: 13, color: pos.muted },
+  itemLabel: { flex: 1, fontSize: 16, color: pos.text, fontFamily: pos.font },
+  danger: { color: '#D32F2F' },
+  itemKey: { fontSize: 13, color: pos.muted, fontFamily: pos.font },
   divider: { height: 1, backgroundColor: pos.border, marginVertical: 6 },
-  footer: { borderTopWidth: 1, borderTopColor: pos.border },
 });

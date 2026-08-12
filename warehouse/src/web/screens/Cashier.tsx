@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -24,7 +23,6 @@ import { pos } from '../../ui/webTheme';
  * же, что кабинет. Слева витрина плитками, справа чек, внизу полоса продажи.
  */
 export function Cashier() {
-  const router = useRouter();
   const { db, refresh } = useDatabase();
   const cart = useCart();
 
@@ -97,12 +95,13 @@ export function Cashier() {
             <View style={styles.keyHint}>
               <Text style={styles.keyHintText}>C</Text>
             </View>
+            {/* Клиенты открываются внутри кассы, а не в кабинете: раньше эта
+                кнопка уводила на карточку контрагента, и кассир оказывался
+                вне кассы с недобитым чеком. */}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Добавить клиента"
-              onPress={() =>
-                router.push({ pathname: '/counterparty/[id]', params: { id: 'new', kind: 'customer' } })
-              }
+              accessibilityLabel="Клиенты"
+              onPress={() => setView('clients')}
               style={styles.addCustomer}
             >
               <WebIcon.parties size={22} color="#FFFFFF" />

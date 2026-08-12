@@ -1,4 +1,4 @@
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 
 import { listLocations, stockByLocation } from '../../db/locations';
@@ -13,12 +13,11 @@ import { WebIcon } from '../../ui/icons';
 import { web, WEB_FONT } from '../../ui/webTheme';
 
 /**
- * Просмотр товара — панель справа поверх справочника.
+ * Просмотр товара — то, что видно, когда на товар нажали в справочнике.
  *
- * Именно панель, а не отдельная страница: в исходном приложении адрес
- * выглядит как `/catalog/list/m/get/<id>`, и список остаётся виден слева.
- * Так после закрытия карточки не нужно заново искать, где ты был, а соседние
- * товары открываются один за другим.
+ * Только содержимое: панель, в которой оно живёт, и полоса кнопок над ним —
+ * в `Drawer` и `ProductCard`. Здесь не должно быть ни того, ни другого, иначе
+ * при переходе к правке полоса дёргалась бы, перерисовываясь вместе с телом.
  *
  * Разделы и подписи — его: «ЦЕНЫ», «СОСТАВ КОМЛЕКТА» (с его же опечаткой в
  * слове), «СКЛАД», вкладки «Информация» и «История движения».
@@ -32,15 +31,7 @@ const REASON_LABEL: Record<MoveReason, string> = {
   return: 'Возврат',
 };
 
-export function ProductView({
-  id,
-  onClose,
-  onEdit,
-}: {
-  id: Id;
-  onClose: () => void;
-  onEdit: () => void;
-}) {
+export function ProductView({ id }: { id: Id }) {
   const [tab, setTab] = useState<'info' | 'history'>('info');
 
   const product = useQuery((db) => getProduct(db, id), [id]);
@@ -57,21 +48,7 @@ export function ProductView({
   const margin = marginBp(product.cost_price, product.sale_price);
 
   return (
-    <View style={styles.panel}>
-      <View style={styles.bar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Закрыть" onPress={onClose}>
-          <Text style={styles.close}>✕</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={onEdit} style={styles.edit}>
-          <Text style={styles.editLabel}>Редактировать</Text>
-        </Pressable>
-        <View style={styles.spacer} />
-        <Pressable accessibilityRole="button" style={styles.remove}>
-          <Text style={styles.removeLabel}>Удалить</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.photo}>
             {product.photo_uri ? (
@@ -176,7 +153,6 @@ export function ProductView({
             />
           </>
         )}
-      </ScrollView>
     </View>
   );
 }
@@ -312,28 +288,6 @@ function Table({
 }
 
 const styles = StyleSheet.create({
-  panel: { flex: 1, backgroundColor: '#FFFFFF' },
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: web.border,
-  },
-  close: { fontFamily: WEB_FONT, fontSize: 20, color: web.textMuted },
-  edit: { backgroundColor: web.green, borderRadius: 3, paddingHorizontal: 22, paddingVertical: 10 },
-  editLabel: { fontFamily: WEB_FONT, fontSize: 14, color: '#FFFFFF' },
-  spacer: { flex: 1 },
-  remove: {
-    borderWidth: 1,
-    borderColor: web.danger,
-    borderRadius: 3,
-    paddingHorizontal: 22,
-    paddingVertical: 9,
-  },
-  removeLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.danger },
   content: { padding: 24, paddingBottom: 60 },
   header: { flexDirection: 'row', gap: 26 },
   photo: {

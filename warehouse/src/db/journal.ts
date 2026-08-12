@@ -31,10 +31,66 @@ export interface JournalEntry {
   sender: string | null;
   /** Кто получил: покупатель или магазин. */
   receiver: string | null;
+  /** Кто провёл документ. */
+  author: string | null;
+  /** Комментарий — по нему тоже ищут. */
+  note: string | null;
 }
 
-export function listJournal(db: SqlDriver, limit = 500): JournalEntry[] {
-  const params: SqlParam[] = [limit];
+/**
+ * Отбор в журнале движения товара.
+ *
+ * Поля — его: поиск по номеру или комментарию, дата, отправитель, получатель,
+ * автор, тип документа, оплата. Двух его полей нет: «Статус» (проведён,
+ * отложен, удалён) и «Фискальный чек» — мы не откладываем документы и не
+ * фискализируем чеки, и фильтр по тому, чего не бывает, только мешает.
+ */
+export interface JournalFilter {
+  /** Номер документа или слово из комментария. */
+  search?: string;
+  /** Диапазон дат, YYYY-MM-DD включительно. */
+  from?: string;
+  to?: string;
+  sender?: string;
+  receiver?: string;
+  author?: string;
+  kinds?: JournalKind[];
+  /** Оплаченные или неоплаченные. У складских документов оплаты нет. */
+  paid?: 'paid' | 'unpaid';
+}
+
+export function listJournal(
+  db: SqlDriver,
+  limit = 500,
+  filter: JournalFilter = {},
+): JournalEntry[] {
+  const params: SqlParam[] = [];
+  const where: string[] = [];
+
+  const add = (sql: string, ...values: SqlParam[]) => {
+    where.push(sql);
+    params.push(...values);
+  };
+
+  if (filter.search?.trim()) {
+    const text = filter.search.trim().toLowerCase();
+    // Номер ищется точным совпадением, остальное — по вхождению: «12» не
+    // должно находить документ №120, иначе поиск по номеру бесполезен.
+    add("(CAST(id AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)", text, `%${text}%`);
+  }
+  if (filter.from) add('date(created_at) >= ?', filter.from);
+  if (filter.to) add('date(created_at) <= ?', filter.to);
+  if (filter.sender) add('sender = ?', filter.sender);
+  if (filter.receiver) add('receiver = ?', filter.receiver);
+  if (filter.author) add('author = ?', filter.author);
+  if (filter.kinds?.length) {
+    add(`kind IN (${filter.kinds.map(() => '?').join(', ')})`, ...filter.kinds);
+  }
+  if (filter.paid === 'paid') add('paid IS NOT NULL AND paid >= amount');
+  if (filter.paid === 'unpaid') add('(paid IS NULL OR paid < amount)');
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(limit);
 
   return db.all<JournalEntry>(
     `SELECT * FROM (
@@ -51,7 +107,9 @@ export function listJournal(db: SqlDriver, limit = 500): JournalEntry[] {
               COALESCE(
                 (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
                 'Розничный покупатель'
-              )                                            AS receiver
+              )                                            AS receiver,
+              (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author,
+              NULL                                         AS note
        FROM sales s
 
        UNION ALL
@@ -73,13 +131,52 @@ export function listJournal(db: SqlDriver, limit = 500): JournalEntry[] {
                    ELSE d.counterparty END,
               CASE WHEN d.subtype = 'transfer'
                    THEN (SELECT l.name FROM locations l WHERE l.id = d.location_to)
-                   ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END
+                   ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END,
+              (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+              d.note
        FROM docs d
      )
+     ${whereSql}
      ORDER BY created_at DESC, id DESC
      LIMIT ?`,
     params,
   );
+}
+
+/**
+ * Что предложить в выпадающих списках фильтра.
+ *
+ * Значения берутся из самих документов, а не из справочников: в списке
+ * «Отправитель» должны стоять те, от кого хоть что-то приходило, а не все
+ * заведённые поставщики — иначе выбирать придётся из трёх тысяч строк, из
+ * которых сработают пять.
+ */
+export function journalOptions(db: SqlDriver): {
+  senders: string[];
+  receivers: string[];
+  authors: string[];
+} {
+  const column = (name: string) =>
+    db
+      .all<{ value: string }>(
+        `SELECT DISTINCT ${name} AS value FROM (
+           SELECT (SELECT l.name FROM locations l WHERE l.id = s.location_id) AS sender,
+                  COALESCE((SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+                           'Розничный покупатель') AS receiver,
+                  (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author
+           FROM sales s
+           UNION ALL
+           SELECT d.counterparty,
+                  (SELECT l.name FROM locations l WHERE l.id = d.location_id),
+                  (SELECT f.name FROM staff f WHERE f.id = d.staff_id)
+           FROM docs d
+         )
+         WHERE ${name} IS NOT NULL AND ${name} <> ''
+         ORDER BY value COLLATE NOCASE`,
+      )
+      .map((row) => row.value);
+
+  return { senders: column('sender'), receivers: column('receiver'), authors: column('author') };
 }
 
 /** Заголовки в журнале — по дню. Ключ группировки берём из даты без времени. */
@@ -148,6 +245,8 @@ export interface MoneyEntry {
   /** Куда легли деньги: касса магазина, терминал, счёт в банке. */
   account: string;
   category: string;
+  author: string | null;
+  note: string | null;
 }
 
 /** Способ оплаты — это и есть счёт, на который попали деньги. */
@@ -157,7 +256,89 @@ const ACCOUNT: Record<string, string> = {
   transfer: 'Счет в банке',
 };
 
-export function listMoney(db: SqlDriver, limit = 500): MoneyEntry[] {
+/** Обратно: по названию счёта — способ оплаты, если такой счёт из чеков. */
+function accountKey(account: string): string {
+  return Object.keys(ACCOUNT).find((key) => ACCOUNT[key] === account) ?? '';
+}
+
+/** Что предложить в списках фильтра денег — по тому, что уже есть в ленте. */
+export function moneyOptions(db: SqlDriver): {
+  accounts: string[];
+  counterparties: string[];
+  categories: string[];
+  authors: string[];
+} {
+  const list = (sql: string) =>
+    db.all<{ value: string }>(sql).map((row) => row.value).filter(Boolean);
+
+  return {
+    accounts: [
+      ...new Set([
+        ...Object.values(ACCOUNT),
+        ...list('SELECT DISTINCT account AS value FROM money_docs ORDER BY value'),
+      ]),
+    ],
+    counterparties: list(
+      `SELECT DISTINCT COALESCE(counterparty,
+         (SELECT c.name FROM counterparties c WHERE c.id = counterparty_id)) AS value
+       FROM money_docs ORDER BY value COLLATE NOCASE`,
+    ),
+    categories: list(
+      'SELECT DISTINCT category AS value FROM money_docs ORDER BY value COLLATE NOCASE',
+    ),
+    authors: list(
+      `SELECT DISTINCT (SELECT f.name FROM staff f WHERE f.id = staff_id) AS value
+       FROM money_docs ORDER BY value COLLATE NOCASE`,
+    ),
+  };
+}
+
+/**
+ * Отбор в движении денег.
+ *
+ * Поля — его: поиск, дата, счёт, контрагент, автор, тип, категория платежа.
+ * Его «Статуса» (проведён / не проведён / удалён) у нас нет: ордер заводится
+ * сразу проведённым.
+ */
+export interface MoneyFilter {
+  search?: string;
+  from?: string;
+  to?: string;
+  account?: string;
+  counterparty?: string;
+  author?: string;
+  types?: MoneyType[];
+  category?: string;
+}
+
+export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}): MoneyEntry[] {
+  const params: SqlParam[] = [];
+  const where: string[] = [];
+
+  const add = (sql: string, ...values: SqlParam[]) => {
+    where.push(sql);
+    params.push(...values);
+  };
+
+  if (filter.search?.trim()) {
+    const text = filter.search.trim().toLowerCase();
+    add("(CAST(id AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)", text, `%${text}%`);
+  }
+  if (filter.from) add('date(created_at) >= ?', filter.from);
+  if (filter.to) add('date(created_at) <= ?', filter.to);
+  // Счёт у чека выводится из способа оплаты уже после запроса, поэтому здесь
+  // сравнивается то же самое правило, а не готовая строка.
+  if (filter.account) add('account = ? OR payment = ?', filter.account, accountKey(filter.account));
+  if (filter.counterparty) add('counterparty = ?', filter.counterparty);
+  if (filter.author) add('author = ?', filter.author);
+  if (filter.category) add('category = ?', filter.category);
+  if (filter.types?.length) {
+    add(`type IN (${filter.types.map(() => '?').join(', ')})`, ...filter.types);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(limit);
+
   const rows = db.all<MoneyEntry & { payment: string | null }>(
     `SELECT * FROM (
        SELECT s.id                    AS id,
@@ -172,7 +353,9 @@ export function listMoney(db: SqlDriver, limit = 500): MoneyEntry[] {
               )                       AS counterparty,
               s.payment               AS payment,
               ''                      AS account,
-              'Оплата от клиента'     AS category
+              'Оплата от клиента'     AS category,
+              (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author,
+              NULL                    AS note
        FROM sales s
        WHERE NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
@@ -197,12 +380,15 @@ export function listMoney(db: SqlDriver, limit = 500): MoneyEntry[] {
               CASE WHEN d.type = 'transfer'
                    THEN d.account || ' → ' || COALESCE(d.account_to, '')
                    ELSE d.account END,
-              COALESCE(d.category, '')
+              COALESCE(d.category, ''),
+              (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+              d.note
        FROM money_docs d
      )
+     ${whereSql}
      ORDER BY created_at DESC, id DESC
      LIMIT ?`,
-    [limit],
+    params,
   );
 
   return rows.map((row) => ({

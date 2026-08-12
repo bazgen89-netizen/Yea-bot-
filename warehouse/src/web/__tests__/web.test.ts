@@ -70,7 +70,8 @@ describe('заголовок раздела', () => {
 describe('журнал движения товара', () => {
   it('складывает строки в группы по дням, сохраняя порядок', () => {
     const entry = (id: number, created_at: string) =>
-      ({ id, kind: 'sale', created_at, positions: 1, amount: 0, paid: 0, sender: null, receiver: null }) as const;
+      ({ id, kind: 'sale', created_at, positions: 1, amount: 0, paid: 0,
+         sender: null, receiver: null, author: null, note: null }) as const;
 
     const groups = groupByDay([
       entry(3, '2026-08-08T11:27:00.000Z'),
@@ -88,7 +89,10 @@ describe('журнал движения товара', () => {
   });
 
   it('называет документ так же, как в исходном приложении', () => {
-    const base = { created_at: '', positions: 0, amount: 0, paid: null, sender: null, receiver: null };
+    const base = {
+      created_at: '', positions: 0, amount: 0, paid: null,
+      sender: null, receiver: null, author: null, note: null,
+    };
     expect(entryTitle({ ...base, id: 4784, kind: 'sale' })).toBe('Продажа #4784');
     expect(entryTitle({ ...base, id: 3303, kind: 'adjustment' })).toBe('Корректировка #3303');
     expect(entryTitle({ ...base, id: 12, kind: 'purchase' })).toBe('Закупка #12');

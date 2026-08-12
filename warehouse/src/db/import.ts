@@ -126,7 +126,13 @@ export function importProducts(db: SqlDriver, text: string): ImportResult {
       country: pick(row, 'страна', 'country') || found?.country || null,
       plu_code: pick(row, 'plu код', 'plu') || found?.plu_code || null,
       description: pick(row, 'описание', 'description') || found?.description || null,
-      photo_uri: found?.photo_uri ?? null,
+      // Фотография — ссылкой или картинкой прямо в файле (data:image/...).
+      // Пустая колонка не стирает уже загруженное фото: выгрузки часто идут
+      // без картинок, и повторный импорт цен не должен обнулять витрину.
+      photo_uri:
+        pick(row, 'фото', 'изображение', 'картинка', 'photo', 'image', 'pic') ||
+        found?.photo_uri ||
+        null,
     };
 
     let productId: Id;

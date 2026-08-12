@@ -345,3 +345,44 @@ describe('инвентаризация и корректировка', () => {
     );
   });
 });
+
+describe('фильтр журнала', () => {
+  it('отбирает по типу, дате и оплате', () => {
+    const tea = product();
+
+    postDoc(db, {
+      type: 'purchase',
+      counterparty: 'Чайный дом',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'шт', qty: 10000, price: 5000 }],
+    });
+    postDoc(db, {
+      type: 'writeoff',
+      note: 'разбили банку',
+      lines: [{ product_id: tea, name: 'Шу пуэр', unit: 'шт', qty: 1000, price: 5000 }],
+    });
+
+    expect(listJournal(db, 500, { kinds: ['purchase'] })).toHaveLength(1);
+    expect(listJournal(db, 500, { kinds: ['purchase', 'writeoff'] })).toHaveLength(2);
+
+    // Поиск по комментарию — вхождением, по номеру — точным совпадением.
+    expect(listJournal(db, 500, { search: 'банку' })).toHaveLength(1);
+    expect(listJournal(db, 500, { search: 'Чайный дом' })).toHaveLength(0);
+
+    const today = new Date().toISOString().slice(0, 10);
+    expect(listJournal(db, 500, { from: today })).toHaveLength(2);
+    expect(listJournal(db, 500, { from: '2099-01-01' })).toHaveLength(0);
+
+    // У складских документов оплаты нет — они неоплаченные.
+    expect(listJournal(db, 500, { paid: 'unpaid' })).toHaveLength(2);
+    expect(listJournal(db, 500, { paid: 'paid' })).toHaveLength(0);
+  });
+
+  it('отбирает деньги по типу и категории', () => {
+    createMoneyDoc(db, { type: 'income', amount: 100000, account: 'Касса магазина', category: 'Выручка' });
+    createMoneyDoc(db, { type: 'expense', amount: 50000, account: 'Касса магазина', category: 'Аренда' });
+
+    expect(listMoney(db, 500, { types: ['expense'] })).toHaveLength(1);
+    expect(listMoney(db, 500, { category: 'Аренда' })).toHaveLength(1);
+    expect(listMoney(db, 500, { category: 'Аренда', types: ['income'] })).toHaveLength(0);
+  });
+});

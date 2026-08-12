@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
   formatDay,
   formatTime,
   groupMoneyByDay,
   listMoney,
+  moneyOptions,
   moneyTitle,
   type MoneyEntry,
+  type MoneyFilter as MoneyFilterInput,
 } from '../../db/journal';
+import type { MoneyType } from '../../db/money';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
@@ -29,15 +33,66 @@ const COLUMNS: Column[] = [
 /** «Движение денег» — журнал кабинета. */
 export function MoneyTable() {
   const [search, setSearch] = useState('');
-  const entries = useQuery((db) => listMoney(db));
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, FilterValue>>({});
 
-  const filtered = search.trim()
-    ? entries.filter((entry) =>
-        moneyTitle(entry).toLowerCase().includes(search.trim().toLowerCase()),
-      )
-    : entries;
+  const filter = useMemo<MoneyFilterInput>(
+    () => ({
+      search,
+      from: values.dateFrom as string | undefined,
+      to: values.dateTo as string | undefined,
+      account: values.account as string | undefined,
+      counterparty: values.counterparty as string | undefined,
+      author: values.author as string | undefined,
+      category: values.category as string | undefined,
+      types: values.types as MoneyType[] | undefined,
+    }),
+    [search, values],
+  );
 
-  const groups = groupMoneyByDay(filtered);
+  const entries = useQuery((db) => listMoney(db, 500, filter), [filter]);
+  const options = useQuery((db) => moneyOptions(db));
+
+  const fields: FilterField[] = [
+    { key: 'date', label: 'Дата', kind: 'dates' },
+    {
+      key: 'account',
+      label: 'Счёт',
+      kind: 'select',
+      options: options.accounts.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'counterparty',
+      label: 'Контрагент',
+      kind: 'select',
+      options: options.counterparties.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'author',
+      label: 'Автор',
+      kind: 'select',
+      options: options.authors.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'category',
+      label: 'Категория платежа',
+      kind: 'select',
+      options: options.categories.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'types',
+      label: 'Тип',
+      kind: 'checks',
+      options: [
+        { value: 'income', label: 'Приход' },
+        { value: 'expense', label: 'Расход' },
+        { value: 'transfer', label: 'Перевод' },
+      ],
+    },
+  ];
+
+  const active = activeCount(values);
+  const groups = groupMoneyByDay(entries);
 
   return (
     <View style={styles.screen}>
@@ -48,11 +103,22 @@ export function MoneyTable() {
           placeholder="поиск по номеру или комментарию"
           width={306}
         />
-        <ToolButton label="дата" soon />
-        <ToolButton label="статус" soon />
-        <ToolButton label="тип" soon />
-        <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
+        <ToolButton
+          label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
+          tone={active > 0 ? 'blueOutline' : 'plain'}
+          icon={<WebIcon.funnel color={active > 0 ? web.link : web.text} />}
+          onPress={() => setFilterOpen(true)}
+        />
       </Toolbar>
+
+      <JournalFilter
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        fields={fields}
+        values={values}
+        onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+        onReset={() => setValues({})}
+      />
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>

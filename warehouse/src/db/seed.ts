@@ -1,6 +1,7 @@
 import type { SqlDriver } from './driver';
 import { ensureLocation, listLocations } from './locations';
 import CLIENTS from './seed/clients.json';
+import PHOTOS from './seed/photos.json';
 import CATALOG from './seed/products.json';
 
 /**
@@ -153,12 +154,17 @@ function seedProducts(db: SqlDriver): void {
         }
       }
 
+      // Фотография ищется по коду товара: артикул и штрихкод есть не у всех,
+      // код есть всегда. Пока `scripts/sync-photos.mjs` не запускали, файл
+      // пуст, и товары идут без картинок — как и было.
+      const photo = item.c ? ((PHOTOS as Record<string, string>)[item.c] ?? null) : null;
+
       db.run(
         `INSERT INTO products
            (name, sku, code, barcode, category_id, unit, cost_price, sale_price, min_qty,
             discount_bp, photo_uri, created_at, search_text)
-         VALUES (?, ?, ?, NULL, ?, ?, 0, ?, 0, ?, NULL, ?, ?)`,
-        [item.n, item.s, item.c, categoryId, item.u, item.p, item.d, now, search],
+         VALUES (?, ?, ?, NULL, ?, ?, 0, ?, 0, ?, ?, ?, ?)`,
+        [item.n, item.s, item.c, categoryId, item.u, item.p, item.d, photo, now, search],
       );
       const productId = db.lastInsertId();
 

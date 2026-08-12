@@ -1,16 +1,21 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
   entryTitle,
   formatDay,
   formatTime,
   groupByDay,
+  journalOptions,
   listJournal,
   type JournalEntry,
+  type JournalFilter as JournalFilterInput,
+  type JournalKind,
 } from '../../db/journal';
+import { DOC_KIND_LABEL } from '../../domain/types';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
@@ -44,16 +49,74 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
 export function JournalTable() {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, FilterValue>>({});
 
-  const entries = useQuery((db) => listJournal(db));
+  // Отбор делает база, а не память: журнал бывает длинным, и фильтровать уже
+  // отданные пятьсот строк значит показывать не то, что просили.
+  const filter = useMemo<JournalFilterInput>(
+    () => ({
+      search,
+      from: values.dateFrom as string | undefined,
+      to: values.dateTo as string | undefined,
+      sender: values.sender as string | undefined,
+      receiver: values.receiver as string | undefined,
+      author: values.author as string | undefined,
+      kinds: values.kinds as JournalKind[] | undefined,
+      paid: values.paid as 'paid' | 'unpaid' | undefined,
+    }),
+    [search, values],
+  );
 
-  const filtered = search.trim()
-    ? entries.filter((entry) =>
-        entryTitle(entry).toLowerCase().includes(search.trim().toLowerCase()),
-      )
-    : entries;
+  const entries = useQuery((db) => listJournal(db, 500, filter), [filter]);
+  const options = useQuery((db) => journalOptions(db));
 
-  const groups = groupByDay(filtered);
+  const fields: FilterField[] = [
+    { key: 'date', label: 'Дата', kind: 'dates' },
+    {
+      key: 'sender',
+      label: 'Отправитель',
+      kind: 'select',
+      options: options.senders.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'receiver',
+      label: 'Получатель',
+      kind: 'select',
+      options: options.receivers.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'author',
+      label: 'Автор',
+      kind: 'select',
+      options: options.authors.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'paid',
+      label: 'Оплата',
+      kind: 'select',
+      options: [
+        { value: 'paid', label: 'Оплаченные' },
+        { value: 'unpaid', label: 'Неоплаченные' },
+      ],
+    },
+    {
+      key: 'kinds',
+      label: 'Тип',
+      kind: 'checks',
+      options: [
+        { value: 'sale', label: 'Продажа' },
+        { value: 'refund', label: 'Возврат продажи' },
+        ...(Object.keys(DOC_KIND_LABEL) as (keyof typeof DOC_KIND_LABEL)[]).map((kind) => ({
+          value: kind,
+          label: DOC_KIND_LABEL[kind],
+        })),
+      ],
+    },
+  ];
+
+  const active = activeCount(values);
+  const groups = groupByDay(entries);
 
   return (
     <View style={styles.screen}>
@@ -64,12 +127,22 @@ export function JournalTable() {
           placeholder="поиск по номеру или комментарию"
           width={306}
         />
-        <ToolButton label="дата" soon />
-        <ToolButton label="статус" soon />
-        <ToolButton label="оплата" soon />
-        <ToolButton label="тип" soon />
-        <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
+        <ToolButton
+          label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
+          tone={active > 0 ? 'blueOutline' : 'plain'}
+          icon={<WebIcon.funnel color={active > 0 ? web.link : web.text} />}
+          onPress={() => setFilterOpen(true)}
+        />
       </Toolbar>
+
+      <JournalFilter
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        fields={fields}
+        values={values}
+        onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+        onReset={() => setValues({})}
+      />
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>

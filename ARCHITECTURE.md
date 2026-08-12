@@ -10,10 +10,11 @@ Telegram-бот, отвечающий на вопросы о китайском 
 4. [Описание модулей](#описание-модулей)
 5. [Внешние зависимости](#внешние-зависимости)
 6. [Переменные окружения](#переменные-окружения)
-7. [Деплой](#деплой)
-8. [Решения для масштабируемости](#решения-для-масштабируемости)
-9. [Известные проблемы](#известные-проблемы)
-10. [Дорожная карта масштабирования](#дорожная-карта-масштабирования)
+7. [Кросспостинг в соцсети](#кросспостинг-в-соцсети)
+8. [Деплой](#деплой)
+9. [Решения для масштабируемости](#решения-для-масштабируемости)
+10. [Известные проблемы](#известные-проблемы)
+11. [Дорожная карта масштабирования](#дорожная-карта-масштабирования)
 
 ---
 
@@ -28,11 +29,13 @@ flowchart LR
         WH[webapp.py<br/>aiohttp-сервер] --> H[handlers/<br/>команды, сообщения, кнопки]
         H --> S[services/search.py<br/>SerperClient]
         H --> A[services/ai.py<br/>GroqClient]
+        H --> SO[services/social.py<br/>MetricoolClient]
         S --> C[(cache.py<br/>TTLCache, 5 мин)]
     end
 
     S -->|поиск cn + ru| SERPER[Serper API<br/>google.serper.dev]
     A -->|chat completions| GROQ[Groq API<br/>Llama 3.3 70B]
+    SO -->|/post| MC[Metricool] --> SN[Instagram · Facebook<br/>Pinterest · YouTube]
 ```
 
 Бот работает в **webhook-режиме**: Telegram сам доставляет обновления HTTP-запросом на `/webhook`, поэтому не нужен постоянный long-polling и приложение хорошо подходит для платформ типа Render.
@@ -73,7 +76,8 @@ sequenceDiagram
 - **/start, «привет», «меню»** → главное меню с inline-кнопками.
 - **Кнопки меню** (`brew`, `news` → `reg_*`, `ship`, `price`) → готовые китайскоязычные поисковые запросы + генерация ответа.
 - **Режим «Цены»**: кнопка `price` ставит `user_data["mode"] = "price"`; следующее сообщение трактуется как название чая — поиск цены + промо Waystea.
-- **/debug** → диагностика: заданы ли ключи, живы ли Groq и Serper.
+- **/debug** → диагностика: заданы ли ключи, живы ли Groq, Serper и Metricool.
+- **/post** → кросспостинг: один текст уходит во все подключённые соцсети (см. [раздел ниже](#кросспостинг-в-соцсети)).
 
 ## Структура кода
 
@@ -86,15 +90,18 @@ Yea-bot-/
 ├── teabot/                 # пакет приложения
 │   ├── config.py           # Settings (env), константы тайм-аутов и кэша
 │   ├── constants.py        # тексты, REGIONS, BUY_KEYWORDS, is_buy_question()
+│   ├── social.py           # каталог соцсетей, лимиты площадок, validate(), SocialConfig
 │   ├── cache.py            # TTLCache — кэш в памяти с TTL и лимитом размера
 │   ├── http.py             # общая aiohttp.ClientSession на всё приложение
 │   ├── services/
 │   │   ├── search.py       # SerperClient — поиск (cn + ru параллельно) + кэш
-│   │   └── ai.py           # GroqClient — chat completions + health_check
+│   │   ├── ai.py           # GroqClient — chat completions + health_check
+│   │   └── social.py       # MetricoolClient — постановка поста в очередь соцсетей
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
+│   │   ├── social.py       # /post — диалог кросспостинга
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
@@ -128,13 +135,15 @@ flowchart TD
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |
 | `teabot/services/ai.py` | Генерация ответов Groq (Llama 3.3 70B), обработка 429/401/таймаутов | `GroqClient.ask()`, `.health_check()` |
+| `teabot/social.py` | Каталог площадок и их ограничений, проверка поста, права на публикацию | `NETWORKS`, `validate()`, `SocialConfig.allows()` |
+| `teabot/services/social.py` | Публикация поста во все выбранные сети через Metricool, построчный отчёт | `MetricoolClient.publish()`, `format_report()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
 
 ### Внедрение зависимостей
 
-Клиенты сервисов создаются один раз при старте (`webapp.on_startup`) и кладутся в `bot_data` PTB-приложения. Обработчики получают их через `get_search(ctx)` / `get_ai(ctx)` — глобальных переменных с состоянием нет, в тестах клиенты легко подменяются моками.
+Клиенты сервисов создаются один раз при старте (`webapp.on_startup`) и кладутся в `bot_data` PTB-приложения. Обработчики получают их через `get_search(ctx)` / `get_ai(ctx)` / `get_social(ctx)` — глобальных переменных с состоянием нет, в тестах клиенты легко подменяются моками.
 
 ## Внешние зависимости
 
@@ -143,6 +152,7 @@ flowchart TD
 | **Telegram Bot API** | Приём/отправка сообщений | Webhook (входящие) + HTTPS (исходящие), библиотека `python-telegram-bot` |
 | **Groq API** | LLM-генерация ответов (`llama-3.3-70b-versatile`) | OpenAI-совместимый REST, тайм-аут 30 с |
 | **Serper API** | Поиск Google (zh-cn и ru локали) | REST, тайм-аут 8 с, результаты кэшируются на 5 мин |
+| **Metricool API v2** | Кросспостинг: один пост → Instagram, Facebook, Pinterest, YouTube | REST (`/scheduler/posts`), тайм-аут 20 с, по одному запросу на сеть |
 | **Render** | Хостинг, даёт `RENDER_EXTERNAL_URL` и `PORT` | — |
 
 ## Переменные окружения
@@ -154,6 +164,50 @@ flowchart TD
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |
+| `METRICOOL_USER_TOKEN` | нет | Токен API Metricool; без него `/post` отвечает подсказкой |
+| `METRICOOL_USER_ID` | нет | ID пользователя Metricool |
+| `METRICOOL_BLOG_ID` | нет | ID бренда Metricool, в чьи аккаунты идёт публикация |
+| `SOCIAL_ADMINS` | нет | Telegram-ID через запятую, кому разрешён `/post`. **Пусто → публиковать нельзя никому** |
+| `SOCIAL_NETWORKS` | нет | Список сетей через запятую; по умолчанию `instagram,facebook,pinterest,youtube` |
+| `SOCIAL_TIMEZONE` | нет | Часовой пояс расписания, по умолчанию `Europe/Moscow` |
+
+## Кросспостинг в соцсети
+
+Команда `/post` собирает один пост и раскладывает его по всем подключённым площадкам. Бот **не хранит токены отдельных соцсетей** — единой точкой публикации выступает Metricool, поэтому добавление новой площадки не требует правок кода: достаточно подключить её к бренду и дописать код в `SOCIAL_NETWORKS`.
+
+```mermaid
+sequenceDiagram
+    participant A as Админ
+    participant B as Бот (/post)
+    participant V as social.validate()
+    participant M as Metricool API
+    participant N as Instagram / Facebook / Pinterest / YouTube
+
+    A->>B: /post
+    B->>A: «Пришлите текст поста»
+    A->>B: текст (+ ссылка на медиа)
+    B->>A: экран с тумблерами сетей и предпросмотром
+    A->>B: 🚀 Опубликовать
+    B->>V: проверка лимитов и обязательного медиа
+    alt есть замечания
+        V-->>A: список проблем, состояние сохранено
+    else пост валиден
+        par по одному запросу на сеть
+            B->>M: POST /scheduler/posts (instagram)
+        and
+            B->>M: POST /scheduler/posts (facebook)
+        end
+        M->>N: публикация по расписанию
+        B->>A: отчёт «✅ 3 из 4 сетей»
+    end
+```
+
+Ключевые решения:
+
+- **Отдельный запрос на каждую сеть.** Отказ одной площадки (например, Instagram без медиа) не отменяет публикацию в остальные, и в отчёте видно, что именно не прошло.
+- **Валидация до отправки.** `social.validate()` знает лимиты текста и требование медиа для каждой площадки, поэтому типовые ошибки ловятся без обращения к API.
+- **Публикация «сейчас» = через 5 минут.** Metricool не принимает время в прошлом, а между нажатием кнопки и запросом проходит время; запас задаётся `SOCIAL_PUBLISH_DELAY_MIN`.
+- **Белый список админов.** Пустой `SOCIAL_ADMINS` запрещает публикацию всем: случайный пользователь бота не должен постить от имени бренда.
 
 ## Деплой
 

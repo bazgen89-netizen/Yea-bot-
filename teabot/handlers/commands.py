@@ -2,8 +2,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from . import get_ai, get_search
+from . import get_ai, get_search, get_social, get_social_cfg
 from ..keyboards import main_menu_kb
+from ..social import title as network_title
 
 
 async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -33,5 +34,11 @@ async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     lines.append("\n🔍 <b>Поиск Serper:</b>")
     lines.append(f"  {await search.health_check()}")
+
+    social, cfg = get_social(ctx), get_social_cfg(ctx)
+    lines.append("\n📡 <b>Кросспостинг (Metricool):</b>")
+    lines.append(f"  {await social.health_check()}")
+    lines.append(f"  Сети: {', '.join(network_title(c) for c in cfg.networks) or '—'}")
+    lines.append(f"  Админов: {len(cfg.admins)}")
 
     await update.message.reply_text("\n".join(lines), parse_mode='HTML')

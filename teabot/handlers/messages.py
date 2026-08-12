@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from . import get_ai, get_search
+from . import hub as hub_flow
 from . import social as social_flow
 from .commands import menu
 from ..constants import WAYSTEA_PROMO, is_buy_question
@@ -70,6 +71,10 @@ async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text.lower() in ["привет", "/start", "меню", "старт"]:
         ctx.user_data.clear()
         return await menu(update, ctx)
+
+    # Режим штаба: сообщение — это поручение команде, а не вопрос о чае
+    if hub_flow.is_active(ctx):
+        return await hub_flow.on_text(update, ctx)
 
     if ctx.user_data.get("mode") == "price":
         ctx.user_data.pop("mode", None)

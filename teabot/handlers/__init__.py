@@ -37,9 +37,11 @@ def register_handlers(ptb: Application) -> None:
     from .messages import on_msg
     from .callbacks import on_cb
     from .social import post_cmd
+    from .hub import team_cmd
 
     ptb.add_handler(CommandHandler("start", start_cmd))
     ptb.add_handler(CommandHandler("debug", debug_cmd))
     ptb.add_handler(CommandHandler("post", post_cmd))
+    ptb.add_handler(CommandHandler("team", team_cmd))
     ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
     ptb.add_handler(CallbackQueryHandler(on_cb))

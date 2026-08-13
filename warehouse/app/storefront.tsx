@@ -1,5 +1,5 @@
-import { Section } from '../src/web/screens/Section';
+import { StorefrontSettings } from '../src/web/screens/StorefrontSettings';
 
 export default function StorefrontScreen() {
-  return <Section title={'Интернет-витрина'} note={'Витрина с вашими товарами и остатками для покупателей.'} />;
+  return <StorefrontSettings />;
 }

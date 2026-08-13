@@ -106,6 +106,45 @@ export interface CompanySettings {
   /** Лояльность: скидки. */
   presetDiscounts: number[];
   discountRules: DiscountRule[];
+
+  /** Интернет-витрина. */
+  storefront: Storefront;
+}
+
+/**
+ * Настройки интернет-витрины — четыре его вкладки одним объектом.
+ *
+ * Отдельной таблицей их держать не за чем: витрина одна на компанию, и все
+ * её поля читаются и сохраняются вместе.
+ */
+export interface Storefront {
+  /** Включена ли витрина. */
+  on: boolean;
+
+  /** Домен: поддомен у нас и свой домен. */
+  subdomain: string;
+  domain: string;
+
+  /** Товары: из какого магазина, что делать с нулевыми остатками. */
+  storeId: number | null;
+  /** hide — прятать, show — показывать, order — показывать под заказ. */
+  zeroStocks: 'hide' | 'show' | 'order';
+  /** Категории, которые видны на витрине; пусто — все. */
+  categories: string[];
+
+  /** О магазине. */
+  title: string;
+  description: string;
+  about: string;
+  email: string;
+  phone: string;
+  address: string;
+
+  /** Аналитика: счётчики и подтверждения. */
+  ym: string;
+  ga: string;
+  ywm: string;
+  gwm: string;
 }
 
 const DEFAULTS: CompanySettings = {
@@ -147,6 +186,25 @@ const DEFAULTS: CompanySettings = {
 
   presetDiscounts: [],
   discountRules: [],
+
+  storefront: {
+    on: false,
+    subdomain: '',
+    domain: '',
+    storeId: null,
+    zeroStocks: 'hide',
+    categories: [],
+    title: 'WAYSTEA',
+    description: '',
+    about: '',
+    email: 'waystea@gmail.com',
+    phone: '',
+    address: '',
+    ym: '',
+    ga: '',
+    ywm: '',
+    gwm: '',
+  },
 };
 
 const KEY = 'company_settings';
@@ -158,7 +216,15 @@ export function getSettings(db: SqlDriver): CompanySettings {
   try {
     // Незнакомые поля не мешают, недостающие берутся из умолчаний: настройки
     // переживают обновление приложения, в котором полей стало больше.
-    return { ...DEFAULTS, ...(JSON.parse(row.value) as Partial<CompanySettings>) };
+    const saved = JSON.parse(row.value) as Partial<CompanySettings>;
+    // Вложенный объект надо слить отдельно: одним `...` он заменился бы
+    // целиком, и у того, кто сохранился до появления новых полей витрины,
+    // они оказались бы undefined.
+    return {
+      ...DEFAULTS,
+      ...saved,
+      storefront: { ...DEFAULTS.storefront, ...(saved.storefront ?? {}) },
+    };
   } catch {
     return DEFAULTS;
   }

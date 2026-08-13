@@ -28,6 +28,8 @@ import { useDatabase, useQuery } from '../src/state/DatabaseProvider';
 import { Badge, Button, Card, Choice, Empty, Field, Row } from '../src/ui/components';
 import { colors, radius, spacing, text } from '../src/ui/theme';
 import { confirm, say } from '../src/ui/alert';
+import { useDesktop } from '../src/ui/useDesktop';
+import { StaffCards } from '../src/web/screens/StaffCards';
 
 /**
  * Сотрудники и права.
@@ -47,6 +49,11 @@ export default function StaffScreen() {
 
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
 
+  // На широком экране сотрудники показаны карточками, как в кабинете:
+  // счётчики по ролям, карточка на человека, уволенные под сворачивающейся
+  // полосой. Форма правки — общая с телефоном, отличать её незачем.
+  const desktop = useDesktop();
+
   if (editing) {
     return (
       <StaffForm
@@ -58,6 +65,8 @@ export default function StaffScreen() {
       />
     );
   }
+
+  if (desktop) return <StaffCards onEdit={setEditing} />;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>

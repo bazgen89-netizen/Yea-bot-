@@ -1,5 +1,5 @@
-import { Section } from '../src/web/screens/Section';
+import { PriceTags } from '../src/web/screens/PriceTags';
 
 export default function PrintFormsScreen() {
-  return <Section title={'Компания / печатные формы'} note={'Шаблоны чеков, ценников и накладных.'} />;
+  return <PriceTags />;
 }

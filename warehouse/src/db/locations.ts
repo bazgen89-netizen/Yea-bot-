@@ -5,6 +5,11 @@ import type { Milli } from '../domain/qty';
 export interface Location {
   id: Id;
   name: string;
+  address: string | null;
+  description: string | null;
+  is_default: number;
+  /** Коды налогов точки через запятую: в разных точках ставки бывают разными. */
+  taxes: string;
   archived: number;
   created_at: string;
 }
@@ -70,6 +75,72 @@ export function renameLocation(db: SqlDriver, id: Id, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('У магазина должно быть название');
   db.run('UPDATE locations SET name = ? WHERE id = ?', [trimmed, id]);
+}
+
+/** Что можно поправить в карточке магазина. */
+export interface LocationInput {
+  name: string;
+  address: string | null;
+  description: string | null;
+  is_default: boolean;
+  taxes: string[];
+}
+
+export function blankLocation(): LocationInput {
+  return { name: '', address: null, description: null, is_default: false, taxes: [] };
+}
+
+export function getLocation(db: SqlDriver, id: Id): Location | null {
+  return db.get<Location>('SELECT * FROM locations WHERE id = ?', [id]) ?? null;
+}
+
+export function saveLocation(db: SqlDriver, id: Id | null, input: LocationInput): Id {
+  const name = input.name.trim();
+  if (!name) throw new Error('У магазина должно быть название');
+
+  const clash = db.get<{ id: Id }>(
+    'SELECT id FROM locations WHERE name = ? AND id <> ?',
+    [name, id ?? -1],
+  );
+  if (clash) throw new Error(`Магазин «${name}» уже есть`);
+
+  return db.tx(() => {
+    // Магазин по умолчанию один: включая его здесь, снимаем отметку с
+    // прежнего — иначе документы подставлялись бы то на один, то на другой.
+    if (input.is_default) db.run('UPDATE locations SET is_default = 0');
+
+    const taxes = input.taxes.join(',');
+
+    if (id) {
+      db.run(
+        `UPDATE locations SET name = ?, address = ?, description = ?, is_default = ?, taxes = ?
+         WHERE id = ?`,
+        [
+          name,
+          input.address?.trim() || null,
+          input.description?.trim() || null,
+          input.is_default ? 1 : 0,
+          taxes,
+          id,
+        ],
+      );
+      return id;
+    }
+
+    db.run(
+      `INSERT INTO locations (name, address, description, is_default, taxes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        input.address?.trim() || null,
+        input.description?.trim() || null,
+        input.is_default ? 1 : 0,
+        taxes,
+        new Date().toISOString(),
+      ],
+    );
+    return db.lastInsertId();
+  });
 }
 
 /**

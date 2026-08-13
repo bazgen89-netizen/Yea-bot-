@@ -463,6 +463,74 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_doc_payments_doc ON doc_payments(doc_id);
   `,
+
+  // 14 — счета отдельными записями
+  `
+  -- Счета до сих пор были именами внутри денежных документов: «Касса
+  -- магазина» существовала ровно потому, что кто-то так написал. Завести
+  -- новый счёт было нечем, а у существующего не было ни типа, ни реквизитов.
+  --
+  -- Документы по-прежнему ссылаются на счёт по имени: переписывать их на
+  -- ссылки значило бы трогать каждую уже заведённую запись, а имя счёта и
+  -- так уникально.
+  CREATE TABLE accounts (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    name    TEXT NOT NULL UNIQUE,
+    -- store | wallet | bank_card | bank_account | register — его типы.
+    type    TEXT NOT NULL DEFAULT 'wallet',
+    -- Остаток, с которого счёт начался: то, что лежало до первого документа.
+    opening_balance INTEGER NOT NULL DEFAULT 0,
+    -- Учитывать ли счёт в общем балансе компании.
+    include INTEGER NOT NULL DEFAULT 1,
+    -- Через этот счёт проходит эквайринг.
+    use_terminal INTEGER NOT NULL DEFAULT 0,
+    account_number TEXT,
+    -- Банковские реквизиты списком «название → номер», как у компании.
+    bank_details   TEXT NOT NULL DEFAULT '[]',
+    description TEXT,
+    is_default  INTEGER NOT NULL DEFAULT 0,
+    archived    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Три счёта, которые были зашиты в коде, становятся записями: без этого
+  -- уже заведённые документы ссылались бы на счета, которых нет в списке.
+  INSERT INTO accounts (name, type, include, use_terminal, is_default) VALUES
+    ('Касса магазина',          'register',     1, 0, 1),
+    ('Терминал / Счет в банке', 'bank_account', 1, 1, 0),
+    ('Счет в банке',            'bank_account', 1, 0, 0);
+
+  -- Счета, встретившиеся в уже заведённых документах, но не в этой тройке.
+  INSERT INTO accounts (name, type)
+  SELECT DISTINCT account, 'wallet' FROM money_docs
+  WHERE account IS NOT NULL
+    AND account NOT IN (SELECT name FROM accounts);
+
+  INSERT INTO accounts (name, type)
+  SELECT DISTINCT account_to, 'wallet' FROM money_docs
+  WHERE account_to IS NOT NULL
+    AND account_to NOT IN (SELECT name FROM accounts);
+  `,
+
+  // 15 — карточка магазина
+  `
+  -- У магазина было одно название. В карточке он показывает адрес, описание,
+  -- отметку «по умолчанию» и налоги точки: в разных точках ставки бывают
+  -- разными, и чек печатается с той, что у точки.
+  ALTER TABLE locations ADD COLUMN address     TEXT;
+  ALTER TABLE locations ADD COLUMN description TEXT;
+  ALTER TABLE locations ADD COLUMN is_default  INTEGER NOT NULL DEFAULT 0;
+
+  -- Налоги точки — список кодов через запятую. Отдельной таблицей их держать
+  -- не за чем: сами налоги лежат в настройках компании одним JSON, и связь
+  -- ссылками пришлось бы поддерживать вручную с обеих сторон.
+  ALTER TABLE locations ADD COLUMN taxes TEXT NOT NULL DEFAULT '';
+
+  -- Первый заведённый магазин становится магазином по умолчанию: он и так им
+  -- был — на него подставлялись документы и чеки.
+  UPDATE locations SET is_default = 1
+  WHERE id = (SELECT MIN(id) FROM locations WHERE archived = 0);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

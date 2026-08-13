@@ -1,10 +1,21 @@
 import type { SqlDriver } from '../driver';
 import { createTestDriver } from '../testDriver';
 import {
+  archiveAccount,
+  blankAccount,
+  createAccount,
+  getAccount,
+  listAccounts,
+  totalBalance,
+} from '../accounts';
+import {
   archiveLocation,
+  blankLocation,
   createLocation,
+  getLocation,
   listLocationsWithTotals,
   renameLocation,
+  saveLocation,
 } from '../locations';
 import { accountBalances, createMoneyDoc } from '../money';
 import { createProduct } from '../products';
@@ -192,5 +203,107 @@ describe('лояльность и реквизиты', () => {
     expect(back.requisites).toEqual([]);
     expect(back.taxes).toEqual([]);
     expect(back.cashbackRateBp).toBe(0);
+  });
+});
+
+describe('счета отдельными записями', () => {
+  it('заводятся тремя знакомыми и считают остаток с начального', () => {
+    const names = listAccounts(db).map((account) => account.name);
+    expect(names).toContain('Касса магазина');
+    expect(names).toContain('Терминал / Счет в банке');
+    expect(names).toContain('Счет в банке');
+
+    const wallet = createAccount(db, {
+      ...blankAccount(),
+      name: 'Кошелёк',
+      opening_balance: 100000,
+    });
+
+    createMoneyDoc(db, { type: 'income', amount: 50000, account: 'Кошелёк' });
+
+    // 1000,00 было + 500,00 пришло.
+    expect(getAccount(db, wallet)!.balance).toBe(150000);
+  });
+
+  it('счёт без движений удаляется, счёт с движениями прячется', () => {
+    const unused = createAccount(db, { ...blankAccount(), name: 'Пустой' });
+    archiveAccount(db, unused);
+    expect(listAccounts(db, true).find((a) => a.name === 'Пустой')).toBeUndefined();
+
+    const used = createAccount(db, { ...blankAccount(), name: 'Рабочий' });
+    createMoneyDoc(db, { type: 'expense', amount: 10000, account: 'Рабочий' });
+    archiveAccount(db, used);
+
+    expect(listAccounts(db).find((a) => a.name === 'Рабочий')).toBeUndefined();
+    expect(listAccounts(db, true).find((a) => a.name === 'Рабочий')?.archived).toBe(1);
+  });
+
+  it('в общий баланс попадают только отмеченные', () => {
+    createAccount(db, {
+      ...blankAccount(),
+      name: 'Личный',
+      opening_balance: 700000,
+      include: false,
+    });
+    createAccount(db, { ...blankAccount(), name: 'Рабочий', opening_balance: 300000 });
+
+    expect(totalBalance(db)).toBe(300000);
+  });
+
+  it('счёт по умолчанию только один', () => {
+    const first = createAccount(db, { ...blankAccount(), name: 'Первый', is_default: true });
+    const second = createAccount(db, { ...blankAccount(), name: 'Второй', is_default: true });
+
+    expect(getAccount(db, first)!.is_default).toBe(0);
+    expect(getAccount(db, second)!.is_default).toBe(1);
+  });
+
+  it('эквайринг остаётся только у расчётного счёта', () => {
+    const wallet = createAccount(db, {
+      ...blankAccount(),
+      name: 'Кошелёк',
+      type: 'wallet',
+      use_terminal: true,
+    });
+    expect(getAccount(db, wallet)!.use_terminal).toBe(0);
+
+    const bank = createAccount(db, {
+      ...blankAccount(),
+      name: 'Расчётный',
+      type: 'bank_account',
+      use_terminal: true,
+    });
+    expect(getAccount(db, bank)!.use_terminal).toBe(1);
+  });
+});
+
+describe('карточка магазина', () => {
+  it('хранит адрес, описание и налоги точки', () => {
+    const id = saveLocation(db, null, {
+      name: 'Ереван',
+      address: 'Северный проспект, 1',
+      description: 'Первый этаж',
+      is_default: true,
+      taxes: ['1', '2'],
+    });
+
+    const back = getLocation(db, id)!;
+    expect(back.address).toBe('Северный проспект, 1');
+    expect(back.description).toBe('Первый этаж');
+    expect(back.taxes).toBe('1,2');
+    expect(back.is_default).toBe(1);
+  });
+
+  it('магазин по умолчанию только один', () => {
+    const first = saveLocation(db, null, { ...blankLocation(), name: 'Ереван', is_default: true });
+    const second = saveLocation(db, null, { ...blankLocation(), name: 'Гюмри', is_default: true });
+
+    expect(getLocation(db, first)!.is_default).toBe(0);
+    expect(getLocation(db, second)!.is_default).toBe(1);
+  });
+
+  it('не заводит два магазина с одним названием', () => {
+    saveLocation(db, null, { ...blankLocation(), name: 'Ереван' });
+    expect(() => saveLocation(db, null, { ...blankLocation(), name: 'Ереван' })).toThrow();
   });
 });

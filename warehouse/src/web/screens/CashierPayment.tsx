@@ -1,62 +1,134 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
-import { cashOptions, change, enough } from '../../domain/payment';
+import { cashOptions, change } from '../../domain/payment';
 import type { Kopecks } from '../../domain/money';
-import type { PaymentMethod } from '../../domain/types';
+import type { CounterpartyWithTotals, PaymentMethod } from '../../domain/types';
+import { formatPhone } from '../../db/counterparties';
 import { pos } from '../../ui/webTheme';
 
 /**
- * Окно оплаты чека — «Принять оплату».
+ * «Принять оплату» — окно кассы, двумя колонками.
  *
- * Собрано его экраном: сверху итог, ниже переключатель «Наличные /
- * Банковская карта», у наличных — поле внесённой суммы, ряд подсказок
- * «Варианты оплаты наличными» и строка «Сдача».
+ * Слева **«Платежи»**: итог, сколько принято наличными, безналичными и в
+ * отсрочку, строка «Принято», комментарий к продаже и переключатель «Печатать
+ * чек». Справа **«Принять оплату»**: покупатель, три способа, сумма, варианты
+ * оплаты наличными и синяя кнопка «ПРИНЯТЬ … РУБ» с подсказкой ENTER.
  *
- * До этого оплаты не было вовсе: кнопка «ПРОДАЖА» сразу проводила чек
- * наличными и молчала, если чего-то не хватало. Кассир не мог ни выбрать
- * способ оплаты, ни посчитать сдачу, а на любой ошибке чек просто пропадал.
+ * Двумя колонками, а не одной, потому что **оплата бывает раздельной**: часть
+ * наличными, часть картой, остаток в отсрочку. Правая колонка принимает один
+ * платёж, левая копит принятое и показывает, сколько ещё осталось. Одной
+ * колонкой это не выразить: пришлось бы либо запретить раздельную оплату,
+ * либо каждый раз спрашивать «а сколько уже приняли».
+ *
+ * Отсрочка — долг покупателя: товар отдали, деньги не взяли. Поэтому её нельзя
+ * оформить на розничного — долг некому записать.
  */
+
+const METHODS: { id: PaymentMethod | 'credit'; label: string; sign: string }[] = [
+  { id: 'cash', label: 'Наличные', sign: '₽' },
+  { id: 'card', label: 'Безналичные', sign: '▭' },
+  { id: 'credit', label: 'Отсрочка', sign: '◇' },
+];
+
+/** Сколько принято каждым способом. */
+type Taken = Record<'cash' | 'card' | 'credit', Kopecks>;
+
+const EMPTY: Taken = { cash: 0, card: 0, credit: 0 };
+
 export function CashierPayment({
   visible,
   total,
+  customer,
   onClose,
   onPay,
   mode = 'sale',
 }: {
   visible: boolean;
   total: Kopecks;
+  /** Покупатель чека; null — розничный. */
+  customer?: CounterpartyWithTotals | null;
   onClose: () => void;
-  onPay: (payment: PaymentMethod, tendered: Kopecks) => void;
   /**
-   * Продажа или возврат.
-   *
-   * У возврата деньги идут в обратную сторону: сдачи не бывает, вносить
-   * нечего, и вопрос здесь один — чем выдать, из кассы или на карту.
+   * Чек проведён. `payment` — способ, которым принято больше всего: чек
+   * хранит один способ, и делить его на три значило бы менять и отчёты,
+   * и движение денег.
+   */
+  onPay: (payment: PaymentMethod, tendered: Kopecks, note: string) => void;
+  /**
+   * Продажа или возврат. У возврата деньги идут в обратную сторону: сдачи не
+   * бывает, вносить нечего, и вопрос один — чем выдать.
    */
   mode?: 'sale' | 'return';
 }) {
-  const [method, setMethod] = useState<PaymentMethod>('cash');
-  const [tendered, setTendered] = useState('');
-
   const returning = mode === 'return';
 
-  // По карте платят ровно столько, сколько в чеке: сдачи с карты не бывает.
-  const given =
-    returning || method !== 'cash'
-      ? total
-      : tendered.trim()
-        ? (parseMoney(tendered) ?? 0)
-        : total;
-  const rest = change(given, total);
-  const ready = enough(given, total);
+  const [method, setMethod] = useState<'cash' | 'card' | 'credit'>('cash');
+  const [amount, setAmount] = useState('');
+  const [taken, setTaken] = useState<Taken>(EMPTY);
+  const [note, setNote] = useState('');
+  const [printReceipt, setPrintReceipt] = useState(false);
 
-  const finish = (amount: Kopecks) => {
-    onPay(method, amount);
-    setTendered('');
+  const accepted = taken.cash + taken.card + taken.credit;
+  const left = Math.max(0, total - accepted);
+
+  // Окно открылось — начинаем с чистого листа и с суммы, которой не хватает.
+  useEffect(() => {
+    if (!visible) return;
     setMethod('cash');
-  };
+    setTaken(EMPTY);
+    setNote('');
+    setAmount(String(total / 100));
+  }, [visible, total]);
+
+  // Введённая сумма следует за остатком, пока её не трогали руками.
+  useEffect(() => {
+    if (!visible) return;
+    setAmount(String(left / 100));
+  }, [visible, left]);
+
+  const entered = parseMoney(amount) ?? 0;
+  // Наличными приносят больше, чем в чеке, — это сдача, а не переплата.
+  const applied = method === 'cash' ? Math.min(entered, left) : Math.min(entered, left);
+  const rest = method === 'cash' && !returning ? change(entered, left) : 0;
+
+  /** Принять этот платёж. Хватило на весь чек — проводим. */
+  function accept() {
+    if (method === 'credit' && !customer) return;
+    if (applied <= 0 && left > 0) return;
+
+    const next: Taken = { ...taken, [method]: taken[method] + applied };
+    const total_ = next.cash + next.card + next.credit;
+
+    if (total_ >= total) {
+      // Чек хранит один способ оплаты — тот, которым приняли больше всего.
+      const winner = (Object.keys(next) as (keyof Taken)[]).reduce((a, b) =>
+        next[a] >= next[b] ? a : b,
+      );
+      onPay(winner === 'credit' ? 'transfer' : winner, entered, note);
+      return;
+    }
+
+    setTaken(next);
+  }
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        accept();
+      }
+    };
+
+    globalThis.addEventListener?.('keydown', onKey);
+    return () => globalThis.removeEventListener?.('keydown', onKey);
+  });
+
+  const creditBlocked = method === 'credit' && !customer;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -69,169 +141,339 @@ export function CashierPayment({
         />
 
         <View style={styles.panel}>
-          <Text style={styles.title}>{returning ? 'Выдать возврат' : 'Принять оплату'}</Text>
+          {/* Левая колонка — что уже принято. */}
+          <ScrollView style={styles.left} contentContainerStyle={styles.leftContent}>
+            <Text style={styles.title}>Платежи</Text>
 
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Итог</Text>
-            <Text style={styles.totalValue}>{formatMoneyWeb(total)} руб</Text>
-          </View>
+            <Line label="Итог" value={formatMoneyWeb(total)} strong />
+            <Line label="Наличные" value={formatMoneyWeb(taken.cash)} />
+            <Line label="Безналичные" value={formatMoneyWeb(taken.card)} />
+            <Line label="Отсрочка" value={formatMoneyWeb(taken.credit)} />
+            <Line label="Принято" value={formatMoneyWeb(accepted)} strong />
+            {left > 0 && accepted > 0 ? (
+              <Line label="Осталось" value={formatMoneyWeb(left)} accent />
+            ) : null}
 
-          <View style={styles.methods}>
-            {(
-              [
-                ['cash', 'Наличные'],
-                ['card', 'Банковская карта'],
-              ] as [PaymentMethod, string][]
-            ).map(([value, label]) => (
-              <Pressable
-                key={value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: method === value }}
-                onPress={() => setMethod(value)}
-                style={[styles.method, method === value && styles.methodOn]}
-              >
-                <Text style={[styles.methodLabel, method === value && styles.methodLabelOn]}>
-                  {label}
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder={returning ? 'Комментарий к возврату' : 'Комментарий к продаже'}
+              placeholderTextColor={pos.muted}
+              multiline
+              accessibilityLabel="Комментарий"
+              style={styles.note}
+            />
+
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: printReceipt }}
+              accessibilityLabel="Печатать чек"
+              onPress={() => setPrintReceipt((on) => !on)}
+              style={styles.printRow}
+            >
+              <Text style={styles.printLabel}>Печатать чек</Text>
+              <View style={[styles.track, printReceipt && styles.trackOn]}>
+                <View style={[styles.knob, printReceipt && styles.knobOn]} />
+              </View>
+            </Pressable>
+
+            <Pressable accessibilityRole="button" onPress={onClose} style={styles.cancel}>
+              <Text style={styles.cancelLabel}>
+                {returning ? 'Отменить возврат' : 'Отменить чек'}
+              </Text>
+            </Pressable>
+          </ScrollView>
+
+          {/* Правая колонка — этот платёж. */}
+          <ScrollView style={styles.right} contentContainerStyle={styles.rightContent}>
+            <Text style={styles.title}>{returning ? 'Выдать возврат' : 'Принять оплату'}</Text>
+
+            <View style={styles.customer}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials(customer?.name)}</Text>
+              </View>
+              <View style={styles.customerText}>
+                <Text style={styles.customerName} numberOfLines={1}>
+                  {customer?.name ?? 'Розничный покупатель'}
                 </Text>
-              </Pressable>
-            ))}
-          </View>
+                {customer?.phone ? (
+                  <Text style={styles.customerPhone}>{formatPhone(customer.phone)}</Text>
+                ) : null}
+              </View>
+            </View>
 
-          {returning ? (
-            <Text style={styles.hint}>
-              {method === 'cash'
-                ? 'Выдайте покупателю деньги из кассы, затем подтвердите возврат.'
-                : 'Верните оплату на карту через терминал, затем подтвердите возврат.'}
-            </Text>
-          ) : method === 'cash' ? (
-            <>
-              <Text style={styles.label}>Получено от покупателя</Text>
-              <TextInput
-                value={tendered}
-                onChangeText={setTendered}
-                placeholder={formatMoneyWeb(total)}
-                placeholderTextColor={pos.muted}
-                keyboardType="decimal-pad"
-                style={styles.input}
-              />
+            <View style={styles.methods}>
+              {METHODS.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: method === item.id }}
+                  accessibilityLabel={item.label}
+                  onPress={() => setMethod(item.id as 'cash' | 'card' | 'credit')}
+                  style={[styles.method, method === item.id && styles.methodOn]}
+                >
+                  <Text style={[styles.methodSign, method === item.id && styles.methodSignOn]}>
+                    {item.sign}
+                  </Text>
+                  <Text style={[styles.methodLabel, method === item.id && styles.methodLabelOn]}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
 
-              <Text style={styles.label}>Варианты оплаты наличными</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Text style={styles.fieldLabel}>Сумма</Text>
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              accessibilityLabel="Сумма оплаты"
+              style={styles.amount}
+            />
+
+            {creditBlocked ? (
+              <Text style={styles.warning}>
+                Отсрочку не на кого записать: выберите покупателя в чеке.
+              </Text>
+            ) : null}
+
+            {method === 'cash' && !returning ? (
+              <>
+                <Text style={styles.fieldLabel}>Варианты оплаты наличными</Text>
                 <View style={styles.options}>
-                  {cashOptions(total).map((option) => (
+                  {cashOptions(left).map((option) => (
                     <Pressable
                       key={option}
                       accessibilityRole="button"
-                      onPress={() => finish(option)}
+                      accessibilityLabel={`Принять ${formatMoneyWeb(option)}`}
+                      onPress={() => setAmount(String(option / 100))}
                       style={styles.option}
                     >
                       <Text style={styles.optionLabel}>{formatMoneyWeb(option)}</Text>
                     </Pressable>
                   ))}
                 </View>
-              </ScrollView>
 
-              <View style={styles.changeRow}>
-                <Text style={styles.changeLabel}>Сдача</Text>
-                <Text style={styles.changeValue}>{formatMoneyWeb(rest)} руб</Text>
+                {rest > 0 ? (
+                  <View style={styles.changeRow}>
+                    <Text style={styles.changeLabel}>Сдача</Text>
+                    <Text style={styles.changeValue}>{formatMoneyWeb(rest)} руб</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: creditBlocked }}
+              onPress={accept}
+              style={[styles.confirm, creditBlocked && styles.confirmOff]}
+            >
+              <Text style={styles.confirmLabel}>
+                {returning ? 'ВЕРНУТЬ' : 'ПРИНЯТЬ'} {formatMoneyWeb(applied)} РУБ
+              </Text>
+              <View style={styles.key}>
+                <Text style={styles.keyLabel}>ENTER</Text>
               </View>
-            </>
-          ) : (
-            <Text style={styles.hint}>
-              Примите оплату через терминал, затем подтвердите чек.
-            </Text>
-          )}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !ready }}
-            onPress={() => ready && finish(given)}
-            style={[styles.confirm, !ready && styles.confirmOff]}
-          >
-            <Text style={styles.confirmLabel}>
-              {returning
-                ? `Вернуть ${formatMoneyWeb(total)} руб`
-                : ready
-                  ? `Оплатить ${formatMoneyWeb(total)} руб`
-                  : 'Не хватает внесённого'}
-            </Text>
-          </Pressable>
-
-          <Pressable accessibilityRole="button" onPress={onClose} style={styles.cancel}>
-            <Text style={styles.cancelLabel}>{returning ? 'Отменить возврат' : 'Отменить чек'}</Text>
-          </Pressable>
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
 }
 
+function Line({
+  label,
+  value,
+  strong,
+  accent,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <View style={styles.line}>
+      <Text style={[styles.lineLabel, strong && styles.lineStrong]}>{label}</Text>
+      <Text style={[styles.lineValue, strong && styles.lineStrong, accent && styles.lineAccent]}>
+        {value} руб
+      </Text>
+    </View>
+  );
+}
+
+/** «Фирсов Алексей» → «ФА». */
+function initials(name: string | undefined): string {
+  if (!name) return '—';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.slice(0, 1).toUpperCase())
+    .join('');
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
+  root: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   panel: {
-    width: 520,
-    maxWidth: '94%',
+    flexDirection: 'row',
+    width: 900,
+    maxWidth: '96%',
     maxHeight: '92%',
-    padding: 26,
-    gap: 12,
     borderRadius: 6,
     backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
     zIndex: 1,
   },
-  title: { fontFamily: pos.font, fontSize: 24, color: pos.text },
-  totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  totalLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
-  totalValue: { fontFamily: pos.font, fontSize: 30, fontWeight: '700', color: pos.text },
-  methods: { flexDirection: 'row', gap: 10, marginTop: 6 },
+
+  left: { flex: 1, borderRightWidth: 1, borderRightColor: pos.border },
+  leftContent: { padding: 26, gap: 10 },
+  right: { flex: 1.1 },
+  rightContent: { padding: 26, gap: 14 },
+
+  title: { fontFamily: pos.font, fontSize: 24, color: pos.text, marginBottom: 8 },
+
+  line: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+  },
+  lineLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  lineValue: {
+    fontFamily: pos.font,
+    fontSize: 14,
+    color: pos.text,
+    fontVariant: ['tabular-nums'],
+  },
+  lineStrong: { color: pos.text, fontWeight: '700' },
+  lineAccent: { color: pos.accent },
+
+  note: {
+    minHeight: 70,
+    marginTop: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: pos.border,
+    borderRadius: 4,
+    fontFamily: pos.font,
+    fontSize: 14,
+    color: pos.text,
+    textAlignVertical: 'top',
+  },
+  printRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  printLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  track: { width: 44, height: 20, borderRadius: 10, backgroundColor: '#D4D4D5', padding: 2 },
+  trackOn: { backgroundColor: pos.green },
+  knob: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' },
+  knobOn: { transform: [{ translateX: 24 }] },
+
+  cancel: { marginTop: 16, alignItems: 'center', paddingVertical: 10 },
+  cancelLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+
+  customer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pos.bar,
+  },
+  avatarText: { fontFamily: pos.font, fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
+  customerText: { flex: 1 },
+  customerName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  customerPhone: { fontFamily: pos.font, fontSize: 13, color: pos.bar },
+
+  methods: { flexDirection: 'row', gap: 10 },
   method: {
     flex: 1,
+    height: 68,
     alignItems: 'center',
-    paddingVertical: 13,
-    borderRadius: 4,
+    justifyContent: 'center',
+    gap: 4,
     borderWidth: 1,
     borderColor: pos.border,
+    borderRadius: 4,
   },
   methodOn: { backgroundColor: pos.bar, borderColor: pos.bar },
-  methodLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  methodSign: { fontFamily: pos.font, fontSize: 18, color: pos.bar },
+  methodSignOn: { color: '#FFFFFF' },
+  methodLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
   methodLabelOn: { color: '#FFFFFF' },
-  label: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 8 },
-  input: {
-    height: 52,
+
+  fieldLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
+  amount: {
+    height: 48,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: pos.border,
+    borderColor: pos.accent,
     borderRadius: 4,
-    paddingHorizontal: 14,
     fontFamily: pos.font,
     fontSize: 22,
     color: pos.text,
+    fontVariant: ['tabular-nums'],
   },
-  options: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
+  warning: { fontFamily: pos.font, fontSize: 13, color: pos.accent },
+
+  options: { flexDirection: 'row', flexWrap: 'wrap' },
   option: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    height: 36,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: pos.border,
+    marginLeft: -1,
+    marginTop: -1,
   },
-  optionLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
-  changeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginTop: 6,
+  optionLabel: {
+    fontFamily: pos.font,
+    fontSize: 13,
+    color: pos.text,
+    fontVariant: ['tabular-nums'],
   },
-  changeLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
-  changeValue: { fontFamily: pos.font, fontSize: 22, fontWeight: '700', color: pos.green },
-  hint: { fontFamily: pos.font, fontSize: 15, color: pos.muted, lineHeight: 22, marginVertical: 14 },
+
+  changeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  changeLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  changeValue: {
+    fontFamily: pos.font,
+    fontSize: 18,
+    color: pos.text,
+    fontVariant: ['tabular-nums'],
+  },
+
   confirm: {
+    marginTop: 8,
+    height: 52,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    justifyContent: 'center',
+    gap: 14,
     borderRadius: 4,
-    backgroundColor: pos.green,
-    marginTop: 10,
+    backgroundColor: pos.bar,
   },
-  confirmOff: { backgroundColor: pos.border },
-  confirmLabel: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
-  cancel: { alignItems: 'center', paddingVertical: 10 },
-  cancelLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  confirmOff: { opacity: 0.5 },
+  confirmLabel: { fontFamily: pos.font, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.6 },
+  key: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 3,
+  },
+  keyLabel: { fontFamily: pos.font, fontSize: 11, color: '#FFFFFF' },
 });

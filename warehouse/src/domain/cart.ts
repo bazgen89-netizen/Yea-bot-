@@ -52,6 +52,24 @@ export function discountFromPercent(subtotal: Kopecks, percent: number): Kopecks
   return Math.round((subtotal * clamped) / 100);
 }
 
+/**
+ * Скидка суммой -> процент.
+ *
+ * Обратная к `discountFromPercent`, и нужна ровно затем, зачем у него в окне
+ * скидки переключатель «% / РУБ»: кассиру называют то «десять процентов», то
+ * «скидка семьдесят рублей», и он должен ввести услышанное, а не считать в
+ * уме. Хранится при этом одна величина — сумма; процент от неё производен.
+ *
+ * Пустой чек даёт ноль, а не деление на ноль.
+ */
+export function percentFromDiscount(subtotal: Kopecks, discount: Kopecks): number {
+  if (subtotal <= 0) return 0;
+  const percent = (Math.min(Math.max(discount, 0), subtotal) / subtotal) * 100;
+  // Два знака: «10.00 %» у него в подписи, и округление до целого превратило
+  // бы скидку в 70 рублей с чека в 630 в «11 %», которых никто не давал.
+  return Math.round(percent * 100) / 100;
+}
+
 export interface CartIssue {
   product_id: number;
   name: string;

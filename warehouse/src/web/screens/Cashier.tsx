@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
 import { CashierCustomer } from './CashierCustomer';
+import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierPayment } from './CashierPayment';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
@@ -11,6 +12,7 @@ import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { openShiftAnywhere } from '../../db/shifts';
+import { discountFromPercent, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type {
@@ -50,11 +52,33 @@ export function Cashier() {
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
   const [pickingCustomer, setPickingCustomer] = useState(false);
+  const [discounting, setDiscounting] = useState(false);
+  /**
+   * Скидка процентом, если её задали процентом.
+   *
+   * Хранится отдельно от суммы, потому что чек добирают: «десять процентов»
+   * на одну позицию и на три — разные деньги, а обещали покупателю проценты.
+   * Скидка суммой процент сбрасывает: там обещали ровно эти рубли.
+   */
+  const [discountPercent, setDiscountPercent] = useState<number | null>(null);
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
   const shop = locations[0]?.name ?? 'Магазин';
+
+  /**
+   * Скидка процентом пересчитывается на каждое изменение чека.
+   *
+   * Иначе «десять процентов», данные на одну позицию, остались бы теми же
+   * рублями после того, как в чек добрали ещё две: обещали процент, а
+   * получилось бы меньше.
+   */
+  useEffect(() => {
+    if (discountPercent === null) return;
+    const wanted = discountFromPercent(cart.totals.subtotal, discountPercent);
+    if (wanted !== cart.totals.discount) cart.setDiscount(wanted);
+  }, [discountPercent, cart]);
 
   /**
    * Открыть смену.
@@ -97,13 +121,14 @@ export function Cashier() {
     setPaying(true);
   };
 
-  const pay = (payment: PaymentMethod, tendered: number): void => {
+  const pay = (payment: PaymentMethod, tendered: number, note: string): void => {
     try {
       // Возврат проводится своей операцией: товар возвращается на склад, а
       // деньги уходят из кассы — списывать остаток здесь было бы наоборот.
       const post = mode === 'sale' ? createSale : createReturn;
       post(db, {
         customerId: customer?.id ?? null,
+        note,
         discount: cart.discount,
         payment,
         lines: cart.lines,
@@ -136,9 +161,12 @@ export function Cashier() {
 
     cart.clear();
     setSelected(null);
-    // Покупатель тоже сбрасывается: следующий чек пробивают следующему,
-    // и оставленная карточка приписала бы его покупку прежнему клиенту.
+    // Покупатель и скидка тоже сбрасываются: следующий чек пробивают
+    // следующему, и оставленная карточка приписала бы его покупку прежнему
+    // клиенту, а оставленная скидка — досталась бы ему даром.
     setCustomer(null);
+    setDiscountPercent(null);
+    cart.setDiscount(0);
     setPaying(false);
     refresh();
 
@@ -289,31 +317,81 @@ export function Cashier() {
               <Text style={styles.emptyReceiptText}>Выберите товары</Text>
             </View>
           ) : (
-            <ScrollView style={styles.receipt}>
-              {cart.lines.map((line) => (
-                <View key={line.product_id} style={styles.receiptRow}>
-                  <View style={styles.receiptBody}>
-                    <Text style={styles.receiptName} numberOfLines={2}>
-                      {line.name}
-                    </Text>
-                    <Text style={styles.receiptQty}>
-                      {formatQty(line.qty)} {line.unit} × {formatMoneyWeb(line.price)}
-                    </Text>
-                  </View>
-                  <Text style={styles.receiptSum}>
-                    {formatMoneyWeb(Math.round((line.price * line.qty) / 1000))}
+            <>
+              <ScrollView style={styles.receipt}>
+                {cart.lines.map((line) => {
+                  const gross = Math.round((line.price * line.qty) / 1000);
+                  // Скидка чека раскладывается на позиции пропорционально —
+                  // так у него: у строки видно и цену до скидки, и после.
+                  const share =
+                    cart.totals.subtotal > 0
+                      ? Math.round((gross * cart.totals.discount) / cart.totals.subtotal)
+                      : 0;
+
+                  return (
+                    <View key={line.product_id} style={styles.receiptRow}>
+                      <View style={styles.receiptBody}>
+                        <Text style={styles.receiptName} numberOfLines={2}>
+                          {line.name}
+                        </Text>
+                        <View style={styles.receiptMeta}>
+                          {share > 0 ? (
+                            <View style={styles.discountBadge}>
+                              <Text style={styles.discountBadgeText}>
+                                {percentFromDiscount(cart.totals.subtotal, cart.totals.discount)}%
+                                Скидка
+                              </Text>
+                            </View>
+                          ) : null}
+                          <Text style={styles.receiptQty}>
+                            {formatQty(line.qty)} {line.unit} × {formatMoneyWeb(line.price)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.receiptSums}>
+                        <Text style={styles.receiptSum}>{formatMoneyWeb(gross - share)}</Text>
+                        {share > 0 ? (
+                          <Text style={styles.receiptWas}>{formatMoneyWeb(gross)}</Text>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Убрать из чека"
+                        onPress={() => cart.remove(line.product_id)}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.receiptRemove}>✕</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Подытог и скидка — у него они стоят над кнопкой продажи, и
+                  по строке скидки в неё же и заходят. */}
+              <View style={styles.totals}>
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>Подытог</Text>
+                  <Text style={styles.totalsValue}>
+                    {formatMoneyWeb(cart.totals.subtotal)} руб
                   </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Убрать из чека"
-                    onPress={() => cart.remove(line.product_id)}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.receiptRemove}>✕</Text>
-                  </Pressable>
                 </View>
-              ))}
-            </ScrollView>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Размер скидки"
+                  onPress={() => setDiscounting(true)}
+                  style={styles.totalsRow}
+                >
+                  <Text style={styles.totalsDiscount}>
+                    Скидка{' '}
+                    {percentFromDiscount(cart.totals.subtotal, cart.totals.discount).toFixed(2)} %
+                  </Text>
+                  <Text style={styles.totalsDiscount}>
+                    {formatMoneyWeb(cart.totals.discount)} руб
+                  </Text>
+                </Pressable>
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -357,14 +435,35 @@ export function Cashier() {
         mode={mode}
         total={cart.totals.total}
         onClose={() => setPaying(false)}
+        customer={customer}
         onPay={pay}
+      />
+
+      <CashierDiscount
+        visible={discounting}
+        subtotal={cart.totals.subtotal}
+        discount={cart.totals.discount}
+        onClose={() => setDiscounting(false)}
+        onApply={(money, percent) => {
+          setDiscountPercent(percent);
+          cart.setDiscount(money);
+        }}
       />
 
       <CashierCustomer
         visible={pickingCustomer}
         chosen={customer}
         onClose={() => setPickingCustomer(false)}
-        onPick={setCustomer}
+        onPick={(picked) => {
+          setCustomer(picked);
+          // Личная скидка клиента подставляется сама: её для того и завели,
+          // и заставлять кассира вводить её руками — верный способ забыть.
+          // Бонусному клиенту процент не даётся: у него бонусы вместо него.
+          const personal =
+            picked && picked.loyalty_type !== 'bonus' ? picked.discount_bp / 100 : 0;
+          setDiscountPercent(personal > 0 ? personal : null);
+          if (personal === 0) cart.setDiscount(0);
+        }}
       />
 
       <CashierOpenShift
@@ -613,6 +712,38 @@ const styles = StyleSheet.create({
   receiptBody: { flex: 1, gap: 2 },
   receiptName: { fontSize: 16, color: pos.text },
   receiptQty: { fontSize: 14, color: pos.muted },
+  receiptMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  discountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    backgroundColor: '#FCE4EC',
+  },
+  discountBadgeText: { fontFamily: pos.font, fontSize: 11, color: '#C2185B', fontWeight: '700' },
+  receiptSums: { alignItems: 'flex-end' },
+  receiptWas: {
+    fontFamily: pos.font,
+    fontSize: 13,
+    color: pos.muted,
+    textDecorationLine: 'line-through',
+    fontVariant: ['tabular-nums'],
+  },
+  totals: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: pos.border,
+  },
+  totalsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  totalsLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  totalsValue: {
+    fontFamily: pos.font,
+    fontSize: 15,
+    color: pos.text,
+    fontVariant: ['tabular-nums'],
+  },
+  totalsDiscount: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
   receiptSum: { fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
   receiptRemove: { fontSize: 17, color: pos.muted },
 

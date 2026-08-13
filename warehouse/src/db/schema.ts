@@ -560,6 +560,14 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE counterparties ADD COLUMN account_number TEXT;
   ALTER TABLE counterparties ADD COLUMN legal_address  TEXT;
   `,
+
+  // 17 — комментарий к продаже
+  `
+  -- «Комментарий к продаже» в окне оплаты. Кассир пишет туда то, что иначе
+  -- не запомнить: «оплата двумя картами», «обещал занести остаток завтра».
+  -- Без колонки поле было бы обманом — набранное исчезало бы с чеком.
+  ALTER TABLE sales ADD COLUMN note TEXT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

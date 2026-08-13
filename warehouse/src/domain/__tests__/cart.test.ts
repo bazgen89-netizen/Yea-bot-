@@ -1,4 +1,11 @@
-import { addToCart, cartTotals, discountFromPercent, findStockIssues, setCartQty } from '../cart';
+import {
+  addToCart,
+  cartTotals,
+  discountFromPercent,
+  findStockIssues,
+  percentFromDiscount,
+  setCartQty,
+} from '../cart';
 import type { CartLine } from '../types';
 
 function line(over: Partial<CartLine> = {}): CartLine {
@@ -97,5 +104,35 @@ describe('addToCart / setCartQty', () => {
     setCartQty(original, 1, 5000);
     expect(original).toHaveLength(1);
     expect(original[0].qty).toBe(1000);
+  });
+});
+
+describe('percentFromDiscount', () => {
+  it('обратна discountFromPercent', () => {
+    // Ровно случай со снимка кассы: чек 700,00, скидка 10 % — это 70,00.
+    const subtotal = 70000;
+    const discount = discountFromPercent(subtotal, 10);
+    expect(discount).toBe(7000);
+    expect(percentFromDiscount(subtotal, discount)).toBe(10);
+  });
+
+  it('считает процент от суммы, названной в рублях', () => {
+    // Кассиру сказали «скинь семьдесят рублей» с чека в 630,00.
+    expect(percentFromDiscount(63000, 7000)).toBeCloseTo(11.11, 2);
+  });
+
+  it('не делит на ноль и не уходит за границы', () => {
+    expect(percentFromDiscount(0, 5000)).toBe(0);
+    expect(percentFromDiscount(10000, -500)).toBe(0);
+    // Скидка больше чека — это сто процентов, а не больше.
+    expect(percentFromDiscount(10000, 50000)).toBe(100);
+  });
+
+  it('переключение % ↔ руб не теряет величину', () => {
+    const subtotal = 133700;
+    for (const percent of [3, 5, 7, 8, 10, 12.5]) {
+      const money = discountFromPercent(subtotal, percent);
+      expect(percentFromDiscount(subtotal, money)).toBeCloseTo(percent, 1);
+    }
   });
 });

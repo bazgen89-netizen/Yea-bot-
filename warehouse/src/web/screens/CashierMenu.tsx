@@ -2,7 +2,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useEffect, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { closeShift, listRegisters, openShift, openShiftAnywhere, shiftReport } from '../../db/shifts';
+import { closeShift, openShiftAnywhere, shiftReport } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import type { CashierView } from './CashierViews';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -53,6 +53,7 @@ export function CashierMenu({
   onOpenView,
   mode,
   onToggleMode,
+  onOpenShift,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -61,27 +62,17 @@ export function CashierMenu({
   /** Что кассир сейчас набирает: продажу или возврат. */
   mode: 'sale' | 'return';
   onToggleMode: () => void;
+  /** Показать окно «Открытие смены» — оно живёт на самой кассе. */
+  onOpenShift: () => void;
 }) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
 
   const shift = useQuery((database) => openShiftAnywhere(database));
-  const registers = useQuery((database) => listRegisters(database));
   const report = useQuery(
     (database) => (shift ? shiftReport(database, shift.id) : null),
     [shift?.id],
   );
-
-  function start() {
-    const free = registers.find((register) => register.open_shift_id === null);
-    if (!free) {
-      say('Нет свободной кассы', 'Смена уже открыта.');
-      return;
-    }
-    openShift(db, { registerId: free.id, cashier: 'waystea' });
-    refresh();
-    say('Смена открыта', `${free.name}. Чеки будут копиться в ней, пока её не закроют.`);
-  }
 
   /**
    * Закрыть смену.
@@ -167,7 +158,7 @@ export function CashierMenu({
         {
           label: 'Открыть смену',
           icon: <WebIcon.lockOpen size={22} color={tint} />,
-          action: start,
+          action: onOpenShift,
         },
       ];
 

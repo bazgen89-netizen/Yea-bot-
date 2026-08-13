@@ -39,9 +39,19 @@ export interface CompanySettings {
   currency: string;
   /** Как показывать валюту: «руб», «₽», «RUB». */
   currencyView: string;
-  phone: string;
-  email: string;
+  /**
+   * Телефоны и почты списками, а не по одному: у него под каждым полем
+   * ссылка «добавить еще», и у компании с двумя точками телефонов два.
+   */
+  phones: string[];
+  emails: string[];
   site: string;
+  /**
+   * Префикс штрихкода весового товара — две цифры, с которых начинается
+   * штрихкод, напечатанный весами. По нему касса понимает, что в коде зашит
+   * вес, а не количество.
+   */
+  pluPrefix: string;
 
   /**
    * Реквизиты.
@@ -74,17 +84,22 @@ export interface CompanySettings {
   reportTime: string;
   timezone: string;
 
-  /** Лояльность: бонусная программа. */
+  /**
+   * Лояльность: бонусная программа.
+   *
+   * Все три ставки — проценты в сотых долях (500 = 5 %), потому что у него
+   * это три поля с приписком «%», а не пары чисел. Подпись под полем
+   * пересказывает ставку словами — «Каждые 100,00 в чеке = 5 бонусов на
+   * счет», — но само значение одно.
+   */
   bonusOn: boolean;
-  /** Курс начисления: сколько рублей чека дают сколько бонусов. */
-  bonusPerRubles: number;
-  bonusEarned: number;
-  /** Курс списания: сколько бонусов равны скольким рублям скидки. */
-  bonusSpend: number;
-  bonusSpendRubles: number;
+  /** Курс начисления: сколько процентов чека возвращается бонусами. */
+  cashbackRateBp: number;
+  /** Курс списания: сколько рублей скидки даёт один бонус, в процентах. */
+  redemptionRateBp: number;
   /** Каким процентом чека можно платить бонусами. */
   bonusLimitBp: number;
-  /** Бонусы новому покупателю и в день рождения, копейки. */
+  /** Бонусы новому покупателю и в день рождения — штуки, не деньги. */
   bonusStart: number;
   bonusBirthday: number;
 
@@ -98,9 +113,10 @@ const DEFAULTS: CompanySettings = {
   country: 'Россия',
   currency: 'RUB',
   currencyView: 'руб',
-  phone: '',
-  email: 'waystea@gmail.com',
+  phones: [''],
+  emails: ['waystea@gmail.com'],
   site: '',
+  pluPrefix: '22',
 
   legalName: '',
   legalFullName: '',
@@ -123,13 +139,9 @@ const DEFAULTS: CompanySettings = {
   timezone: 'Europe/Moscow',
 
   bonusOn: false,
-  // «Каждые 100 ₽ в чеке = 1 бонус на счет» — их формулировка и их же
-  // значения по умолчанию.
-  bonusPerRubles: 100,
-  bonusEarned: 1,
-  bonusSpend: 1,
-  bonusSpendRubles: 1,
-  bonusLimitBp: 5000,
+  cashbackRateBp: 0,
+  redemptionRateBp: 10000,
+  bonusLimitBp: 0,
   bonusStart: 0,
   bonusBirthday: 0,
 

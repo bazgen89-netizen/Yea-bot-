@@ -16,7 +16,7 @@ import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { pickFile, saveFile } from '../../ui/download';
 import { parsePercent } from '../../domain/pricing';
-import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { web, webText, WEB_FONT, FORM_BORDER } from '../../ui/webTheme';
 
 /**
  * «Настройки / настройки компании» — вкладки, как в оригинале.
@@ -88,8 +88,29 @@ export function CompanySettings() {
               value={draft.currencyView}
               onChange={(currencyView) => set({ currencyView })}
             />
-            <WebField label="Телефон" value={draft.phone} onChange={(phone) => set({ phone })} />
-            <WebField label="Email" value={draft.email} onChange={(email) => set({ email })} />
+            {/* Префикс весового штрихкода: две цифры, с которых начинается
+                код, напечатанный весами. По ним касса понимает, что в коде
+                зашит вес, а не количество. */}
+            <WebField
+              label="Префикс штрихкода весового товара"
+              value={draft.pluPrefix}
+              onChange={(pluPrefix) => set({ pluPrefix: pluPrefix.replace(/\D/g, '').slice(0, 2) })}
+            />
+
+            {/* Телефоны и почты списками: у него под каждым «добавить еще»,
+                и у компании с двумя точками телефонов два. */}
+            <ListField
+              label="Телефон"
+              values={draft.phones}
+              placeholder="Введите номер телефона"
+              onChange={(phones) => set({ phones })}
+            />
+            <ListField
+              label="Email"
+              values={draft.emails}
+              placeholder="mail@example.com"
+              onChange={(emails) => set({ emails })}
+            />
             <WebField label="Cайт" value={draft.site} onChange={(site) => set({ site })} />
           </Block>
         ) : null}
@@ -435,6 +456,68 @@ function WebField({
   );
 }
 
+/**
+ * Поле, которого бывает несколько: телефон, почта.
+ *
+ * Ссылка «добавить еще» стоит в самой подписи — так у него, и это заметно
+ * лучше кнопки под списком: видно, что добавлять есть куда, ещё до того как
+ * заполнил первое.
+ */
+function ListField({
+  label,
+  values,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  placeholder?: string;
+  onChange: (values: string[]) => void;
+}) {
+  // Пустой список всё равно рисуется одной строкой: поле, в которое нечего
+  // ввести, выглядит как поломка.
+  const rows = values.length ? values : [''];
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>
+        {label} (
+        <Text
+          accessibilityRole="link"
+          onPress={() => onChange([...rows, ''])}
+          style={styles.addMore}
+        >
+          добавить еще
+        </Text>
+        )
+      </Text>
+
+      {rows.map((value, index) => (
+        <View key={index} style={styles.listRow}>
+          <TextInput
+            value={value}
+            onChangeText={(next) => onChange(rows.map((item, i) => (i === index ? next : item)))}
+            placeholder={placeholder}
+            placeholderTextColor={web.textMuted}
+            accessibilityLabel={`${label} ${index + 1}`}
+            style={[styles.input, styles.listInput]}
+          />
+          {rows.length > 1 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Убрать ${label.toLowerCase()} ${index + 1}`}
+              onPress={() => onChange(rows.filter((_, i) => i !== index))}
+              style={styles.listRemove}
+            >
+              <Text style={styles.listRemoveSign}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function WebSelect({
   label,
   value,
@@ -456,6 +539,19 @@ function WebSelect({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  addMore: { color: web.link, fontWeight: '400' },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  listInput: { flex: 1 },
+  listRemove: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: FORM_BORDER,
+    borderRadius: 4,
+  },
+  listRemoveSign: { fontSize: 13, color: web.textMuted },
   subTitle: { fontFamily: WEB_FONT, fontSize: 15, fontWeight: '700', color: web.text, marginTop: 10 },
   pair: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   pairHalf: { flex: 1 },

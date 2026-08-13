@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
+import { CashierOpenShift } from './CashierOpenShift';
 import { CashierPayment } from './CashierPayment';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
-import { listRegisters, openShift, openShiftAnywhere } from '../../db/shifts';
+import { openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { Id, PaymentMethod, ProductWithStock } from '../../domain/types';
@@ -38,29 +39,22 @@ export function Cashier() {
   // Продажа или возврат. У него это `documentMode`, и переключается он
   // пунктом меню «Создать возврат»; касса при этом остаётся той же.
   const [mode, setMode] = useState<'sale' | 'return'>('sale');
+  const [opening, setOpening] = useState(false);
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
-  const registers = useQuery((database) => listRegisters(database));
   const shop = locations[0]?.name ?? 'Магазин';
 
   /**
-   * Открыть смену прямо из кассы.
+   * Открыть смену.
    *
-   * Кассу открывают на свободной кассе — той, где смены ещё нет. Если все
-   * заняты, значит смена уже идёт где-то ещё, и об этом надо сказать, а не
-   * молча ничего не сделать.
+   * Не одним нажатием: смена начинается со сверки денег в ящике, и сумму, с
+   * которой начали, спрашивает отдельное окно — без неё в конце смены не с
+   * чем сравнивать пересчёт.
    */
   function openShiftNow() {
-    const free = registers.find((register) => register.open_shift_id === null);
-    if (!free) {
-      say('Нет свободной кассы', 'Смена уже открыта на другой кассе.');
-      return;
-    }
-
-    openShift(db, { registerId: free.id, cashier: 'waystea' });
-    refresh();
+    setOpening(true);
   }
 
   /**
@@ -326,11 +320,18 @@ export function Cashier() {
         onPay={pay}
       />
 
+      <CashierOpenShift
+        visible={opening}
+        onClose={() => setOpening(false)}
+        onOpened={() => say('Смена открыта', 'Чеки будут копиться в ней, пока её не закроют.')}
+      />
+
       <CashierMenu
         visible={menu}
         onClose={() => setMenu(false)}
         onOpenView={setView}
         mode={mode}
+        onOpenShift={openShiftNow}
         onToggleMode={() => {
           // Набранное не переносится из продажи в возврат: это разные чеки, и
           // молча превратить один в другой значило бы вернуть покупателю то,

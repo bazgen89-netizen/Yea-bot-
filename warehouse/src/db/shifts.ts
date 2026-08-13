@@ -230,3 +230,20 @@ export function listShifts(db: SqlDriver, limit = 200): ShiftReport[] {
   const ids = db.all<{ id: Id }>('SELECT id FROM shifts ORDER BY id DESC LIMIT ?', [limit]);
   return ids.map((row) => shiftReport(db, row.id));
 }
+
+/**
+ * Сколько денег осталось в ящике этой кассы с прошлой смены.
+ *
+ * Подставляется в «Сумму денег в кассе» при открытии: ящик не опустошают на
+ * ночь, и кассир начинает смену с тем, что в нём лежит. Считать это число
+ * заново он не должен — он его сверяет.
+ */
+export function lastClosingCash(db: SqlDriver, registerId: Id): Kopecks {
+  const row = db.get<{ closing_cash: Kopecks | null }>(
+    `SELECT closing_cash FROM shifts
+     WHERE register_id = ? AND closed_at IS NOT NULL
+     ORDER BY id DESC LIMIT 1`,
+    [registerId],
+  );
+  return row?.closing_cash ?? 0;
+}

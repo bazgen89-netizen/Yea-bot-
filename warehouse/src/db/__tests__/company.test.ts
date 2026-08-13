@@ -159,8 +159,8 @@ describe('лояльность и реквизиты', () => {
       taxes: [{ name: 'НДС 20 %', code: '1', rate_bp: 2000 }],
       vatPayer: true,
       bonusOn: true,
-      bonusPerRubles: 100,
-      bonusEarned: 1,
+      cashbackRateBp: 500,
+      redemptionRateBp: 10000,
       bonusLimitBp: 3000,
       presetDiscounts: [500, 1000],
       discountRules: [{ from: 1000000, discount_bp: 500 }],
@@ -172,6 +172,7 @@ describe('лояльность и реквизиты', () => {
     expect(back.taxes[0].rate_bp).toBe(2000);
     expect(back.vatPayer).toBe(true);
     expect(back.bonusOn).toBe(true);
+    expect(back.cashbackRateBp).toBe(500);
     expect(back.bonusLimitBp).toBe(3000);
     expect(back.presetDiscounts).toEqual([500, 1000]);
     expect(back.discountRules[0]).toEqual({ from: 1000000, discount_bp: 500 });
@@ -190,6 +191,6 @@ describe('лояльность и реквизиты', () => {
     expect(back.name).toBe('Старая чайная');
     expect(back.requisites).toEqual([]);
     expect(back.taxes).toEqual([]);
-    expect(back.bonusPerRubles).toBe(100);
+    expect(back.cashbackRateBp).toBe(0);
   });
 });

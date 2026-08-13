@@ -282,3 +282,22 @@ function emptyToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 }
+
+/**
+ * Итоги бонусной программы — два числа над её настройками.
+ *
+ * Считаются по счетам клиентов, а не хранятся отдельно: «сгенерировано» —
+ * это всё, что сейчас лежит на счетах плюс уже потраченное, и складывать
+ * его третьим счётчиком значило бы завести число, которое рано или поздно
+ * разойдётся с двумя первыми.
+ */
+export function bonusStats(db: SqlDriver): { generated: number; spent: number } {
+  const row = db.get<{ balance: number; spent: number }>(
+    `SELECT COALESCE(SUM(bonus_balance), 0) AS balance,
+            COALESCE(SUM(bonus_spent), 0)   AS spent
+     FROM counterparties`,
+  );
+  const balance = row?.balance ?? 0;
+  const spent = row?.spent ?? 0;
+  return { generated: balance + spent, spent };
+}

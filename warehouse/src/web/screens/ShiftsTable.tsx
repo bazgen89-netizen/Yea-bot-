@@ -3,12 +3,13 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { formatDay, formatTime } from '../../db/journal';
-import { listRegisters, listShifts, openShift, type ShiftReport } from '../../db/shifts';
+import { listRegisters, listShifts, type ShiftReport } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { say } from '../../ui/alert';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { CashierOpenShift } from './CashierOpenShift';
 import { ShiftView } from './ShiftView';
 
 /**
@@ -55,6 +56,7 @@ export function ShiftsTable() {
   const [search, setSearch] = useState('');
   // Открытая смена — панель справа, поверх списка: так же, как товар.
   const [open2, setOpen2] = useState<number | null>(null);
+  const [opening, setOpening] = useState(false);
 
   const shifts = useQuery((database) => listShifts(database));
   const registers = useQuery((database) => listRegisters(database));
@@ -67,20 +69,16 @@ export function ShiftsTable() {
       )
     : shifts;
 
-  const free = registers.find((register) => register.open_shift_id === null);
   const open = shifts.find((report) => report.shift.closed_at === null);
-
-  function start() {
-    if (!free) {
-      say('Все кассы заняты', 'Сначала закройте открытую смену.');
-      return;
-    }
-    openShift(db, { registerId: free.id, cashier: 'waystea' });
-    refresh();
-  }
 
   return (
     <View style={styles.screen}>
+      <CashierOpenShift
+        visible={opening}
+        onClose={() => setOpening(false)}
+        onOpened={() => undefined}
+      />
+
       <Toolbar>
         <SearchBox
           value={search}
@@ -93,7 +91,7 @@ export function ShiftsTable() {
             ящик и сверяет его с чеками. Кнопка в кабинете позволяла закрыть чужую
             смену через всю страну, пока за кассой ещё стоят люди, и пересчитывать
             было бы нечего. Закрывают смену в кассе: «Меню» → «Закрыть смену». */}
-        <ToolButton label="Открыть смену" tone="green" onPress={start} />
+        <ToolButton label="Открыть смену" tone="green" onPress={() => setOpening(true)} />
         <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
       </Toolbar>
 

@@ -1,28 +1,33 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { bonusStats } from '../src/db/counterparties';
 import { getSettings, saveSettings, type CompanySettings } from '../src/db/settings';
 import { formatMoneyWeb, parseMoney } from '../src/domain/money';
-import { parsePercent } from '../src/domain/pricing';
 import { useDatabase, useQuery } from '../src/state/DatabaseProvider';
 import { say } from '../src/ui/alert';
 import { FORM_BORDER, web, WEB_FONT } from '../src/ui/webTheme';
-import { ToolButton } from '../src/web/Table';
 
 /**
- * «Компания / Лояльность» — две вкладки его экрана.
+ * «Компания / Лояльность» — две его вкладки, «Бонусная система» и «Скидки».
  *
- * **Бонусная система**: курс начисления, курс списания, лимит оплаты,
- * стартовые бонусы и бонусы на день рождения. Формулировки его же — они
- * собраны из шаблона фразой, а не подписью к полю: «Каждые 100 ₽ в чеке =
- * 1 бонус на счет» читается сразу, а «Курс начисления: 100 / 1» — нет.
+ * Снято с `company/loyalty/bonus/index.html` и `discounts.html`. Устройство
+ * оттуда же и важно целиком:
  *
- * **Скидки**: предустановленные скидки и правила накопительных — «Сумма
- * больше чем: … → Скидка …».
+ * — **Ставки — проценты.** Одно поле с приписком «%», а под ним строка,
+ *   пересказывающая ставку словами: «Каждые 100,00 в чеке = 5 бонусов на
+ *   счет». Раньше здесь стояла сама фраза с двумя полями внутри — читалось
+ *   похоже, но значений было два там, где у него одно, и перенести настройки
+ *   один в один стало бы нечем.
  *
- * Начисление бонусов на кассе ещё не сделано: это отдельная работа, и она
- * потребует трогать чек. Здесь заводятся сами правила, и они уже видны в
- * наборе колонок «Лояльность» у клиентов.
+ * — **Сверху два счётчика** — сгенерированный кешбэк и потраченные бонусы.
+ *   Это не украшение: по ним видно, работает программа или заведена и забыта.
+ *
+ * — **Скидок ровно пять**, и накопительных правил тоже пять. Не список с
+ *   «добавить ещё»: на кассе скидку выбирают из ряда кнопок, и ряд этот
+ *   помещается на экран только пока их пять.
+ *
+ * Начисление бонусов на кассе ещё не сделано — здесь заводятся правила.
  */
 
 type Tab = 'bonus' | 'discounts';
@@ -32,9 +37,13 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'discounts', label: 'Скидки' },
 ];
 
+/** Сколько строк в каждом списке скидок — у него ровно столько. */
+const SLOTS = 5;
+
 export default function LoyaltyScreen() {
   const { db, refresh } = useDatabase();
   const saved = useQuery((database) => getSettings(database));
+  const stats = useQuery((database) => bonusStats(database));
 
   const [tab, setTab] = useState<Tab>('bonus');
   const [draft, setDraft] = useState<CompanySettings>(saved);
@@ -68,231 +77,226 @@ export default function LoyaltyScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {tab === 'bonus' ? (
-          <View style={styles.block}>
-            <Text style={styles.blockTitle}>Настройки программы</Text>
-
-            <Toggle
-              label={draft.bonusOn ? 'Бонусная программа активна' : 'Бонусная система не активна'}
-              on={draft.bonusOn}
-              onChange={(bonusOn) => set({ bonusOn })}
-            />
-
-            <Text style={styles.label}>Курс начисления</Text>
-            <Phrase>
-              <Text style={styles.phrase}>{draft.bonusPerRubles === 1 ? 'Каждый' : 'Каждые'}</Text>
-              <Number
-                value={draft.bonusPerRubles}
-                onChange={(bonusPerRubles) => set({ bonusPerRubles })}
-              />
-              <Text style={styles.phrase}>₽ в чеке =</Text>
-              <Number value={draft.bonusEarned} onChange={(bonusEarned) => set({ bonusEarned })} />
-              <Text style={styles.phrase}>{plural(draft.bonusEarned)} на счет</Text>
-            </Phrase>
-
-            <Text style={styles.label}>Курс списания</Text>
-            <Phrase>
-              <Number value={draft.bonusSpend} onChange={(bonusSpend) => set({ bonusSpend })} />
-              <Text style={styles.phrase}>{plural(draft.bonusSpend)} =</Text>
-              <Number
-                value={draft.bonusSpendRubles}
-                onChange={(bonusSpendRubles) => set({ bonusSpendRubles })}
-              />
-              <Text style={styles.phrase}>₽ скидки в чеке</Text>
-            </Phrase>
-
-            <Text style={styles.label}>Лимит оплаты</Text>
-            <Phrase>
-              <Number
-                value={draft.bonusLimitBp / 100}
-                onChange={(value) => set({ bonusLimitBp: Math.round(value * 100) })}
-              />
-              <Text style={styles.phrase}>% чека можно оплатить бонусами</Text>
-            </Phrase>
-
-            <Text style={styles.label}>Стартовые бонусы</Text>
-            <Money
-              value={draft.bonusStart}
-              onChange={(bonusStart) => set({ bonusStart })}
-            />
-            <Text style={styles.hint}>Поступят на счет нового покупателя</Text>
-
-            <Text style={styles.label}>Бонусы на День рождения</Text>
-            <Money
-              value={draft.bonusBirthday}
-              onChange={(bonusBirthday) => set({ bonusBirthday })}
-            />
-            <Text style={styles.hint}>Поступят на счет клиента в его День рождения</Text>
-
-            <Text style={styles.note}>
-              Правила заводятся здесь, но на кассе бонусы пока не начисляются и не списываются —
-              это отдельная работа, и она трогает чек. Заведённые значения уже видны в наборе
-              колонок «Лояльность» у клиентов.
-            </Text>
-          </View>
-        ) : null}
-
-        {tab === 'discounts' ? (
-          <View style={styles.block}>
-            <Text style={styles.blockTitle}>Предустановленные скидки</Text>
-            <Text style={styles.hint}>
-              Из них кассир выбирает скидку в чеке. Пустой список означает, что скидку он вводит
-              руками.
-            </Text>
-
-            <View style={styles.chips}>
-              {draft.presetDiscounts.map((value, index) => (
-                <View key={index} style={styles.chip}>
-                  <Text style={styles.chipText}>{value / 100} %</Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Убрать ${value / 100} %`}
-                    onPress={() =>
-                      set({ presetDiscounts: draft.presetDiscounts.filter((_, at) => at !== index) })
-                    }
-                  >
-                    <Text style={styles.remove}>×</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-
-            <AddDiscount
-              onAdd={(bp) => set({ presetDiscounts: [...draft.presetDiscounts, bp] })}
-            />
-
-            <Text style={[styles.blockTitle, styles.second]}>
-              Правила накопительных скидок
-            </Text>
-
-            {draft.discountRules.map((rule, index) => (
-              <View key={index} style={styles.rule}>
-                <Text style={styles.phrase}>Сумма больше чем:</Text>
-                <View style={styles.ruleField}>
-                  <Money
-                    value={rule.from}
-                    onChange={(from) =>
-                      set({ discountRules: replaceAt(draft.discountRules, index, { ...rule, from }) })
-                    }
-                  />
-                </View>
-                <Text style={styles.phrase}>Скидка</Text>
-                <View style={styles.ruleField}>
-                  <Number
-                    value={rule.discount_bp / 100}
-                    onChange={(value) =>
-                      set({
-                        discountRules: replaceAt(draft.discountRules, index, {
-                          ...rule,
-                          discount_bp: Math.round(value * 100),
-                        }),
-                      })
-                    }
-                  />
-                </View>
-                <Text style={styles.phrase}>%</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Убрать правило"
-                  onPress={() =>
-                    set({ discountRules: draft.discountRules.filter((_, at) => at !== index) })
-                  }
-                >
-                  <Text style={styles.remove}>×</Text>
-                </Pressable>
-              </View>
-            ))}
-
-            <Text
-              accessibilityRole="link"
-              style={styles.addLink}
-              onPress={() =>
-                set({ discountRules: [...draft.discountRules, { from: 0, discount_bp: 0 }] })
-              }
-            >
-              добавить еще
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.actions}>
-          <ToolButton label="Сохранить" tone="green" onPress={save} />
-          <ToolButton label="Отменить" onPress={() => setDraft(saved)} />
-        </View>
+          <BonusTab
+            draft={draft}
+            set={set}
+            generated={stats.generated}
+            spent={stats.spent}
+            onSave={save}
+          />
+        ) : (
+          <DiscountsTab draft={draft} set={set} onSave={save} />
+        )}
       </ScrollView>
     </View>
   );
 }
 
-/** Строка-фраза: числа стоят внутри предложения, а не под подписями. */
-function Phrase({ children }: { children: React.ReactNode }) {
-  return <View style={styles.phraseRow}>{children}</View>;
-}
-
-/** Небольшое числовое поле внутри фразы. */
-function Number_({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const [text, setText] = useState(String(value));
+function BonusTab({
+  draft,
+  set,
+  generated,
+  spent,
+  onSave,
+}: {
+  draft: CompanySettings;
+  set: (patch: Partial<CompanySettings>) => void;
+  generated: number;
+  spent: number;
+  onSave: () => void;
+}) {
+  const cashback = draft.cashbackRateBp / 100;
+  const redemption = draft.redemptionRateBp / 100;
+  const limit = draft.bonusLimitBp / 100;
 
   return (
-    <TextInput
-      value={text}
-      onChangeText={(next) => {
-        setText(next);
-        const parsed = parsePercent(next);
-        if (parsed !== null) onChange(parsed / 100);
-      }}
-      keyboardType="decimal-pad"
-      style={styles.number}
-    />
+    <>
+      <View style={styles.stats}>
+        <Stat label="Сгенерированный кешбэк" value={formatMoneyWeb(generated)} />
+        <Stat label="Потрачено бонусов" value={formatMoneyWeb(spent)} />
+      </View>
+
+      <Text style={styles.blockTitle}>Настройки программы</Text>
+
+      <Toggle
+        label={draft.bonusOn ? 'Бонусная программа активна' : 'Бонусная система не активна'}
+        on={draft.bonusOn}
+        onChange={(bonusOn) => set({ bonusOn })}
+      />
+
+      <Percent
+        label="Курс начисления"
+        value={cashback}
+        onChange={(value) => set({ cashbackRateBp: Math.round(value * 100) })}
+        // «Каждые 100,00 в чеке = 5 бонусов на счет» — их строка целиком,
+        // включая сотню, от которой считается процент.
+        hint={`${cashback === 1 ? 'Каждый' : 'Каждые'} ${formatMoneyWeb(10000)} в чеке = ${trim(cashback)} ${plural(cashback)} на счет`}
+      />
+
+      <Percent
+        label="Курс списания"
+        value={redemption}
+        onChange={(value) => set({ redemptionRateBp: Math.round(value * 100) })}
+        hint={`1 бонус = ${formatMoneyWeb(Math.round(redemption * 100))} скидки в чеке`}
+      />
+
+      <Percent
+        label="Лимит оплаты"
+        value={limit}
+        onChange={(value) => set({ bonusLimitBp: Math.round(value * 100) })}
+        hint={`${trim(limit)}% чека можно оплатить бонусами`}
+      />
+
+      <Percent
+        label="Стартовые бонусы"
+        unit="⛁"
+        value={draft.bonusStart}
+        onChange={(bonusStart) => set({ bonusStart })}
+        hint="Поступят на счет нового покупателя"
+      />
+
+      <Percent
+        label="Бонусы на День рождения"
+        unit="⛁"
+        value={draft.bonusBirthday}
+        onChange={(bonusBirthday) => set({ bonusBirthday })}
+        hint="Поступят на счет клиента в его День рождения"
+      />
+
+      <SaveButton onPress={onSave} />
+    </>
   );
 }
-const Number = Number_;
 
-/** Денежное поле: показывает рубли, хранит копейки. */
-function Money({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const [text, setText] = useState(value ? formatMoneyWeb(value) : '');
+function DiscountsTab({
+  draft,
+  set,
+  onSave,
+}: {
+  draft: CompanySettings;
+  set: (patch: Partial<CompanySettings>) => void;
+  onSave: () => void;
+}) {
+  /** Пять ячеек: заполненные значениями, остальные пустые. */
+  const presets: (number | null)[] = Array.from(
+    { length: SLOTS },
+    (_, i) => draft.presetDiscounts[i] ?? null,
+  );
+  const rules = Array.from(
+    { length: SLOTS },
+    (_, i) => draft.discountRules[i] ?? { from: 0, discount_bp: 0 },
+  );
+
+  const setPreset = (index: number, value: number | null) => {
+    const next = [...presets];
+    next[index] = value;
+    set({ presetDiscounts: next.filter((item): item is number => item !== null) });
+  };
+
+  const setRule = (index: number, patch: { from?: number; discount_bp?: number }) => {
+    const next = rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule));
+    // Пустые правила не сохраняются: строка без суммы и без скидки — это
+    // незаполненная ячейка, а не правило «с нуля рублей скидка ноль».
+    set({ discountRules: next.filter((rule) => rule.from > 0 || rule.discount_bp > 0) });
+  };
 
   return (
-    <TextInput
-      value={text}
-      onChangeText={(next) => {
-        setText(next);
-        const parsed = next.trim() ? parseMoney(next) : 0;
-        if (parsed !== null) onChange(parsed);
-      }}
-      placeholder="0.00"
-      placeholderTextColor={web.textMuted}
-      keyboardType="decimal-pad"
-      style={styles.money}
-    />
+    <>
+      <Text style={styles.label}>Предустановленные скидки</Text>
+      <View style={styles.presetRow}>
+        {presets.map((value, index) => (
+          <View key={index} style={styles.presetCell}>
+            <TextInput
+              value={value === null ? '' : String(value / 100)}
+              onChangeText={(text) => {
+                const parsed = Number(text.replace(',', '.'));
+                setPreset(index, text.trim() === '' ? null : Math.round(parsed * 100));
+              }}
+              placeholder="%"
+              placeholderTextColor={web.textMuted}
+              accessibilityLabel={`Скидка ${index + 1}`}
+              style={styles.input}
+            />
+          </View>
+        ))}
+      </View>
+
+      <Divider>правила накопительных скидок</Divider>
+
+      {rules.map((rule, index) => (
+        <View key={index} style={styles.ruleRow}>
+          <View style={styles.ruleCell}>
+            {index === 0 ? <Text style={styles.label}>Сумма больше чем:</Text> : null}
+            <TextInput
+              value={rule.from ? String(rule.from / 100) : ''}
+              onChangeText={(text) => setRule(index, { from: parseMoney(text) ?? 0 })}
+              placeholder="Сумма"
+              placeholderTextColor={web.textMuted}
+              accessibilityLabel={`Сумма правила ${index + 1}`}
+              style={styles.input}
+            />
+          </View>
+          <View style={styles.ruleCell}>
+            {index === 0 ? <Text style={styles.label}>Скидка, %</Text> : null}
+            <TextInput
+              value={rule.discount_bp ? String(rule.discount_bp / 100) : ''}
+              onChangeText={(text) =>
+                setRule(index, {
+                  discount_bp: Math.round((Number(text.replace(',', '.')) || 0) * 100),
+                })
+              }
+              placeholder="Скидка"
+              placeholderTextColor={web.textMuted}
+              accessibilityLabel={`Скидка правила ${index + 1}`}
+              style={styles.input}
+            />
+          </View>
+        </View>
+      ))}
+
+      <SaveButton onPress={onSave} />
+    </>
   );
 }
 
-function AddDiscount({ onAdd }: { onAdd: (bp: number) => void }) {
-  const [text, setText] = useState('');
-
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.addRow}>
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        placeholder="например 5"
-        placeholderTextColor={web.textMuted}
-        keyboardType="decimal-pad"
-        style={styles.number}
-      />
-      <Text style={styles.phrase}>%</Text>
-      <ToolButton
-        label="Добавить"
-        onPress={() => {
-          const bp = parsePercent(text);
-          if (bp === null || bp <= 0) {
-            say('Проверьте число', 'Скидка — число процентов, например 5.');
-            return;
-          }
-          onAdd(bp);
-          setText('');
-        }}
-      />
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </View>
+  );
+}
+
+/** Поле со ставкой и строкой-пояснением под ним. */
+function Percent({
+  label,
+  value,
+  onChange,
+  hint,
+  unit = '%',
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  hint: string;
+  unit?: string;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputRow}>
+        <TextInput
+          value={value ? String(value) : ''}
+          onChangeText={(text) => onChange(Number(text.replace(',', '.')) || 0)}
+          accessibilityLabel={label}
+          style={[styles.input, styles.numeric]}
+        />
+        <View style={styles.unit}>
+          <Text style={styles.unitText}>{unit}</Text>
+        </View>
+      </View>
+      <Text style={styles.hint}>{hint}</Text>
     </View>
   );
 }
@@ -322,16 +326,35 @@ function Toggle({
   );
 }
 
-function replaceAt<T>(list: T[], index: number, item: T): T[] {
-  return list.map((current, at) => (at === index ? item : current));
+function Divider({ children }: { children: string }) {
+  return (
+    <View style={styles.dividerRow}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerText}>{children}</Text>
+      <View style={styles.dividerLine} />
+    </View>
+  );
 }
 
-/** «бонус / бонуса / бонусов» — так же, как в его фразе. */
-function plural(value: number): string {
-  const ten = value % 10;
-  const hundred = value % 100;
-  if (ten === 1 && hundred !== 11) return 'бонус';
-  if (ten >= 2 && ten <= 4 && (hundred < 10 || hundred >= 20)) return 'бонуса';
+function SaveButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.save}>
+      <Text style={styles.saveLabel}>Сохранить</Text>
+    </Pressable>
+  );
+}
+
+/** «5», а не «5.0»: в подписи дробный ноль только мешает. */
+function trim(value: number): string {
+  return String(Math.round(value * 100) / 100);
+}
+
+function plural(count: number): string {
+  const n = Math.floor(Math.abs(count)) % 100;
+  const last = n % 10;
+  if (n > 10 && n < 20) return 'бонусов';
+  if (last === 1) return 'бонус';
+  if (last >= 2 && last <= 4) return 'бонуса';
   return 'бонусов';
 }
 
@@ -339,83 +362,83 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   tabs: {
     flexDirection: 'row',
-    gap: 4,
-    paddingHorizontal: 26,
-    paddingTop: 16,
+    gap: 24,
+    paddingHorizontal: 30,
+    paddingTop: 18,
     borderBottomWidth: 1,
     borderBottomColor: web.border,
   },
-  tab: { paddingHorizontal: 20, paddingVertical: 12 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: web.link },
-  tabLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
-  tabLabelActive: { color: web.text },
-  content: { padding: 26, paddingBottom: 60, maxWidth: 900 },
-  block: { gap: 8 },
-  blockTitle: { fontFamily: WEB_FONT, fontSize: 18, fontWeight: '700', color: web.text },
-  second: { marginTop: 30 },
-  label: { fontFamily: WEB_FONT, fontSize: 13, fontWeight: '700', color: web.text, marginTop: 14 },
-  hint: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, lineHeight: 17 },
-  note: {
-    fontFamily: WEB_FONT,
-    fontSize: 13,
-    color: web.textMuted,
-    lineHeight: 19,
-    marginTop: 24,
-  },
-  phraseRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  phrase: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
-  number: {
-    width: 90,
+  tab: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: web.link },
+  tabLabel: { fontFamily: WEB_FONT, fontSize: 18, color: web.textMuted },
+  tabLabelActive: { color: web.link },
+
+  content: { padding: 30, gap: 18, maxWidth: 720, width: '100%' },
+
+  stats: { flexDirection: 'row', gap: 40 },
+  stat: { gap: 4 },
+  statLabel: { fontFamily: WEB_FONT, fontSize: 13, color: web.text, fontWeight: '700' },
+  statValue: { fontFamily: WEB_FONT, fontSize: 28, color: web.text },
+
+  blockTitle: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, marginTop: 18 },
+  field: { gap: 6 },
+  label: { fontFamily: WEB_FONT, fontSize: 13, color: web.text, fontWeight: '700' },
+  hint: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+
+  inputRow: { flexDirection: 'row', alignItems: 'stretch', maxWidth: 220 },
+  input: {
+    flex: 1,
     height: 38,
     borderWidth: 1,
     borderColor: FORM_BORDER,
     borderRadius: 4,
     paddingHorizontal: 10,
     fontFamily: WEB_FONT,
-    fontSize: 15,
+    fontSize: 14,
     color: web.text,
-    textAlign: 'right',
   },
-  money: {
-    width: 160,
-    height: 38,
-    borderWidth: 1,
-    borderColor: FORM_BORDER,
-    borderRadius: 4,
-    paddingHorizontal: 10,
-    fontFamily: WEB_FONT,
-    fontSize: 15,
-    color: web.text,
-    textAlign: 'right',
-  },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  numeric: { textAlign: 'right', borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+  unit: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 4,
+    justifyContent: 'center',
     backgroundColor: '#E8E8E8',
-  },
-  chipText: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
-  remove: { fontFamily: WEB_FONT, fontSize: 18, color: web.textMuted },
-  addRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
-  rule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
-  ruleField: {},
-  addLink: { fontFamily: WEB_FONT, fontSize: 14, color: web.link, marginTop: 12 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginVertical: 8 },
-  track: { width: 49, height: 21, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.05)' },
-  trackOn: { backgroundColor: web.link },
-  knob: {
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(34,36,38,0.15)',
+    borderLeftWidth: 0,
+    borderColor: FORM_BORDER,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
   },
-  knobOn: { marginLeft: 30 },
-  toggleLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 34 },
+  unitText: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  track: { width: 49, height: 21, borderRadius: 11, backgroundColor: '#D4D4D5', padding: 2 },
+  trackOn: { backgroundColor: web.green },
+  knob: { width: 17, height: 17, borderRadius: 9, backgroundColor: '#FFFFFF' },
+  knobOn: { transform: [{ translateX: 30 }] },
+  toggleLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+
+  presetRow: { flexDirection: 'row', gap: 10 },
+  presetCell: { flex: 1 },
+  ruleRow: { flexDirection: 'row', gap: 14 },
+  ruleCell: { flex: 1, gap: 6 },
+
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginVertical: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: web.border },
+  dividerText: {
+    fontFamily: WEB_FONT,
+    fontSize: 12,
+    color: web.textMuted,
+    textTransform: 'uppercase',
+  },
+
+  save: {
+    alignSelf: 'flex-start',
+    marginTop: 20,
+    paddingHorizontal: 24,
+    height: 42,
+    justifyContent: 'center',
+    borderRadius: 4,
+    backgroundColor: web.green,
+  },
+  saveLabel: { fontFamily: WEB_FONT, fontSize: 16, color: '#FFFFFF' },
 });

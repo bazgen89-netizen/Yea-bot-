@@ -2,16 +2,23 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
+import { CashierCustomer } from './CashierCustomer';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierPayment } from './CashierPayment';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
+import { formatPhone } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
-import type { Id, PaymentMethod, ProductWithStock } from '../../domain/types';
+import type {
+  CounterpartyWithTotals,
+  Id,
+  PaymentMethod,
+  ProductWithStock,
+} from '../../domain/types';
 import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
@@ -40,6 +47,9 @@ export function Cashier() {
   // пунктом меню «Создать возврат»; касса при этом остаётся той же.
   const [mode, setMode] = useState<'sale' | 'return'>('sale');
   const [opening, setOpening] = useState(false);
+  // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
+  const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
+  const [pickingCustomer, setPickingCustomer] = useState(false);
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
@@ -93,6 +103,7 @@ export function Cashier() {
       // деньги уходят из кассы — списывать остаток здесь было бы наоборот.
       const post = mode === 'sale' ? createSale : createReturn;
       post(db, {
+        customerId: customer?.id ?? null,
         discount: cart.discount,
         payment,
         lines: cart.lines,
@@ -125,6 +136,9 @@ export function Cashier() {
 
     cart.clear();
     setSelected(null);
+    // Покупатель тоже сбрасывается: следующий чек пробивают следующему,
+    // и оставленная карточка приписала бы его покупку прежнему клиенту.
+    setCustomer(null);
     setPaying(false);
     refresh();
 
@@ -201,9 +215,35 @@ export function Cashier() {
 
         {/* Чек */}
         <View style={styles.right}>
-          <View style={styles.customerBar}>
-            <WebIcon.funnel size={19} color="#8E8E93" />
-            <Text style={styles.customerName}>Розничный покупатель</Text>
+          {/* Строка покупателя — это поиск, а не подпись: клиент называет
+              телефон, кассир набирает четыре цифры и выбирает нужного. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Выбрать покупателя"
+            onPress={() => setPickingCustomer(true)}
+            style={styles.customerBar}
+          >
+            <WebIcon.search size={19} color="#8E8E93" />
+            <View style={styles.customerText}>
+              <Text style={styles.customerName} numberOfLines={1}>
+                {customer ? customer.name : 'Розничный покупатель'}
+              </Text>
+              {customer ? (
+                <Text style={styles.customerNote} numberOfLines={1}>
+                  {[
+                    formatPhone(customer.phone),
+                    customer.loyalty_type !== 'bonus' && customer.discount_bp > 0
+                      ? `скидка ${customer.discount_bp / 100} %`
+                      : '',
+                    customer.bonus_balance > 0
+                      ? `${formatMoneyWeb(customer.bonus_balance)} бонусов`
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              ) : null}
+            </View>
             <View style={styles.keyHint}>
               <Text style={styles.keyHintText}>C</Text>
             </View>
@@ -218,7 +258,7 @@ export function Cashier() {
             >
               <WebIcon.parties size={22} color="#FFFFFF" />
             </Pressable>
-          </View>
+          </Pressable>
 
           <View style={styles.recommendRow}>
             <Text style={styles.recommendLabel}>Рекомендации</Text>
@@ -318,6 +358,13 @@ export function Cashier() {
         total={cart.totals.total}
         onClose={() => setPaying(false)}
         onPay={pay}
+      />
+
+      <CashierCustomer
+        visible={pickingCustomer}
+        chosen={customer}
+        onClose={() => setPickingCustomer(false)}
+        onPick={setCustomer}
       />
 
       <CashierOpenShift
@@ -514,7 +561,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  customerName: { flex: 1, fontSize: 19, color: pos.text },
+  customerText: { flex: 1 },
+  customerName: { fontSize: 19, color: pos.text },
+  customerNote: { fontSize: 13, color: pos.muted },
   addCustomer: {
     width: 62,
     height: 62,

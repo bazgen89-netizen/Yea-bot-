@@ -5,8 +5,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Dropdown } from '../Dropdown';
 import { partySets, SET_LABEL, type PartyColumn, type PartySet } from '../partyColumns';
 import { HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { PartyCard } from './PartyCard';
 import { listCounterparties } from '../../db/counterparties';
-import type { CounterpartyWithTotals, PartyKind } from '../../domain/types';
+import type { CounterpartyWithTotals, Id, PartyKind } from '../../domain/types';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
@@ -26,6 +27,9 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [set, setSet] = useState<PartySet>('basic');
+  // Карточка открывается панелью справа, не уводя со списка: в кабинете
+  // это `sidebar: true`, и после сохранения список остаётся на месте.
+  const [open, setOpen] = useState<Id | 'new' | null>(null);
 
   const sets = useMemo(() => partySets(kind), [kind]);
   const columns = sets.find((item) => item.key === set)?.columns ?? sets[0].columns;
@@ -50,9 +54,7 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
         <ToolButton
           label="Создать"
           tone="green"
-          onPress={() =>
-            router.push({ pathname: '/counterparty/[id]', params: { id: 'new', kind } })
-          }
+          onPress={() => setOpen('new')}
         />
         <SearchBox
           value={search}
@@ -106,9 +108,7 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
                 key={party.id}
                 party={party}
                 columns={columns}
-                onPress={() =>
-                  router.push({ pathname: '/counterparty/[id]', params: { id: String(party.id) } })
-                }
+                onPress={() => setOpen(party.id)}
               />
             ))}
 
@@ -122,6 +122,13 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
       </ScrollView>
 
       <Pager page={current} pages={pages} onPage={setPage} />
+      {open !== null ? (
+        <PartyCard
+          id={open === 'new' ? null : open}
+          kind={kind}
+          onClose={() => setOpen(null)}
+        />
+      ) : null}
     </View>
   );
 }

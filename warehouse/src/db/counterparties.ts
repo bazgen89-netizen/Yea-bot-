@@ -110,52 +110,135 @@ export interface PartyInput {
   address?: string | null;
   /** Кто завёл карточку. */
   created_by?: string | null;
+
+  /** 'person' или 'company': от этого зависит половина карточки. */
+  party_type?: string;
+  is_default?: boolean;
+  /** Считать скидку по накопительным правилам компании. */
+  enable_savings?: boolean;
+  /** Телефоны списком; первый попадает и в phone — по нему ищут. */
+  phones?: string[];
+  discount_card?: string | null;
+  loyalty_type?: string | null;
+  cashback_bp?: number;
+  /** Реквизиты организации и банковские. */
+  details?: Requisite[];
+  bank_details?: Requisite[];
+  account_number?: string | null;
+  legal_address?: string | null;
 }
 
+/** Строка реквизита: «ИНН → 5702001741». */
+export interface Requisite {
+  key: string;
+  value: string;
+}
+
+/** Пустые пары не сохраняются — так же, как в реквизитах компании. */
+function cleanPairs(pairs: Requisite[] | undefined): string {
+  return JSON.stringify((pairs ?? []).filter((item) => item.key.trim() && item.value.trim()));
+}
+
+/** Пустые строки в списке телефонов не сохраняются. */
+function cleanList(values: string[] | undefined): string[] {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+/** Разбирает JSON-поле карточки, не падая на мусоре. */
+export function parsePairs(json: string | null | undefined): Requisite[] {
+  try {
+    const parsed = JSON.parse(json || '[]') as Requisite[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function parseList(json: string | null | undefined): string[] {
+  try {
+    const parsed = JSON.parse(json || '[]') as string[];
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Поля карточки, общие для заведения и правки.
+ *
+ * Первый телефон списка попадает и в старую колонку `phone`: по ней ищут,
+ * её показывают списки и на неё смотрит касса. Держать её в стороне от
+ * списка значило бы завести второй ответ на вопрос «какой у него телефон».
+ */
+function fields(input: PartyInput): SqlParam[] {
+  const phones = cleanList(input.phones);
+  const phone = phones[0] ?? emptyToNull(input.phone);
+
+  return [
+    input.kind,
+    input.name.trim(),
+    phone,
+    emptyToNull(input.email),
+    emptyToNull(input.note),
+    input.discount_bp ?? 0,
+    emptyToNull(input.birthday),
+    emptyToNull(input.gender),
+    emptyToNull(input.address),
+    input.party_type ?? 'person',
+    input.is_default ? 1 : 0,
+    input.enable_savings ? 1 : 0,
+    JSON.stringify(phones),
+    emptyToNull(input.discount_card),
+    emptyToNull(input.loyalty_type),
+    input.cashback_bp ?? 0,
+    cleanPairs(input.details),
+    cleanPairs(input.bank_details),
+    emptyToNull(input.account_number),
+    emptyToNull(input.legal_address),
+    searchText({ ...input, phone }),
+  ];
+}
+
+const FIELD_NAMES = `kind, name, phone, email, note, discount_bp,
+        birthday, gender, address, party_type, is_default, enable_savings,
+        phones, discount_card, loyalty_type, cashback_bp,
+        details, bank_details, account_number, legal_address, search_text`;
+
 export function createCounterparty(db: SqlDriver, input: PartyInput): Id {
-  db.run(
-    `INSERT INTO counterparties
-       (kind, name, phone, email, note, discount_bp,
-        birthday, gender, address, created_by, created_at, search_text)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      input.kind,
-      input.name.trim(),
-      emptyToNull(input.phone),
-      emptyToNull(input.email),
-      emptyToNull(input.note),
-      input.discount_bp ?? 0,
-      emptyToNull(input.birthday),
-      emptyToNull(input.gender),
-      emptyToNull(input.address),
-      emptyToNull(input.created_by),
-      new Date().toISOString(),
-      searchText(input),
-    ],
-  );
-  return db.lastInsertId();
+  return db.tx(() => {
+    // Контрагент по умолчанию один на вид: включая его здесь, снимаем
+    // отметку с прежнего — иначе документ подставлял бы то одного, то другого.
+    if (input.is_default) {
+      db.run("UPDATE counterparties SET is_default = 0 WHERE kind = ? OR kind = 'both'", [
+        input.kind,
+      ]);
+    }
+
+    db.run(
+      `INSERT INTO counterparties (${FIELD_NAMES}, created_by, created_at)
+       VALUES (${FIELD_NAMES.split(',').map(() => '?').join(', ')}, ?, ?)`,
+      [...fields(input), emptyToNull(input.created_by), new Date().toISOString()],
+    );
+    return db.lastInsertId();
+  });
 }
 
 export function updateCounterparty(db: SqlDriver, id: Id, input: PartyInput): void {
-  db.run(
-    `UPDATE counterparties SET
-       kind = ?, name = ?, phone = ?, email = ?, note = ?, discount_bp = ?,
-       birthday = ?, gender = ?, address = ?, search_text = ?
-     WHERE id = ?`,
-    [
-      input.kind,
-      input.name.trim(),
-      emptyToNull(input.phone),
-      emptyToNull(input.email),
-      emptyToNull(input.note),
-      input.discount_bp ?? 0,
-      emptyToNull(input.birthday),
-      emptyToNull(input.gender),
-      emptyToNull(input.address),
-      searchText(input),
-      id,
-    ],
-  );
+  db.tx(() => {
+    if (input.is_default) {
+      db.run(
+        `UPDATE counterparties SET is_default = 0
+         WHERE (kind = ? OR kind = 'both') AND id <> ?`,
+        [input.kind, id],
+      );
+    }
+
+    const assignments = FIELD_NAMES.split(',')
+      .map((name) => `${name.trim()} = ?`)
+      .join(', ');
+
+    db.run(`UPDATE counterparties SET ${assignments} WHERE id = ?`, [...fields(input), id]);
+  });
 }
 
 /**
@@ -267,15 +350,29 @@ export function formatPhone(phone: string | null | undefined): string {
   return `+7 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
 }
 
+/**
+ * По чему ищут контрагента.
+ *
+ * Его подпись поиска на кассе перечисляет всё: «Поиск покупателя по имени,
+ * телефону, email и дисконтной карте». Значит, и в строке поиска должно
+ * лежать всё — включая второй телефон и номер карты, иначе обещание в
+ * подписи не выполняется.
+ */
 function searchText(input: PartyInput): string {
-  const parts = [input.name, input.phone, input.email]
+  const phones = [input.phone, ...(input.phones ?? [])];
+
+  const parts = [input.name, input.email, input.discount_card, ...phones]
     .filter((v): v is string => Boolean(v?.trim()))
     .map(normalize);
 
-  const digits = phoneDigits(input.phone);
-  if (digits) parts.push(digits);
+  // Телефон ищется и без разделителей: «+7 (999) 123-45-67» находится по
+  // «9991234567».
+  for (const phone of phones) {
+    const digits = phoneDigits(phone);
+    if (digits) parts.push(digits);
+  }
 
-  return parts.join(' ');
+  return [...new Set(parts)].join(' ');
 }
 
 function emptyToNull(value: string | null | undefined): string | null {

@@ -113,6 +113,19 @@ export interface Counterparty {
   bonus_spent: Kopecks;
   /** Кешбэк в сотых долях процента. */
   cashback_bp: number;
+  /** 'person' — физическое лицо, 'company' — организация. */
+  party_type: string;
+  /** Подставляется в документ по умолчанию. */
+  is_default: number;
+  /** Считать скидку по накопительным правилам, а не по личному проценту. */
+  enable_savings: number;
+  /** Телефоны списком, JSON: рабочий и личный. */
+  phones: string;
+  /** Реквизиты организации и банковские — списки «название → номер», JSON. */
+  details: string;
+  bank_details: string;
+  account_number: string | null;
+  legal_address: string | null;
   archived: number;
   created_at: string;
 }

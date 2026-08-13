@@ -40,6 +40,13 @@ export interface SaleInput {
    * после продажи не менялся бы: он считается по движениям этой точки.
    */
   locationId?: Id | null;
+  /**
+   * Покупатель чека; пусто — розничный.
+   *
+   * Без него чек некому приписать: карточка клиента считает покупки по своим
+   * чекам, и «сколько он у нас купил» осталось бы без ответа.
+   */
+  customerId?: Id | null;
 }
 
 /**
@@ -78,8 +85,8 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          staff_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                          customer_id, staff_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         totals.total,
@@ -87,6 +94,7 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         input.payment ?? 'cash',
         shift?.id ?? null,
         locationId,
+        input.customerId ?? null,
         // Чек помнит, кто его пробил: без этого отчёт по сотрудникам
         // считать не из чего.
         currentStaffId(db),
@@ -220,9 +228,17 @@ export function createReturn(db: SqlDriver, input: SaleInput): Id {
 
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          staff_id, created_at)
-       VALUES (?, 0, 0, ?, ?, ?, ?, ?)`,
-      [totals.discount, payment, shift?.id ?? null, locationId, currentStaffId(db), now],
+                          customer_id, staff_id, created_at)
+       VALUES (?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+      [
+        totals.discount,
+        payment,
+        shift?.id ?? null,
+        locationId,
+        input.customerId ?? null,
+        currentStaffId(db),
+        now,
+      ],
     );
     const saleId = db.lastInsertId();
 

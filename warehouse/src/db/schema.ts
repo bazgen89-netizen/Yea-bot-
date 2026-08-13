@@ -531,6 +531,35 @@ export const MIGRATIONS: string[] = [
   UPDATE locations SET is_default = 1
   WHERE id = (SELECT MIN(id) FROM locations WHERE archived = 0);
   `,
+
+  // 16 — карточка контрагента целиком
+  `
+  -- Физическое лицо или организация. От этого зависит половина карточки:
+  -- у человека пол и день рождения, у организации реквизиты, расчётный счёт
+  -- и юридический адрес.
+  ALTER TABLE counterparties ADD COLUMN party_type TEXT NOT NULL DEFAULT 'person';
+
+  -- Контрагент по умолчанию — тот, что подставляется в документ.
+  ALTER TABLE counterparties ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
+
+  -- Накопительная скидка: считать ли клиенту скидку по правилам из
+  -- «Лояльности», а не по его личному проценту.
+  ALTER TABLE counterparties ADD COLUMN enable_savings INTEGER NOT NULL DEFAULT 0;
+
+  -- Телефонов у клиента бывает несколько: рабочий и личный. Старая колонка
+  -- phone остаётся — по ней ищут и на неё смотрят списки, и в ней лежит
+  -- первый из списка.
+  ALTER TABLE counterparties ADD COLUMN phones TEXT NOT NULL DEFAULT '[]';
+  UPDATE counterparties SET phones = '["' || replace(phone, '"', '') || '"]'
+  WHERE phone IS NOT NULL AND TRIM(phone) <> '';
+
+  -- Реквизиты организации и банковские — списками «название → номер»,
+  -- как у компании и у счёта.
+  ALTER TABLE counterparties ADD COLUMN details        TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE counterparties ADD COLUMN bank_details   TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE counterparties ADD COLUMN account_number TEXT;
+  ALTER TABLE counterparties ADD COLUMN legal_address  TEXT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

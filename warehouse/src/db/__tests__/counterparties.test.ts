@@ -8,6 +8,8 @@ import {
   getCounterparty,
   importCounterparties,
   listCounterparties,
+  parseList,
+  parsePairs,
   phoneDigits,
   updateCounterparty,
 } from '../counterparties';
@@ -209,5 +211,100 @@ describe('телефоны', () => {
     expect(formatPhone('89991234567')).toBe('+7 (999) 123-45-67');
     expect(formatPhone('доб. 12')).toBe('доб. 12');
     expect(formatPhone(null)).toBe('');
+  });
+});
+
+describe('карточка контрагента целиком', () => {
+  it('хранит организацию с реквизитами и адресами', () => {
+    const id = createCounterparty(db, {
+      kind: 'supplier',
+      name: 'ООО «Чайный путь»',
+      party_type: 'company',
+      is_default: true,
+      phones: ['+7 999 111-22-33', '+7 999 444-55-66'],
+      email: 'sales@tea.example',
+      details: [
+        { key: 'ИНН', value: '5702001741' },
+        { key: '', value: '' },
+      ],
+      bank_details: [{ key: 'БИК', value: '044525225' }],
+      account_number: '40702810000000000001',
+      legal_address: 'Москва, ул. Чайная, 1',
+      address: 'Склад на Студёной',
+    });
+
+    const back = getCounterparty(db, id)!;
+    expect(back.party_type).toBe('company');
+    expect(back.is_default).toBe(1);
+    expect(back.account_number).toBe('40702810000000000001');
+    expect(back.legal_address).toBe('Москва, ул. Чайная, 1');
+
+    // Первый телефон списка попадает и в старую колонку — по ней ищут.
+    expect(back.phone).toBe('+7 999 111-22-33');
+    expect(parseList(back.phones)).toHaveLength(2);
+
+    // Пустая пара реквизитов не сохраняется.
+    expect(parsePairs(back.details)).toEqual([{ key: 'ИНН', value: '5702001741' }]);
+    expect(parsePairs(back.bank_details)).toHaveLength(1);
+  });
+
+  it('ищется по второму телефону, почте и дисконтной карте', () => {
+    createCounterparty(db, {
+      kind: 'customer',
+      name: 'Анна',
+      phones: ['+7 900 000-00-01', '+7 911 222-33-44'],
+      email: 'anna@example.com',
+      discount_card: 'K-2048',
+    });
+
+    const found = (search: string) =>
+      listCounterparties(db, { kind: 'customer', search }).map((party) => party.name);
+
+    expect(found('9112223344')).toEqual(['Анна']);
+    expect(found('anna@')).toEqual(['Анна']);
+    expect(found('K-2048')).toEqual(['Анна']);
+    expect(found('нетакого')).toEqual([]);
+  });
+
+  it('контрагент по умолчанию только один в своём виде', () => {
+    const first = createCounterparty(db, { kind: 'customer', name: 'Первый', is_default: true });
+    const second = createCounterparty(db, { kind: 'customer', name: 'Второй', is_default: true });
+
+    expect(getCounterparty(db, first)!.is_default).toBe(0);
+    expect(getCounterparty(db, second)!.is_default).toBe(1);
+
+    // У поставщиков свой «по умолчанию» — клиента он не трогает.
+    const supplier = createCounterparty(db, {
+      kind: 'supplier',
+      name: 'Поставщик',
+      is_default: true,
+    });
+    expect(getCounterparty(db, second)!.is_default).toBe(1);
+    expect(getCounterparty(db, supplier)!.is_default).toBe(1);
+  });
+
+  it('правка не теряет тип и реквизиты', () => {
+    const id = createCounterparty(db, {
+      kind: 'customer',
+      name: 'Борис',
+      party_type: 'company',
+      details: [{ key: 'ОГРН', value: '1025700000000' }],
+    });
+
+    updateCounterparty(db, id, {
+      kind: 'customer',
+      name: 'Борис Петрович',
+      party_type: 'company',
+      details: [{ key: 'ОГРН', value: '1025700000000' }],
+      loyalty_type: 'bonus',
+      cashback_bp: 500,
+    });
+
+    const back = getCounterparty(db, id)!;
+    expect(back.name).toBe('Борис Петрович');
+    expect(back.party_type).toBe('company');
+    expect(back.loyalty_type).toBe('bonus');
+    expect(back.cashback_bp).toBe(500);
+    expect(parsePairs(back.details)).toHaveLength(1);
   });
 });

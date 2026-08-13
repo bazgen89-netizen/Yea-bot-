@@ -35,15 +35,17 @@ export interface JournalEntry {
   author: string | null;
   /** Комментарий — по нему тоже ищут. */
   note: string | null;
+  /** 1 — проведён, 0 — отложен. У чеков всегда 1. */
+  posted: number;
 }
 
 /**
  * Отбор в журнале движения товара.
  *
  * Поля — его: поиск по номеру или комментарию, дата, отправитель, получатель,
- * автор, тип документа, оплата. Двух его полей нет: «Статус» (проведён,
- * отложен, удалён) и «Фискальный чек» — мы не откладываем документы и не
- * фискализируем чеки, и фильтр по тому, чего не бывает, только мешает.
+ * автор, тип документа, оплата, статус. Одного его поля нет — «Фискальный
+ * чек»: мы чеки не фискализируем, и фильтр по тому, чего не бывает, только
+ * мешает.
  */
 export interface JournalFilter {
   /** Номер документа или слово из комментария. */
@@ -57,6 +59,8 @@ export interface JournalFilter {
   kinds?: JournalKind[];
   /** Оплаченные или неоплаченные. У складских документов оплаты нет. */
   paid?: 'paid' | 'unpaid';
+  /** Проведённые или отложенные. */
+  status?: 'posted' | 'draft';
 }
 
 export function listJournal(
@@ -88,6 +92,8 @@ export function listJournal(
   }
   if (filter.paid === 'paid') add('paid IS NOT NULL AND paid >= amount');
   if (filter.paid === 'unpaid') add('(paid IS NULL OR paid < amount)');
+  if (filter.status === 'posted') add('posted = 1');
+  if (filter.status === 'draft') add('posted = 0');
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   params.push(limit);
@@ -109,7 +115,8 @@ export function listJournal(
                 'Розничный покупатель'
               )                                            AS receiver,
               (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author,
-              NULL                                         AS note
+              NULL                                         AS note,
+              1                                            AS posted
        FROM sales s
 
        UNION ALL
@@ -117,13 +124,23 @@ export function listJournal(
        SELECT d.id,
               ${KIND_SQL},
               d.created_at,
-              (SELECT COUNT(*) FROM stock_moves m
-               WHERE m.doc_id = d.id AND ${ONE_SIDE}),
-              CAST(ROUND(COALESCE((
-                SELECT SUM(ABS(m.qty_delta) * m.price) FROM stock_moves m
-                WHERE m.doc_id = d.id AND ${ONE_SIDE}
-              ), 0) / 1000.0) AS INTEGER),
-              NULL,
+              -- У отложенного документа движений нет вовсе, и позиции с суммой
+              -- берутся из его строк: иначе он показался бы пустым.
+              CASE WHEN d.posted = 1
+                   THEN (SELECT COUNT(*) FROM stock_moves m
+                         WHERE m.doc_id = d.id AND ${ONE_SIDE})
+                   ELSE (SELECT COUNT(*) FROM doc_lines l WHERE l.doc_id = d.id) END,
+              CASE WHEN d.posted = 1
+                   THEN CAST(ROUND(COALESCE((
+                          SELECT SUM(ABS(m.qty_delta) * m.price) FROM stock_moves m
+                          WHERE m.doc_id = d.id AND ${ONE_SIDE}
+                        ), 0) / 1000.0) AS INTEGER)
+                   ELSE CAST(ROUND(COALESCE((
+                          SELECT SUM(l.qty * l.price) FROM doc_lines l
+                          WHERE l.doc_id = d.id
+                        ), 0) / 1000.0) AS INTEGER) END,
+              (SELECT SUM(p.amount) FROM doc_payments p
+               WHERE p.doc_id = d.id AND p.paid = 1),
               -- У перемещения отправитель и получатель — магазины, у остальных
               -- документов слева контрагент, справа магазин.
               CASE WHEN d.subtype = 'transfer'
@@ -133,7 +150,8 @@ export function listJournal(
                    THEN (SELECT l.name FROM locations l WHERE l.id = d.location_to)
                    ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END,
               (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
-              d.note
+              d.note,
+              d.posted
        FROM docs d
      )
      ${whereSql}
@@ -214,9 +232,10 @@ export function formatTime(iso: string): string {
 
 /** Название документа в журнале: «Продажа #4784». */
 const KIND_LABEL: Record<JournalKind, string> = {
-  sale: 'Продажа',
-  refund: 'Возврат продажи',
   ...DOC_KIND_LABEL,
+  // Чек-возврат называется так же, как документ возврата: покупателю всё
+  // равно, вернули ему деньги на кассе или накладной.
+  refund: DOC_KIND_LABEL.sale_return,
 };
 
 export function entryTitle(entry: JournalEntry): string {

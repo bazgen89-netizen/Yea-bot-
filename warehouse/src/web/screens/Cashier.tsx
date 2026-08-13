@@ -6,7 +6,7 @@ import { CashierPayment } from './CashierPayment';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
-import { createSale, OutOfStockError } from '../../db/sales';
+import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { listRegisters, openShift, openShiftAnywhere } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
@@ -35,6 +35,9 @@ export function Cashier() {
   // Открытый раздел кассы. 'sale' — сама продажа, всё остальное рисуется
   // поверх неё, не уводя с экрана кассы.
   const [view, setView] = useState<CashierView>('sale');
+  // Продажа или возврат. У него это `documentMode`, и переключается он
+  // пунктом меню «Создать возврат»; касса при этом остаётся той же.
+  const [mode, setMode] = useState<'sale' | 'return'>('sale');
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
@@ -70,7 +73,10 @@ export function Cashier() {
    */
   const startPay = () => {
     if (cart.lines.length === 0) {
-      say('Чек пуст', 'Выберите товары на витрине.');
+      say(
+        mode === 'sale' ? 'Чек пуст' : 'Возврат пуст',
+        'Выберите товары на витрине.',
+      );
       return;
     }
 
@@ -79,7 +85,7 @@ export function Cashier() {
     if (!shift) {
       say(
         'Смена закрыта',
-        'Чтобы продавать, откройте смену: «Меню» слева внизу → «Открыть смену».',
+        'Чтобы работать, откройте смену: «Меню» слева внизу → «Открыть смену».',
       );
       return;
     }
@@ -89,7 +95,10 @@ export function Cashier() {
 
   const pay = (payment: PaymentMethod, tendered: number): void => {
     try {
-      createSale(db, {
+      // Возврат проводится своей операцией: товар возвращается на склад, а
+      // деньги уходят из кассы — списывать остаток здесь было бы наоборот.
+      const post = mode === 'sale' ? createSale : createReturn;
+      post(db, {
         discount: cart.discount,
         payment,
         lines: cart.lines,
@@ -113,18 +122,22 @@ export function Cashier() {
         return;
       }
 
-      say('Чек не проведён', String(error));
+      say(mode === 'sale' ? 'Чек не проведён' : 'Возврат не проведён', String(error));
       return;
     }
 
-    const rest = payment === 'cash' ? tendered - cart.totals.total : 0;
+    const rest = mode === 'sale' && payment === 'cash' ? tendered - cart.totals.total : 0;
+    const done = mode === 'sale' ? 'Чек пробит' : 'Возврат проведён';
 
     cart.clear();
     setSelected(null);
     setPaying(false);
     refresh();
 
-    if (rest > 0) say('Чек пробит', `Сдача ${formatMoneyWeb(rest)} руб.`);
+    if (rest > 0) say(done, `Сдача ${formatMoneyWeb(rest)} руб.`);
+    else if (mode === 'return') {
+      say(done, `Из кассы выдано ${formatMoneyWeb(cart.totals.total)} руб.`);
+    }
   };
 
   return (
@@ -158,7 +171,10 @@ export function Cashier() {
                   // Остаток проверяется при нажатии, а не при оплате: узнать,
                   // что товара нет, кассир должен сразу, а не после того, как
                   // назвал покупателю сумму.
-                  if (product.kind !== 'service' && product.stock <= 0) {
+                  //
+                  // В возврате остаток не проверяется вовсе: товар приносят
+                  // обратно, и на складе его как раз и нет — потому и продали.
+                  if (mode === 'sale' && product.kind !== 'service' && product.stock <= 0) {
                     say(
                       'Товара нет на остатке',
                       `«${product.name}» — остаток ${formatQty(product.stock)} ${product.unit}. ` +
@@ -168,7 +184,11 @@ export function Cashier() {
                   }
 
                   const inCart = cart.lines.find((line) => line.product_id === product.id);
-                  if (product.kind !== 'service' && (inCart?.qty ?? 0) + 1000 > product.stock) {
+                  if (
+                    mode === 'sale' &&
+                    product.kind !== 'service' &&
+                    (inCart?.qty ?? 0) + 1000 > product.stock
+                  ) {
                     say(
                       'Больше нет',
                       `«${product.name}»: на складе ${formatQty(product.stock)} ${product.unit}, ` +
@@ -266,21 +286,26 @@ export function Cashier() {
 
       {/* Нижняя полоса */}
       <View style={styles.bottom}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Меню"
-          onPress={() => setMenu(true)}
-          style={styles.bottomMenu}
-        >
-          <Icon.menu size={24} color={pos.text} />
-          <Text style={styles.bottomMenuLabel}>Меню</Text>
-        </Pressable>
+        {/* Левая часть нижней полосы повторяет пропорцию витрины, а синяя
+            кнопка — пропорцию чека. Тогда кнопка стоит ровно под чеком при
+            любой ширине окна; заданная процентами, она не совпадала с ним. */}
+        <View style={styles.bottomLeft}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Меню"
+            onPress={() => setMenu(true)}
+            style={styles.bottomMenu}
+          >
+            <Icon.menu size={24} color={pos.text} />
+            <Text style={styles.bottomMenuLabel}>Меню</Text>
+          </Pressable>
 
-        <Text style={styles.bottomShop} numberOfLines={1}>
-          {shop} / {shift ? `Смена #${shift.id}` : 'Смена закрыта'}
-        </Text>
+          <Text style={styles.bottomShop} numberOfLines={1}>
+            {shop} / {shift ? `Смена #${shift.id}` : 'Смена закрыта'}
+          </Text>
 
-        <Text style={styles.bottomClock}>{today()}</Text>
+          <Text style={styles.bottomClock}>{today()}</Text>
+        </View>
 
         <Pressable
           accessibilityRole="button"
@@ -288,19 +313,33 @@ export function Cashier() {
           style={({ pressed }) => [styles.sellBar, pressed && { opacity: 0.9 }]}
         >
           <Text style={styles.sellDots}>⋮</Text>
-          <Text style={styles.sellLabel}>ПРОДАЖА</Text>
+          <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
           <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
         </Pressable>
       </View>
 
       <CashierPayment
         visible={paying}
+        mode={mode}
         total={cart.totals.total}
         onClose={() => setPaying(false)}
         onPay={pay}
       />
 
-      <CashierMenu visible={menu} onClose={() => setMenu(false)} onOpenView={setView} />
+      <CashierMenu
+        visible={menu}
+        onClose={() => setMenu(false)}
+        onOpenView={setView}
+        mode={mode}
+        onToggleMode={() => {
+          // Набранное не переносится из продажи в возврат: это разные чеки, и
+          // молча превратить один в другой значило бы вернуть покупателю то,
+          // что он только что выбрал купить.
+          cart.clear();
+          setSelected(null);
+          setMode((current) => (current === 'sale' ? 'return' : 'sale'));
+        }}
+      />
 
       {view !== 'sale' ? (
         <View style={styles.panel}>
@@ -535,12 +574,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: pos.border,
   },
+  bottomLeft: { flex: 1.55, flexDirection: 'row', alignItems: 'center' },
   bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
   bottomMenuLabel: { fontSize: 17, color: pos.text },
   bottomShop: { flex: 1, fontSize: 15, color: pos.muted, textAlign: 'center' },
   bottomClock: { fontSize: 15, color: pos.muted, paddingRight: 24 },
   sellBar: {
-    width: '42%',
+    flex: 1,
     height: 58,
     backgroundColor: pos.bar,
     flexDirection: 'row',

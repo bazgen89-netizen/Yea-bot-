@@ -15,6 +15,8 @@ import { Button, Card, Choice, Empty, Field } from '../../src/ui/components';
 import { ProductPicker } from '../../src/ui/ProductPicker';
 import { colors, radius, spacing, text } from '../../src/ui/theme';
 import { say } from '../../src/ui/alert';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { DocForm } from '../../src/web/screens/DocForm';
 
 /**
  * Складской документ: закупка, возврат закупки, оприходование, списание
@@ -42,6 +44,22 @@ const FORM: Record<
     action: string;
   }
 > = {
+  sale: {
+    party: 'Клиент',
+    partyHint: 'Кому отгружаем',
+    note: 'Комментарий',
+    noteHint: 'Накладная №34',
+    price: true,
+    action: 'Продать',
+  },
+  sale_return: {
+    party: 'Клиент',
+    partyHint: 'Кто возвращает',
+    note: 'Причина возврата',
+    noteHint: 'Не подошёл сорт',
+    price: true,
+    action: 'Принять возврат',
+  },
   purchase: {
     party: 'Поставщик',
     partyHint: 'ООО «Чайный путь»',
@@ -86,6 +104,18 @@ function kindFromParams(params: { kind?: string; type?: string }): keyof typeof 
 }
 
 export default function NewDocScreen() {
+  const params = useLocalSearchParams<{ kind?: string; type?: string }>();
+  const kind = kindFromParams(params);
+
+  // На широком экране документ заводится формой кабинета: слева витрина,
+  // справа сам документ. На телефоне такая форма не помещается.
+  const desktop = useDesktop();
+  if (desktop) return <DocForm kind={kind} />;
+
+  return <NewDocPhone />;
+}
+
+function NewDocPhone() {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { scanBarcode } = useScanner();

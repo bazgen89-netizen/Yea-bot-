@@ -403,6 +403,66 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX idx_docs_counterparty ON docs(counterparty_id);
   `,
+
+  // 13 — документ как бумага: номер, дата, проведение, статус и оплаты
+  `
+  -- Номер документа. Строкой, а не числом: в номерах бывают буквы и префиксы
+  -- («ТН-0012»), и складывать их никто не собирается.
+  ALTER TABLE docs ADD COLUMN number TEXT;
+
+  -- Дата документа отдельно от created_at. Документ заводят задним числом —
+  -- накладная пришла вчера, а вбили её сегодня, — и отчёт должен считать по
+  -- дате накладной, а не по дате ввода.
+  ALTER TABLE docs ADD COLUMN doc_date TEXT;
+  UPDATE docs SET doc_date = created_at WHERE doc_date IS NULL;
+
+  -- Проведён или отложен.
+  --
+  -- Отложенный документ склад не двигает: у него нет движений вовсе. Поэтому
+  -- у всех уже заведённых документов здесь 1 — движения у них есть, и без
+  -- единицы они разом стали бы черновиками.
+  ALTER TABLE docs ADD COLUMN posted INTEGER NOT NULL DEFAULT 1;
+
+  -- Статус заказа: 0 без статуса, 1 новый, 2 в работе, 3 закрыт, 4 отменен.
+  -- К проведению отношения не имеет — проведённый документ бывает «В работе».
+  ALTER TABLE docs ADD COLUMN state INTEGER NOT NULL DEFAULT 0;
+
+  -- Скидка на весь документ, сотые доли процента: 500 = 5 %.
+  ALTER TABLE docs ADD COLUMN discount_bp INTEGER NOT NULL DEFAULT 0;
+
+  -- Позиции отложенного документа.
+  --
+  -- У проведённого позиции восстанавливаются из движений, и второй копии для
+  -- них не нужно. Но у отложенного движений нет — а позиции есть, и хранить
+  -- их больше негде.
+  CREATE TABLE doc_lines (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id     INTEGER NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    qty        INTEGER NOT NULL,
+    price      INTEGER NOT NULL DEFAULT 0,
+    -- Скидка на позицию, сотые доли процента.
+    discount_bp INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX idx_doc_lines_doc ON doc_lines(doc_id);
+
+  -- Оплаты документа — вкладка «Счета и оплаты».
+  --
+  -- Оплат у одного документа бывает несколько: половину внесли при отгрузке,
+  -- остальное через неделю. Каждая — своя строка со своим счётом и датой.
+  CREATE TABLE doc_payments (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id  INTEGER NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+    account TEXT    NOT NULL,
+    amount  INTEGER NOT NULL,
+    -- Оплачено или только выставлено.
+    paid    INTEGER NOT NULL DEFAULT 0,
+    date    TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_doc_payments_doc ON doc_payments(doc_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

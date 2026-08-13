@@ -61,7 +61,7 @@ export interface AccountBalance {
 }
 
 /** Какой способ оплаты кладёт деньги на какой счёт. */
-const SALE_ACCOUNT: Record<string, string> = {
+export const SALE_ACCOUNT: Record<string, string> = {
   cash: 'Касса магазина',
   card: 'Терминал / Счет в банке',
   transfer: 'Счет в банке',

@@ -51,11 +51,16 @@ export function CashierMenu({
   visible,
   onClose,
   onOpenView,
+  mode,
+  onToggleMode,
 }: {
   visible: boolean;
   onClose: () => void;
   /** Открыть раздел внутри кассы, не уходя с неё. */
   onOpenView: (view: CashierView) => void;
+  /** Что кассир сейчас набирает: продажу или возврат. */
+  mode: 'sale' | 'return';
+  onToggleMode: () => void;
 }) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
@@ -78,26 +83,36 @@ export function CashierMenu({
     say('Смена открыта', `${free.name}. Чеки будут копиться в ней, пока её не закроют.`);
   }
 
+  /**
+   * Закрыть смену.
+   *
+   * Сначала спрашиваем, точно ли закрывать, и только потом пересчитываем
+   * ящик: закрытие необратимо, а нажать пункт меню мимо легко. Раньше первым
+   * шёл пересчёт, и кассир вводил сумму, ещё не понимая, что закрывает смену.
+   */
   function finish() {
     if (!report) return;
 
-    const answer = globalThis.prompt?.(
-      `Сколько наличных в кассе?\nОжидается ${formatMoneyWeb(report.expectedCash)}`,
-      String(report.expectedCash / 100),
-    );
-    if (answer === null || answer === undefined) return;
-
-    const counted = Math.round(Number(answer.replace(',', '.')) * 100);
-    if (!Number.isFinite(counted)) {
-      say('Проверьте сумму', 'Наличные — число.');
-      return;
-    }
-
     confirm(
-      'Закрыть смену?',
-      'После закрытия чеки пойдут в следующую смену. Отменить нельзя.',
-      'Закрыть',
+      'Действительно хотите закрыть смену?',
+      `Смена №${report.shift.id}, чеков ${report.receipts} на ${formatMoneyWeb(report.revenue)}. ` +
+        'После закрытия чеки пойдут в следующую смену. Отменить нельзя.',
+      'Закрыть смену',
       () => {
+        // Пересчитанные наличные спрашиваем: смысл закрытия — сверить ящик
+        // с чеками, а не переписать одно в другое.
+        const answer = globalThis.prompt?.(
+          `Сколько наличных в кассе?\nОжидается ${formatMoneyWeb(report.expectedCash)}`,
+          String(report.expectedCash / 100),
+        );
+        if (answer === null || answer === undefined) return;
+
+        const counted = Math.round(Number(answer.replace(',', '.')) * 100);
+        if (!Number.isFinite(counted)) {
+          say('Проверьте сумму', 'Наличные — число.');
+          return;
+        }
+
         const z = closeShift(db, report.shift.id, counted);
         refresh();
         say(
@@ -120,7 +135,9 @@ export function CashierMenu({
   // уводит из кассы, и он стоит отдельно от всего остального.
   const exit: Item[] = [
     {
-      label: 'Выйти в кабинет',
+      // У него это «Выйти» — выход из кассирского приложения. Входа у нас
+      // нет, и единственное, куда отсюда выходят, — кабинет.
+      label: 'Выйти',
       icon: <WebIcon.chevronLeft size={22} color={tint} />,
       href: '/',
       key: '6',
@@ -130,9 +147,12 @@ export function CashierMenu({
   const shiftItems: Item[] = shift
     ? [
         {
-          label: 'Создать возврат',
+          // Пункт переключает кассу в режим возврата, а не открывает журнал:
+          // у него он так и устроен — `toggleDocType`, и подпись меняется
+          // на обратную, пока возврат набирается.
+          label: mode === 'sale' ? 'Создать возврат' : 'Вернуться к продаже',
           icon: <WebIcon.goods size={22} color={tint} />,
-          view: 'receipts',
+          action: onToggleMode,
           key: '4',
         },
         {

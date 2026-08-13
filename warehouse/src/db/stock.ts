@@ -142,7 +142,7 @@ export function postDoc(db: SqlDriver, input: DocInput): Id {
  * дал бы отрицательную себестоимость, а такой не бывает — при минусе просто
  * запоминаем цену последней закупки.
  */
-function averageCost(db: SqlDriver, productId: Id, incoming: number, price: number): void {
+export function averageCost(db: SqlDriver, productId: Id, incoming: number, price: number): void {
   const row = db.get<{ cost_price: number }>(
     'SELECT cost_price FROM products WHERE id = ?',
     [productId],

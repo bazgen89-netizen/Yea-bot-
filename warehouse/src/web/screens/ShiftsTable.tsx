@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { formatDay, formatTime } from '../../db/journal';
-import { closeShift, listRegisters, listShifts, openShift, type ShiftReport } from '../../db/shifts';
+import { listRegisters, listShifts, openShift, type ShiftReport } from '../../db/shifts';
 import { formatMoneyWeb } from '../../domain/money';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
@@ -79,38 +79,6 @@ export function ShiftsTable() {
     refresh();
   }
 
-  function finish() {
-    if (!open) return;
-    // Пересчитанные наличные спрашиваем: смысл закрытия — сверить ящик
-    // с чеками, а не переписать одно в другое.
-    const answer = globalThis.prompt?.(
-      `Сколько наличных в кассе «${open.register_name}»?\n` +
-        `Ожидается ${formatMoneyWeb(open.expectedCash)}`,
-      String(open.expectedCash / 100),
-    );
-    if (answer === null || answer === undefined) return;
-
-    const counted = Math.round(Number(answer.replace(',', '.')) * 100);
-    if (!Number.isFinite(counted)) {
-      say('Проверьте сумму', 'Наличные — число.');
-      return;
-    }
-
-    const report = closeShift(db, open.shift.id, counted);
-    refresh();
-    say(
-      `Z-отчёт по смене №${report.shift.id}`,
-      [
-        `Чеков: ${report.receipts}`,
-        `Выручка: ${formatMoneyWeb(report.revenue)}`,
-        `Наличными: ${formatMoneyWeb(report.cash)}`,
-        `Ожидалось в кассе: ${formatMoneyWeb(report.expectedCash)}`,
-        `Пересчитано: ${formatMoneyWeb(counted)}`,
-        `Расхождение: ${formatMoneyWeb(report.difference ?? 0)}`,
-      ].join('\n'),
-    );
-  }
-
   return (
     <View style={styles.screen}>
       <Toolbar>
@@ -120,13 +88,12 @@ export function ShiftsTable() {
           placeholder="поиск по кассе или номеру"
           width={306}
         />
+        {/* Открыть смену из кабинета можно, закрыть — нет.
+            Закрытие смены — дело продавца в конце рабочего дня: он пересчитывает
+            ящик и сверяет его с чеками. Кнопка в кабинете позволяла закрыть чужую
+            смену через всю страну, пока за кассой ещё стоят люди, и пересчитывать
+            было бы нечего. Закрывают смену в кассе: «Меню» → «Закрыть смену». */}
         <ToolButton label="Открыть смену" tone="green" onPress={start} />
-        <ToolButton
-          label="Закрыть смену"
-          tone="orangeOutline"
-          onPress={open ? finish : undefined}
-          soon={!open}
-        />
         <ToolButton label="Фильтр" icon={<WebIcon.funnel color={web.text} />} soon />
       </Toolbar>
 

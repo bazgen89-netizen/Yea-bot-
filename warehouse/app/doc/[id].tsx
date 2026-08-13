@@ -10,6 +10,8 @@ import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { Button, Card, Empty, Row } from '../../src/ui/components';
 import { colors, spacing, text } from '../../src/ui/theme';
 import { confirm, say } from '../../src/ui/alert';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { DocForm } from '../../src/web/screens/DocForm';
 
 /**
  * Просмотр складского документа.
@@ -19,6 +21,27 @@ import { confirm, say } from '../../src/ui/alert';
  * за этим в журнал и заходят: «откуда взялась закупка на сорок тысяч».
  */
 export default function DocScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const docId = Number(id);
+
+  // В кабинете нажатие на строку журнала открывает документ той же формой,
+  // в которой его заводили: посмотреть и поправить — одно действие, и
+  // отдельного экрана «только посмотреть» у него нет.
+  const desktop = useDesktop();
+  const kind = useQuery((database) => {
+    const doc = getDoc(database, docId);
+    return doc ? docKind(doc) : null;
+  }, [docId]);
+
+  if (desktop) {
+    if (!kind) return <Empty title="Документ не найден" hint="Возможно, его отменили" />;
+    return <DocForm kind={kind} id={docId} />;
+  }
+
+  return <DocPhone />;
+}
+
+function DocPhone() {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { id } = useLocalSearchParams<{ id: string }>();

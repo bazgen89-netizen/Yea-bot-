@@ -1,4 +1,5 @@
 import type { SqlDriver } from './driver';
+import { createMoneyDoc, SALE_ACCOUNT } from './money';
 import { openShiftAnywhere } from './shifts';
 import { currentStaffId } from './staff';
 import { cartTotals, findStockIssues } from '../domain/cart';
@@ -189,6 +190,68 @@ export function listSales(db: SqlDriver, limit = 50): SaleSummary[] {
      LIMIT ?`,
     [limit],
   );
+}
+
+/**
+ * Возврат без чека — то, что открывает пункт кассы «Создать возврат».
+ *
+ * Отличается от `refundSale` тем, что не ссылается на прошлую продажу:
+ * покупатель приходит с товаром, а чека у него нет. Такой возврат кассир
+ * набирает как обычный чек и проводит — товар возвращается на склад, деньги
+ * уходят из кассы.
+ *
+ * Сумма чека остаётся нулевой, как и у возврата по чеку: выручка не должна
+ * расти от того, что товар принесли обратно. Деньги при этом уходят
+ * настоящим расходным документом — иначе остаток кассы в конце смены не
+ * сошёлся бы с тем, что лежит в ящике.
+ */
+export function createReturn(db: SqlDriver, input: SaleInput): Id {
+  if (input.lines.length === 0) {
+    throw new Error('Пустой возврат провести нельзя');
+  }
+
+  const now = new Date().toISOString();
+  const payment = input.payment ?? 'cash';
+
+  return db.tx(() => {
+    const totals = cartTotals(input.lines, input.discount ?? 0);
+    const shift = openShiftAnywhere(db);
+    const locationId = input.locationId ?? shiftLocation(db, shift?.id ?? null);
+
+    db.run(
+      `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
+                          staff_id, created_at)
+       VALUES (?, 0, 0, ?, ?, ?, ?, ?)`,
+      [totals.discount, payment, shift?.id ?? null, locationId, currentStaffId(db), now],
+    );
+    const saleId = db.lastInsertId();
+
+    for (const line of input.lines) {
+      db.run(
+        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
+         VALUES (?, ?, ?, ?, ?)`,
+        [saleId, line.product_id, line.qty, line.price, line.cost_price],
+      );
+      db.run(
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)
+         VALUES (?, ?, 'return', ?, ?, ?, ?)`,
+        [line.product_id, line.qty, saleId, line.price, locationId, now],
+      );
+    }
+
+    if (totals.total > 0) {
+      createMoneyDoc(db, {
+        type: 'expense',
+        amount: totals.total,
+        account: SALE_ACCOUNT[payment] ?? 'Касса магазина',
+        category: 'Прочий расход',
+        note: `Возврат по чеку №${saleId}`,
+        locationId,
+      });
+    }
+
+    return saleId;
+  });
 }
 
 /** Итог чека по позициям — для показа в списке без загрузки позиций. */

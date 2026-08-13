@@ -15,6 +15,7 @@ import {
   type JournalFilter as JournalFilterInput,
   type JournalKind,
 } from '../../db/journal';
+import { DOC_TYPES } from '../../domain/docTypes';
 import { DOC_KIND_LABEL } from '../../domain/types';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -32,17 +33,25 @@ const COLUMNS: Column[] = [
   { key: 'author', title: 'Автор', width: 180 },
 ];
 
-/** Цвет полоски слева: продажи зелёные, возвраты красные, документы фиолетовые. */
+/**
+ * Цвет полоски слева.
+ *
+ * Взят из их таблицы видов документа, а не подобран: у каждого вида в
+ * кабинете свой цвет, и по нему строку узнают, не читая названия.
+ */
 const STRIPE: Record<JournalEntry['kind'], string> = {
-  sale: web.stripeSale,
-  refund: web.danger,
-  purchase_return: web.danger,
-  purchase: web.stripeDoc,
-  stock_in: web.stripeDoc,
-  writeoff: web.stripeDoc,
-  transfer: web.stripeDoc,
-  inventory: web.stripeDoc,
-  adjustment: web.stripeDoc,
+  sale: DOC_TYPES.sale.color,
+  // Чек-возврат — та же операция, что документ «Возврат продажи», и цвет у
+  // неё их же.
+  refund: DOC_TYPES.sale_return.color,
+  sale_return: DOC_TYPES.sale_return.color,
+  purchase: DOC_TYPES.purchase.color,
+  purchase_return: DOC_TYPES.purchase_return.color,
+  stock_in: DOC_TYPES.stock_in.color,
+  writeoff: DOC_TYPES.writeoff.color,
+  transfer: DOC_TYPES.transfer.color,
+  inventory: DOC_TYPES.inventory.color,
+  adjustment: DOC_TYPES.adjustment.color,
 };
 
 /** «Движение товара» — журнал кабинета. */
@@ -64,6 +73,7 @@ export function JournalTable() {
       author: values.author as string | undefined,
       kinds: values.kinds as JournalKind[] | undefined,
       paid: values.paid as 'paid' | 'unpaid' | undefined,
+      status: values.status as 'posted' | 'draft' | undefined,
     }),
     [search, values],
   );
@@ -98,6 +108,15 @@ export function JournalTable() {
       options: [
         { value: 'paid', label: 'Оплаченные' },
         { value: 'unpaid', label: 'Неоплаченные' },
+      ],
+    },
+    {
+      key: 'status',
+      label: 'Статус',
+      kind: 'select',
+      options: [
+        { value: 'posted', label: 'Проведенные' },
+        { value: 'draft', label: 'Отложенные' },
       ],
     },
     {
@@ -193,7 +212,13 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
       <View style={styles.rowInner}>
         <Row onPress={onPress}>
           <View style={styles.status}>
-            <WebIcon.done color={web.stripeSale} />
+            {/* Проведённый отмечен галочкой, отложенный — карандашом: у него
+                это две разные иконки в той же колонке. */}
+            {entry.posted ? (
+              <WebIcon.done color={web.stripeSale} />
+            ) : (
+              <WebIcon.pencil color={web.textMuted} />
+            )}
           </View>
 
           <Text style={[webText.link, { width: doc.width }]} numberOfLines={1}>
@@ -225,6 +250,7 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
 }
 
 const styles = StyleSheet.create({
+
   screen: { flex: 1, backgroundColor: web.bg },
   statusHead: { width: 46 },
   day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },

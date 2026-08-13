@@ -2,6 +2,7 @@ import { useRouter, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DOC_TYPES } from '../src/domain/docTypes';
 import { colors, radius, spacing, text } from '../src/ui/theme';
 
 /**
@@ -26,21 +27,54 @@ interface Action {
   href: Href;
 }
 
+/**
+ * Девять документов — те же и в том же порядке, что у него.
+ *
+ * Цвета взяты из его таблицы видов, а не подобраны: тем же цветом покрашена
+ * полоска строки в журнале, и по нему документ узнают, не читая названия.
+ * «Продажа» и «Возврат продажи» ведут в форму документа, а не на кассу:
+ * документом продают по накладной, чеком — на кассе, и это разные вещи.
+ */
 const DOCUMENTS: Action[] = [
-  { label: 'Продажа', symbol: '↑', tint: '#1F8A4C', href: '/sale/new' },
-  { label: 'Закупка', symbol: '↓', tint: '#1A66FF', href: '/doc/new?kind=purchase' },
-  { label: 'Возврат продажи', symbol: '↴', tint: '#E5252A', href: '/journal' },
+  { label: 'Продажа', symbol: '↑', tint: DOC_TYPES.sale.color, href: '/doc/new?kind=sale' },
+  { label: 'Закупка', symbol: '↓', tint: DOC_TYPES.purchase.color, href: '/doc/new?kind=purchase' },
+  {
+    label: 'Возврат продажи',
+    symbol: '↴',
+    tint: DOC_TYPES.sale_return.color,
+    href: '/doc/new?kind=sale_return',
+  },
   {
     label: 'Возврат закупки',
     symbol: '↥',
-    tint: '#D2691E',
+    tint: DOC_TYPES.purchase_return.color,
     href: '/doc/new?kind=purchase_return',
   },
-  { label: 'Инвентаризация', symbol: '✳', tint: '#0A37F0', href: '/doc/count?kind=inventory' },
-  { label: 'Корректировка', symbol: '≠', tint: '#0A37F0', href: '/doc/count?kind=adjustment' },
-  { label: 'Оприходование', symbol: '⤓', tint: '#7B4BC9', href: '/doc/new?kind=stock_in' },
-  { label: 'Списание', symbol: '⤒', tint: '#7B4BC9', href: '/doc/new?kind=writeoff' },
-  { label: 'Перемещение', symbol: '⇄', tint: '#1A66FF', href: '/doc/new?kind=transfer' },
+  {
+    label: 'Корректировка',
+    symbol: '≠',
+    tint: DOC_TYPES.adjustment.color,
+    href: '/doc/count?kind=adjustment',
+  },
+  {
+    label: 'Инвентаризация',
+    symbol: '✳',
+    tint: DOC_TYPES.inventory.color,
+    href: '/doc/count?kind=inventory',
+  },
+  {
+    label: 'Оприходование',
+    symbol: '⤓',
+    tint: DOC_TYPES.stock_in.color,
+    href: '/doc/new?kind=stock_in',
+  },
+  { label: 'Списание', symbol: '⤒', tint: DOC_TYPES.writeoff.color, href: '/doc/new?kind=writeoff' },
+  {
+    label: 'Перемещение',
+    symbol: '⇄',
+    tint: DOC_TYPES.transfer.color,
+    href: '/doc/new?kind=transfer',
+  },
 ];
 
 const MONEY: Action[] = [

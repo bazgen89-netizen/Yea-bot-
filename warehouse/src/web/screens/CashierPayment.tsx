@@ -23,17 +23,32 @@ export function CashierPayment({
   total,
   onClose,
   onPay,
+  mode = 'sale',
 }: {
   visible: boolean;
   total: Kopecks;
   onClose: () => void;
   onPay: (payment: PaymentMethod, tendered: Kopecks) => void;
+  /**
+   * Продажа или возврат.
+   *
+   * У возврата деньги идут в обратную сторону: сдачи не бывает, вносить
+   * нечего, и вопрос здесь один — чем выдать, из кассы или на карту.
+   */
+  mode?: 'sale' | 'return';
 }) {
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [tendered, setTendered] = useState('');
 
+  const returning = mode === 'return';
+
   // По карте платят ровно столько, сколько в чеке: сдачи с карты не бывает.
-  const given = method === 'cash' ? (tendered.trim() ? (parseMoney(tendered) ?? 0) : total) : total;
+  const given =
+    returning || method !== 'cash'
+      ? total
+      : tendered.trim()
+        ? (parseMoney(tendered) ?? 0)
+        : total;
   const rest = change(given, total);
   const ready = enough(given, total);
 
@@ -54,7 +69,7 @@ export function CashierPayment({
         />
 
         <View style={styles.panel}>
-          <Text style={styles.title}>Принять оплату</Text>
+          <Text style={styles.title}>{returning ? 'Выдать возврат' : 'Принять оплату'}</Text>
 
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Итог</Text>
@@ -82,7 +97,13 @@ export function CashierPayment({
             ))}
           </View>
 
-          {method === 'cash' ? (
+          {returning ? (
+            <Text style={styles.hint}>
+              {method === 'cash'
+                ? 'Выдайте покупателю деньги из кассы, затем подтвердите возврат.'
+                : 'Верните оплату на карту через терминал, затем подтвердите возврат.'}
+            </Text>
+          ) : method === 'cash' ? (
             <>
               <Text style={styles.label}>Получено от покупателя</Text>
               <TextInput
@@ -128,12 +149,16 @@ export function CashierPayment({
             style={[styles.confirm, !ready && styles.confirmOff]}
           >
             <Text style={styles.confirmLabel}>
-              {ready ? `Оплатить ${formatMoneyWeb(total)} руб` : 'Не хватает внесённого'}
+              {returning
+                ? `Вернуть ${formatMoneyWeb(total)} руб`
+                : ready
+                  ? `Оплатить ${formatMoneyWeb(total)} руб`
+                  : 'Не хватает внесённого'}
             </Text>
           </Pressable>
 
           <Pressable accessibilityRole="button" onPress={onClose} style={styles.cancel}>
-            <Text style={styles.cancelLabel}>Отменить чек</Text>
+            <Text style={styles.cancelLabel}>{returning ? 'Отменить возврат' : 'Отменить чек'}</Text>
           </Pressable>
         </View>
       </View>

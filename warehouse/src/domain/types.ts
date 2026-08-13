@@ -149,6 +149,8 @@ export type DocType = 'receipt' | 'writeoff' | 'adjust';
  * есть поставщик и цена, а вторая объясняет, откуда товар взялся без закупки.
  */
 export type DocKind =
+  | 'sale'
+  | 'sale_return'
   | 'purchase'
   | 'purchase_return'
   | 'stock_in'
@@ -159,6 +161,8 @@ export type DocKind =
 
 /** Название документа так, как оно написано в кабинете. */
 export const DOC_KIND_LABEL: Record<DocKind, string> = {
+  sale: 'Продажа',
+  sale_return: 'Возврат продажи',
   purchase: 'Закупка',
   purchase_return: 'Возврат закупки',
   stock_in: 'Оприходование',
@@ -170,6 +174,10 @@ export const DOC_KIND_LABEL: Record<DocKind, string> = {
 
 /** Как вид документа двигает склад. */
 export const DOC_KIND_TYPE: Record<DocKind, DocType> = {
+  // Продажа документом — не чек: её проводят из кабинета, когда товар
+  // отгружают по накладной. Склад она двигает так же, как чек.
+  sale: 'writeoff',
+  sale_return: 'receipt',
   purchase: 'receipt',
   purchase_return: 'writeoff',
   stock_in: 'receipt',

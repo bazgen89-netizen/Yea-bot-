@@ -126,18 +126,21 @@ the 10 MVP steps.
   vision input instead of being accepted automatically. Same fail-open
   behavior as `ai.py`: no API key, or the call erroring, means the photo is
   accepted as before rather than blocking the employee on an AI outage.
-  **Currently unused by the seeded checklist** — every template in
-  `scripts/seed_task_templates.py` is comment-proof for now, per owner
-  request, until reference photos for calibration are ready; the
-  `verification_criteria` text is kept on those templates so switching a
-  given task back to `ProofType.PHOTO` later is a one-line change.
+  Photo proof is on for the cleanliness/tidiness tasks (owner request);
+  everything else stays comment-proof. A passing photo is also forwarded to
+  the owner by `file_id`
+  (`app/services/reports.py::forward_task_photo_to_owner`) — the vision
+  check gates obvious misses, it doesn't replace the owner looking. That
+  forward is best-effort: it can't block closing the task.
   `app/services/tasks.py::sync_stale_tasks_to_templates` (run at every
   boot) handles template edits in general: any not-yet-completed `Task`
-  row whose `requires_proof`/`proof_type`/`verification_criteria` has
-  drifted from its current template gets re-synced (and auto-closes if the
-  template no longer requires proof at all), so an employee never gets
-  stuck on a requirement — photo or otherwise — the checklist doesn't
-  actually have anymore.
+  row whose `requires_proof`/`proof_type`/`verification_criteria`/
+  `description` has drifted from its current template gets re-synced (and
+  auto-closes if the template no longer requires proof at all), so an
+  employee never gets stuck on a requirement — photo or otherwise — the
+  checklist doesn't actually have anymore. `batch` and `title` re-sync only
+  for tasks not yet shown: renumbering a task the employee is already
+  working through would regroup blocks under them.
 - `app/services/intent.py` — AI Processing Layer fallback for store-name
   resolution. `store_matcher.py`'s exact alias matching runs first (free,
   instant); only if that fails does `resolve_store()` ask Claude which of
@@ -180,6 +183,28 @@ the 10 MVP steps.
   monitor (e.g. UptimeRobot) instead if you'd rather not rely on GitHub
   Actions' scheduling. Render's own crash recovery is separate and already
   automatic — this only prevents the inactivity-sleep case.
+
+  It serves two routes with deliberately different contracts. `/` always
+  answers 200: it exists solely to stop Render spinning the service down,
+  so it must not start failing when the bot is paused or wedged — that
+  would let the service sleep exactly when someone is diagnosing it.
+  `/health` answers JSON describing whether the bot is actually working,
+  and 503 once the heartbeat goes stale. The heartbeat job makes a real
+  `bot.get_me()` call rather than just stamping a timestamp, because the
+  failure worth catching is "process up, scheduler running, but no longer
+  talking to Telegram" — a self-referential heartbeat reports that as
+  healthy. `.github/workflows/waystea-watchdog.yml` polls `/health` from
+  outside Render (a watchdog in the same process dies with what it
+  watches) and messages the owner in Telegram after three consecutive
+  failures; it needs the `WAYSTEA_BOT_TOKEN` and
+  `WAYSTEA_OWNER_TELEGRAM_ID` repo secrets.
+- **`BOT_PAUSED` is a maintenance switch, not a kill switch.** Set it in
+  the Render dashboard and restart: the HTTP port stays bound (so Render
+  keeps the service healthy and `/health` reports `paused` rather than
+  down, which keeps the watchdog quiet) but polling, the scheduler and the
+  seeders never start. Unset and restart to resume; the boot-time
+  `drop_pending_updates` means the backlog accumulated during the pause is
+  discarded rather than replayed all at once.
 - **Seeding runs on every boot, not by hand.** Free Render Web Services also
   don't include Shell/One-Off Job access, so there's no way to run
   `python -m scripts.seed_stores` interactively after deploy. `app/main.py`

@@ -270,6 +270,16 @@ class Task(Base):
     owner_notified_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Stamped once this task has been included in a "block closed" report to
+    # the owner (app/services/reports.py::notify_owner_batch_progress).
+    # advance_to_next_batch runs after EVERY completion event and re-derives
+    # the closed batch from whatever is currently visible, so without this
+    # marker the same block gets reported again on the next call — and a
+    # batch number reused by a later reveal (new template seeded mid-shift)
+    # would drag the earlier block's tasks into the new block's report.
+    batch_report_sent_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     employee: Mapped["Employee"] = relationship()
     store: Mapped["Store"] = relationship()

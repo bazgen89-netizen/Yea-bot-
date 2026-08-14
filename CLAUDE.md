@@ -13,7 +13,7 @@
 | Хранилище | память процесса | PostgreSQL (SQLAlchemy async) |
 | LLM | Groq (`GROQ_API_KEY`) | Claude (`ANTHROPIC_API_KEY`) |
 | Запуск | `python bot.py` | `python -m app.main` |
-| Тесты | `pytest tests` (17) | `cd waystea_one && pytest` (39) |
+| Тесты | `pytest tests` (17) | `cd waystea_one && pytest` (49) |
 | Документация | `ARCHITECTURE.md` | `waystea_one/README.md`, `docs/01`–`09` |
 
 Правило: `teabot/` и `waystea_one/` **не импортируют друг друга**. Общего кода

@@ -5,7 +5,7 @@ from app.db import get_session
 from app.models import Employee, ProofType, Store, Task, TaskStatus
 from app.services.identity import get_employee
 from app.services.messaging import notify_employee
-from app.services.reports import notify_owner_batch_progress
+from app.services.reports import forward_task_photo_to_owner, notify_owner_batch_progress
 from app.services.shift_wrapup import send_shift_wrapup
 from app.services.tasks import (
     advance_to_next_batch,
@@ -107,6 +107,7 @@ async def on_photo_proof(message: Message) -> None:
         if task is None or task.proof_type != ProofType.PHOTO.value:
             return
         task_id, criteria = task.id, task.verification_criteria
+        task_title, task_store_id = task.title, task.store_id
 
     # Verification (network call to the AI Processing Layer) happens with
     # no DB session open, same reasoning as app/handlers/shift.py.
@@ -128,5 +129,17 @@ async def on_photo_proof(message: Message) -> None:
     async with get_session() as session:
         task = await get_task(session, task_id)
         await complete_task(session, task, proof_comment=message.caption)
+        store = await session.get(Store, task_store_id)
+
+    # Owner request: the photo itself goes to the owner, not just the "block
+    # closed" summary — they check cleanliness by eye.
+    await forward_task_photo_to_owner(
+        message.bot,
+        employee.name,
+        store.name if store else "?",
+        task_title,
+        message.photo[-1].file_id,
+        message.caption,
+    )
     await notify_employee(message.bot, employee, "Спасибо! Задача закрыта ✅", message)
     await _reveal_next_batch_if_ready(message.bot, employee, message)

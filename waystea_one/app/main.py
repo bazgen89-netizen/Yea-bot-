@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -7,7 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.bot import bot, dispatcher
 from app.config import settings
 from app.db import get_session, init_models
-from app.health import run_health_server
+from app.health import heartbeat, mark_started, run_health_server
 from app.services.music import send_music_nudges
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
@@ -19,6 +20,23 @@ from scripts.seed_stores import seed as seed_stores
 from scripts.seed_task_templates import seed as seed_task_templates
 
 logging.basicConfig(level=logging.INFO)
+
+
+async def _heartbeat_job() -> None:
+    """Liveness probe behind `/health` (app/health.py). Deliberately makes a
+    real Telegram round-trip rather than just stamping a timestamp: the
+    failure worth catching is "process is up, scheduler is running, but the
+    bot is no longer talking to Telegram" (revoked token, wedged session),
+    which a self-referential heartbeat would happily report as healthy.
+    Failing to stamp is the signal — the heartbeat goes stale and /health
+    starts answering 503, which is what the watchdog workflow alerts on.
+    """
+    try:
+        await bot.get_me()
+    except Exception:
+        logging.getLogger(__name__).exception("Heartbeat: Telegram unreachable")
+        return
+    heartbeat()
 
 
 async def send_daily_report() -> None:
@@ -37,6 +55,23 @@ async def main() -> None:
     # health server is a static responder that touches no DB, so it's safe
     # to start immediately; the rest of init runs right after.
     await run_health_server(settings.port)
+
+    mark_started(paused=settings.paused)
+
+    if settings.paused:
+        # Maintenance mode (BOT_PAUSED): the HTTP port stays bound so Render
+        # keeps the service healthy and the keep-alive workflow keeps
+        # succeeding, but nothing else starts — no DB init, no seeding, no
+        # scheduler, no polling. Employees' messages simply go unanswered
+        # (Telegram queues them; the drop_pending_updates below discards the
+        # backlog on resume, so nothing replays at once).
+        logging.getLogger(__name__).warning(
+            "BOT_PAUSED is set — maintenance mode. Health endpoint is up; "
+            "polling, scheduler and seeding are all disabled. Unset BOT_PAUSED "
+            "and restart to resume."
+        )
+        await asyncio.Event().wait()
+        return
 
     await init_models()
     # Free hosting tiers (e.g. Render's free Web Service) often don't offer
@@ -64,6 +99,12 @@ async def main() -> None:
     await bot.delete_webhook(drop_pending_updates=True)
 
     scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        _heartbeat_job,
+        "interval",
+        seconds=settings.reminder_poll_seconds,
+        next_run_time=datetime.datetime.now(datetime.timezone.utc),
+    )
     scheduler.add_job(
         check_reminders,
         "interval",

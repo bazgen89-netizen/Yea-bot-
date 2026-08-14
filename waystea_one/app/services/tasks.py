@@ -50,11 +50,18 @@ async def sync_stale_tasks_to_templates(session: AsyncSession) -> int:
         template = templates_by_id.get(task.template_id)
         if template is None:
             continue
+        # `batch` and `title` are only re-synced for tasks the employee hasn't
+        # been shown yet (sent_at is None). A task already revealed keeps the
+        # block it was displayed under: renumbering it mid-shift would
+        # regroup blocks the employee has already worked through, and could
+        # drop a revealed task into an already-closed block's report.
         changed = (
             task.requires_proof != template.requires_proof
             or task.proof_type != template.proof_type
             or task.verification_criteria != template.verification_criteria
             or task.description != template.description
+            or (task.sent_at is None and task.batch != template.batch)
+            or (task.sent_at is None and task.title != template.title)
         )
         if not changed:
             continue
@@ -62,6 +69,9 @@ async def sync_stale_tasks_to_templates(session: AsyncSession) -> int:
         task.proof_type = template.proof_type
         task.verification_criteria = template.verification_criteria
         task.description = template.description
+        if task.sent_at is None:
+            task.batch = template.batch
+            task.title = template.title
         # A task already sitting in WAITING_PROOF whose template no longer
         # requires proof at all should just close outright, not linger
         # waiting for a comment/photo nobody's going to send.
@@ -177,7 +187,20 @@ async def advance_to_next_batch(
     # Only the just-closed batch (the highest revealed one), not every
     # completed task from earlier batches too.
     just_closed_batch = max(t.batch for t in visible_tasks)
-    completed_batch = [t for t in visible_tasks if t.batch == just_closed_batch]
+    # ...and within it, only tasks not already reported. This function runs
+    # after every completion event and re-derives the closed batch from
+    # current state, so without this filter the owner gets the same block
+    # report again on the next call. It also keeps blocks from bleeding into
+    # each other when a batch number is reused by a later reveal (a template
+    # seeded mid-shift lands on an already-closed batch number): the earlier
+    # block's tasks are already stamped, so they can't be pulled into the new
+    # block's document.
+    completed_batch = [
+        t for t in visible_tasks if t.batch == just_closed_batch and t.batch_report_sent_at is None
+    ]
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for task in completed_batch:
+        task.batch_report_sent_at = now
 
     hidden_result = await session.execute(
         select(Task).where(
@@ -188,10 +211,12 @@ async def advance_to_next_batch(
     )
     hidden_tasks = list(hidden_result.scalars())
     if not hidden_tasks:
+        # Still commit: the batch_report_sent_at stamps above must persist even
+        # when there's no next batch, or the final block gets re-reported.
+        await session.commit()
         return completed_batch, []
 
     next_batch = min(t.batch for t in hidden_tasks)
-    now = datetime.datetime.now(datetime.timezone.utc)
     to_reveal = [t for t in hidden_tasks if t.batch == next_batch]
     for task in to_reveal:
         task.sent_at = now

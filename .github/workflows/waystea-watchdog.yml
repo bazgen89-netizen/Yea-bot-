@@ -1,0 +1,88 @@
+name: WAYSTEA ONE watchdog
+
+# Owner request: a second agent that checks the main one hasn't fallen over.
+#
+# This runs on GitHub's infrastructure rather than inside the bot, which is
+# the whole point — a watchdog living in the same process as the thing it
+# watches dies with it. It checks `/health` (app/health.py), which reports
+# whether the bot is still talking to Telegram, not merely whether the
+# process answers HTTP: a wedged or token-revoked bot keeps serving `/`
+# just fine, and that's exactly the "отвалился" case worth catching.
+#
+# Distinct from waystea-keep-alive.yml: that one pings `/` purely to stop
+# Render's free tier spinning the service down, and deliberately never
+# fails. This one is allowed to fail, and messages the owner in Telegram
+# when it does.
+#
+# Setup: needs two repo secrets — WAYSTEA_BOT_TOKEN and
+# WAYSTEA_OWNER_TELEGRAM_ID. Without them the alert step is skipped and the
+# run just fails visibly in the Actions tab.
+
+on:
+  schedule:
+    # Every 15 min. GitHub's scheduler is best-effort and skews on quiet
+    # repos, so treat this as "within the hour" rather than exact.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: waystea-watchdog
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /health
+        id: probe
+        run: |
+          set +e
+          # Three tries spaced a minute apart. Render's free tier cold-starts
+          # in 30-60s, so a single failed probe usually means "asleep", not
+          # "broken" — alerting on it would train the owner to ignore alerts.
+          for attempt in 1 2 3; do
+            body=$(curl -sS --max-time 60 -w '\n%{http_code}' https://waystea-one-bot.onrender.com/health)
+            code=$(printf '%s' "$body" | tail -n1)
+            payload=$(printf '%s' "$body" | sed '$d')
+            echo "attempt $attempt: HTTP $code $payload"
+            if [ "$code" = "200" ]; then
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] && sleep 60
+          done
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          # Truncated so a long HTML error page from Render can't blow up the
+          # Telegram message or the step output.
+          {
+            echo "detail<<EOF"
+            printf '%s' "${payload:-no response}" | head -c 500
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "last_code=${code:-none}" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Alert owner in Telegram
+        if: failure() && steps.probe.outputs.healthy == 'false'
+        env:
+          BOT_TOKEN: ${{ secrets.WAYSTEA_BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.WAYSTEA_OWNER_TELEGRAM_ID }}
+          LAST_CODE: ${{ steps.probe.outputs.last_code }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$OWNER_ID" ]; then
+            echo "::warning::WAYSTEA_BOT_TOKEN / WAYSTEA_OWNER_TELEGRAM_ID not set — no alert sent"
+            exit 0
+          fi
+          text="🔴 WAYSTEA ONE не отвечает
+          Три проверки /health подряд неуспешны (последний ответ: $LAST_CODE).
+          $DETAIL
+
+          Проверьте сервис на Render: $RUN_URL"
+          curl -sS --max-time 30 \
+            -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${OWNER_ID}" \
+            --data-urlencode text="${text}" \
+            -o /dev/null

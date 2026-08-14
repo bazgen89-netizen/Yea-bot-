@@ -180,6 +180,31 @@ def build_batch_document(
     return filename, "\n".join(lines)
 
 
+async def forward_task_photo_to_owner(
+    bot,
+    employee_name: str,
+    store_name: str,
+    task_title: str,
+    file_id: str,
+    employee_comment: str | None = None,
+) -> None:
+    """Owner request: photo proof for the cleanliness/tidiness tasks should
+    reach the owner so they can judge it themselves — the AI vision check
+    (app/services/vision.py) gates obvious misses, it doesn't replace the
+    owner looking. Re-sends by `file_id` rather than re-uploading bytes.
+
+    Best-effort: a failure here must not block closing the task, so it's
+    logged and swallowed rather than raised.
+    """
+    caption = f"📷 {employee_name} ({store_name})\n{task_title}"
+    if employee_comment:
+        caption += f"\n{employee_comment}"
+    try:
+        await bot.send_photo(settings.owner_telegram_id, file_id, caption=caption)
+    except Exception:
+        logger.exception("Failed to forward photo proof for %r to owner", task_title)
+
+
 async def notify_owner_batch_progress(
     bot, employee: Employee, store: Store | None, completed_batch: list[Task]
 ) -> None:

@@ -26,6 +26,13 @@ class Settings:
     # a Web Service to answer on $PORT even though the bot itself is a
     # polling client, not an HTTP server.
     port: int = int(os.environ.get("PORT", "8080"))
+    # Maintenance switch: with BOT_PAUSED set, app/main.py keeps answering on
+    # $PORT (so Render doesn't mark the service unhealthy and the keep-alive
+    # workflow keeps working) but starts neither polling nor the scheduler —
+    # no tasks, reminders, nudges or reports go out. Set it in the Render
+    # dashboard and restart to pause the bot without touching the deploy;
+    # unset and restart to resume. Accepts 1/true/yes/on.
+    paused: bool = os.environ.get("BOT_PAUSED", "").strip().lower() in {"1", "true", "yes", "on"}
     # Optional: a dedicated "какой чай привезти" chat/topic (see
     # app/handlers/tea_requests.py). Unset by default — the feature is off
     # until both/either are configured. TEA_REQUEST_THREAD_ID is only needed

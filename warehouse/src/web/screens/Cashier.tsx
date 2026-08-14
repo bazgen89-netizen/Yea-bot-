@@ -28,6 +28,7 @@ import { recommendedFor } from '../../db/recommendations';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
+import { clampSplit } from '../../domain/split';
 import { formatQty } from '../../domain/qty';
 import type {
   CounterpartyWithTotals,
@@ -46,8 +47,6 @@ const SPLITTER_WIDTH = 11;
 
 /** Доля ширины, отданная витрине: где стоит граница с чеком. */
 const SPLIT_KEY = 'pos.split';
-const SPLIT_MIN = 0.25;
-const SPLIT_MAX = 0.8;
 /** 1.55 к 1 — то, как полоса стояла до того, как её стало можно двигать. */
 const SPLIT_DEFAULT = 1.55 / 2.55;
 
@@ -93,7 +92,9 @@ export function tileColumns(width: number): number {
 
 function readSplit(): number {
   const saved = Number(globalThis.localStorage?.getItem(SPLIT_KEY));
-  if (!Number.isFinite(saved) || saved < SPLIT_MIN || saved > SPLIT_MAX) return SPLIT_DEFAULT;
+  // Пределы здесь не проверяются: ширины окна ещё нет, и загонять долю
+  // в рамки нечем. Это делает первая же раскладка.
+  if (!Number.isFinite(saved) || saved <= 0 || saved >= 1) return SPLIT_DEFAULT;
   return saved;
 }
 
@@ -154,11 +155,24 @@ export function Cashier() {
 
   function dragSplit(pageX: number, save = false): void {
     if (bodyWidth <= 0) return;
-    // Ни витрину, ни чек нельзя сжать в ничто: за краями держим четверть.
-    const next = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pageX / bodyWidth));
+    // Пределы — в сантиметрах: чеку остаётся не меньше 8 см, витрине — 18.
+    // Разбор — `src/domain/split.ts`.
+    const next = clampSplit(pageX / bodyWidth, bodyWidth - SPLITTER_WIDTH);
     setSplit(next);
     if (save) globalThis.localStorage?.setItem(SPLIT_KEY, String(next));
   }
+
+  /**
+   * Окно поменяло размер — граница подтягивается в допустимые пределы.
+   *
+   * Иначе доля, сохранённая на широком мониторе, на ноутбуке оставила бы
+   * чеку полоску в палец шириной.
+   */
+  useEffect(() => {
+    if (bodyWidth <= 0) return;
+    const allowed = clampSplit(split, bodyWidth - SPLITTER_WIDTH);
+    if (Math.abs(allowed - split) > 0.0005) setSplit(allowed);
+  }, [bodyWidth, split]);
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));

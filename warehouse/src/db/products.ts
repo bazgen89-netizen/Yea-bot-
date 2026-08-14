@@ -565,3 +565,29 @@ export function saveCategories(db: SqlDriver, productId: Id, names: string[]): v
     db.run('UPDATE products SET category_id = ? WHERE id = ?', [ids[0] ?? null, productId]);
   });
 }
+
+/** Категория витрины: название и сколько в ней товаров. */
+export interface CategoryTile {
+  id: Id;
+  name: string;
+  /** Сколько товаров в ней — то самое «N поз.» под названием. */
+  count: number;
+}
+
+/**
+ * Категории для витрины кассы.
+ *
+ * Пустые не показываются: категория без товаров на кассе — плитка, ведущая
+ * в пустую витрину.
+ */
+export function listCategoryTiles(db: SqlDriver): CategoryTile[] {
+  return db.all<CategoryTile>(
+    `SELECT c.id,
+            c.name,
+            COUNT(p.id) AS count
+     FROM categories c
+     JOIN products p ON p.category_id = c.id AND p.archived = 0
+     GROUP BY c.id
+     ORDER BY c.name COLLATE NOCASE`,
+  );
+}

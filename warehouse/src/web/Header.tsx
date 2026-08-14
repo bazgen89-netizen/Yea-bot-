@@ -30,7 +30,7 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
       <View style={[styles.band, styles.bandMiddle]} />
       <View style={[styles.band, styles.bandRight]} />
 
-      <Text style={styles.logo}>CloudShop</Text>
+      <Text style={styles.logo}>Wayshop</Text>
       <Text style={styles.title} numberOfLines={1}>
         {title}
       </Text>

@@ -146,6 +146,28 @@ const oswald = await readFile(join(root, 'assets/fonts/oswald.css'), 'utf8').cat
 if (!oswald) throw new Error('Нет assets/fonts/oswald.css — запустите scripts/fetch-oswald.mjs');
 page = replaceOnce(page, '</head>', `<style id="oswald">${oswald}</style></head>`);
 
+/**
+ * Видимая полоса прокрутки.
+ *
+ * Браузер на макбуке рисует её поверх содержимого и прячет, пока не крутят:
+ * витрина кассы уезжала вниз, и понять, далеко ли до конца, было нельзя. У них
+ * полоса видна всегда — серый скруглённый ползунок у правого края.
+ *
+ * Задаётся стилем страницы, а не свойством `ScrollView`: полосу рисует
+ * браузер, и договориться с ним можно только так. Свойство `scrollbar-width`
+ * при этом не задаётся намеренно: стоит его назвать, и Chromium перестаёт
+ * слушать `::-webkit-scrollbar` — полоса снова становится наложенной
+ * и исчезающей.
+ */
+const SCROLLBARS = `
+html body *::-webkit-scrollbar{width:10px!important;height:10px!important;display:block!important;-webkit-appearance:none!important}
+html body *::-webkit-scrollbar-track{background:transparent!important}
+html body *::-webkit-scrollbar-thumb{background:#C1C7CD!important;border-radius:5px!important;border:2px solid transparent!important;background-clip:content-box!important}
+html body *::-webkit-scrollbar-thumb:hover{background:#9AA3AB!important;background-clip:content-box!important}
+`;
+
+page = replaceOnce(page, '</head>', `<style id="scrollbars">${SCROLLBARS}</style></head>`);
+
 // Сборка для показа наполняется примером. Обычная приходит пустой: каталог
 // в ней заводит тот, кто её поставил, а не тот, кто собирал.
 if (process.env.DEMO === '1') {

@@ -22,13 +22,13 @@ import { CashierSheet } from './CashierSheet';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { formatPhone } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
-import { listProducts } from '../../db/products';
+import { listCategoryTiles, listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { recommendedFor } from '../../db/recommendations';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
-import { clampSplit } from '../../domain/split';
+import { clampSplit, columnsFor, DEFAULT_SPLIT } from '../../domain/split';
 import { formatQty } from '../../domain/qty';
 import type {
   CounterpartyWithTotals,
@@ -42,14 +42,70 @@ import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
+/**
+ * Значок плитки в панели выбора: те же три фигуры, что у него.
+ *
+ * Рисуются квадратиками, а не шрифтом значков: у него это простые фигуры —
+ * четыре плитки у товаров, полосы у категорий, папка у групп, — и подобрать
+ * их из набора точнее, чем сложить из прямоугольников, не выходит.
+ */
+function BrowseGlyph({ kind, active }: { kind: string; active: boolean }) {
+  const tint = active ? '#FFFFFF' : pos.text;
+
+  if (kind === 'categories') {
+    return (
+      <View style={styles.glyphRow}>
+        <View style={[styles.glyphTall, { backgroundColor: tint }]} />
+        <View style={styles.glyphCol}>
+          <View style={[styles.glyphWide, { backgroundColor: tint }]} />
+          <View style={[styles.glyphWide, { backgroundColor: tint }]} />
+        </View>
+      </View>
+    );
+  }
+
+  if (kind === 'groups') {
+    return (
+      <View style={styles.glyphFolder}>
+        <View style={[styles.glyphTab, { backgroundColor: tint }]} />
+        <View style={[styles.glyphBody, { borderColor: tint }]} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.glyphGrid}>
+      <View style={[styles.glyphSquare, { backgroundColor: tint }]} />
+      <View style={[styles.glyphDiamond, { backgroundColor: tint }]} />
+      <View style={[styles.glyphSquare, { backgroundColor: tint }]} />
+      <View style={[styles.glyphSquare, { backgroundColor: tint }]} />
+    </View>
+  );
+}
+
+/**
+ * Цвет полосы категории.
+ *
+ * Считается из названия, а не хранится: цвет у категории должен быть один и
+ * тот же всегда, а заводить для него колонку — значит спрашивать его у того,
+ * кто заводит категорию.
+ */
+const CATEGORY_COLORS = [
+  '#A5D6A7', '#EF9A9A', '#CE93D8', '#E6EE9C', '#9FA8DA',
+  '#90CAF9', '#80DEEA', '#FFCC80', '#B0BEC5', '#F48FB1',
+];
+
+function categoryColor(name: string): string {
+  let value = 0;
+  for (let i = 0; i < name.length; i++) value = (value * 31 + name.charCodeAt(i)) >>> 0;
+  return CATEGORY_COLORS[value % CATEGORY_COLORS.length];
+}
+
 /** Ширина разделительной полосы; ею же расступается нижняя панель. */
 const SPLITTER_WIDTH = 11;
 
 /** Доля ширины, отданная витрине: где стоит граница с чеком. */
 const SPLIT_KEY = 'pos.split';
-/** 1.55 к 1 — то, как полоса стояла до того, как её стало можно двигать. */
-const SPLIT_DEFAULT = 1.55 / 2.55;
-
 /**
  * Курсор «двигать вбок».
  *
@@ -59,42 +115,11 @@ const SPLIT_DEFAULT = 1.55 / 2.55;
  */
 const RESIZE_CURSOR = { cursor: 'col-resize', userSelect: 'none' } as unknown as ViewStyle;
 
-/**
- * Сколько плиток в ряду — их таблица, снятая с кассы. Считается по ширине
- * **окна**: на их экране 1440 точек витрина показывает шесть плиток в ряду,
- * и это x3l, то есть окно, а не панель.
- *
- * ```
- * breakpoints: {xs:0, sm:370, md:400, lg:500, l:600, xl:700,
- *               x2l:900, x3l:1200, x4l:1500, x5l:1900, x6l:2300, x7l:2600}
- * columns:     {xs:2, sm:3, md:3, lg:4, xl:5, x2l:4, x3l:6,
- *               x4l:7, x5l:8, x6l:9, x7l:10}
- * ```
- *
- * Ширина плитки задаётся долей — `100 / колонок` процентов, — а не числом
- * точек. От этого ряд всегда заполнен целиком: витрина тянется вместе с
- * границей, плитки плавно меняют размер, и справа не остаётся пустой полосы.
- * Раньше у плитки была наименьшая ширина в 150 точек, и на узкой витрине
- * проценты переставали сходиться — последний столбец обрывался в пустоту.
- */
-export function tileColumns(width: number): number {
-  if (width >= 2600) return 10;
-  if (width >= 2300) return 9;
-  if (width >= 1900) return 8;
-  if (width >= 1500) return 7;
-  if (width >= 1200) return 6;
-  if (width >= 900) return 4;
-  if (width >= 700) return 5;
-  if (width >= 500) return 4;
-  if (width >= 370) return 3;
-  return 2;
-}
-
 function readSplit(): number {
   const saved = Number(globalThis.localStorage?.getItem(SPLIT_KEY));
   // Пределы здесь не проверяются: ширины окна ещё нет, и загонять долю
   // в рамки нечем. Это делает первая же раскладка.
-  if (!Number.isFinite(saved) || saved <= 0 || saved >= 1) return SPLIT_DEFAULT;
+  if (!Number.isFinite(saved) || saved <= 0 || saved >= 1) return DEFAULT_SPLIT;
   return saved;
 }
 
@@ -126,6 +151,16 @@ export function Cashier() {
   const [askClose, setAskClose] = useState(false);
   const [closing, setClosing] = useState(false);
   const [recoSettings, setRecoSettings] = useState(false);
+  /**
+   * Что показывает витрина: товары, категории или группы.
+   *
+   * Переключает квадратик слева вверху — у него там всплывает панель с тремя
+   * плитками, и выбранная горит оранжевым.
+   */
+  const [browse, setBrowse] = useState<'products' | 'categories' | 'groups'>('products');
+  const [browseMenu, setBrowseMenu] = useState(false);
+  /** В какую категорию провалились с плитки категорий. */
+  const [category, setCategory] = useState<{ id: Id; name: string } | null>(null);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
   const [pickingCustomer, setPickingCustomer] = useState(false);
@@ -148,10 +183,10 @@ export function Cashier() {
    */
   const [split, setSplit] = useState(readSplit);
   const [bodyWidth, setBodyWidth] = useState(0);
-  // Колонок на витрине — по ширине окна, а не панели. От этого плитки при
-  // перетаскивании границы просто плавно меняют размер, а не перестраиваются
-  // рывком: число столбцов не меняется, меняется их ширина.
-  const columns = tileColumns(useWindowDimensions().width);
+  // Размер плитки задаёт окно, число плиток — ширина витрины. Двигаем
+  // границу — товаров видно больше или меньше, а карточки остаются теми же.
+  const windowWidth = useWindowDimensions().width;
+  const columns = columnsFor(windowWidth, Math.max(0, (bodyWidth - SPLITTER_WIDTH) * split));
 
   function dragSplit(pageX: number, save = false): void {
     if (bodyWidth <= 0) return;
@@ -174,7 +209,11 @@ export function Cashier() {
     if (Math.abs(allowed - split) > 0.0005) setSplit(allowed);
   }, [bodyWidth, split]);
 
-  const products = useQuery((database) => listProducts(database, { search }), [search]);
+  const products = useQuery(
+    (database) => listProducts(database, { search, categoryId: category?.id ?? null }),
+    [search, category?.id],
+  );
+  const categories = useQuery((database) => listCategoryTiles(database));
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
   // Что предложить к набранному. Пересчитывается на каждое изменение чека:
@@ -353,9 +392,14 @@ export function Cashier() {
         {/* Витрина */}
         <View style={[styles.left, { flex: split }]}>
           <View style={styles.searchBar}>
-            <View style={styles.gridButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Товары, категории и группы"
+              onPress={() => setBrowseMenu((open) => !open)}
+              style={styles.gridButton}
+            >
               <WebIcon.home size={22} color="#FFFFFF" />
-            </View>
+            </Pressable>
             <TextInput
               value={search}
               onChangeText={setSearch}
@@ -368,17 +412,110 @@ export function Cashier() {
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.tiles}>
-            {products.map((product) => (
-              <Tile
-                key={product.id}
-                product={product}
-                columns={columns}
-                selected={selected === product.id}
-                onPick={pick}
+          {/* Куда провалились: строка возврата к категориям. */}
+          {category ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCategory(null);
+                setBrowse('categories');
+              }}
+              style={styles.crumb}
+            >
+              <Text style={styles.crumbBack}>‹</Text>
+              <Text style={styles.crumbLabel}>{category.name}</Text>
+            </Pressable>
+          ) : null}
+
+          {browse === 'categories' ? (
+            <ScrollView contentContainerStyle={styles.tiles}>
+              {categories.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Категория «${item.name}»`}
+                  onPress={() => {
+                    setCategory({ id: item.id, name: item.name });
+                    setBrowse('products');
+                  }}
+                  style={[styles.tile, styles.catTile, { width: `${100 / columns}%` }]}
+                >
+                  {/* Цветная полоса сверху — их примета. Цвет берётся от
+                      самого названия, чтобы у категории он был всегда один
+                      и тот же, а не менялся от порядка в списке. */}
+                  <View style={[styles.catStripe, { backgroundColor: categoryColor(item.name) }]} />
+                  <Text style={styles.catName} numberOfLines={3}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.catCount}>{item.count} поз.</Text>
+                </Pressable>
+              ))}
+
+              {categories.length === 0 ? (
+                <Text style={styles.browseNote}>
+                  Категорий пока нет — их заводят в карточке товара.
+                </Text>
+              ) : null}
+            </ScrollView>
+          ) : (
+            <ScrollView contentContainerStyle={styles.tiles}>
+              {browse === 'groups' ? (
+                <Text style={styles.browseNote}>
+                  Групп в каталоге пока нет — ниже всё, что вне групп.
+                </Text>
+              ) : null}
+
+              {products.map((product) => (
+                <Tile
+                  key={product.id}
+                  product={product}
+                  columns={columns}
+                  selected={selected === product.id}
+                  onPick={pick}
+                />
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Панель выбора: Товары, Категории, Группы. */}
+          {browseMenu ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Закрыть выбор"
+                onPress={() => setBrowseMenu(false)}
+                style={styles.browseShade}
               />
-            ))}
-          </ScrollView>
+              <View style={styles.browsePanel}>
+                {(
+                  [
+                    ['products', 'Товары'],
+                    ['categories', 'Категории'],
+                    ['groups', 'Группы'],
+                  ] as ['products' | 'categories' | 'groups', string][]
+                ).map(([id, label]) => (
+                  <Pressable
+                    key={id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: browse === id }}
+                    onPress={() => {
+                      setBrowse(id);
+                      setCategory(null);
+                      setBrowseMenu(false);
+                    }}
+                    style={[styles.browseTile, browse === id && styles.browseTileOn]}
+                  >
+                    <View style={styles.browseIcon}>
+                      <BrowseGlyph kind={id} active={browse === id} />
+                    </View>
+                    <Text style={[styles.browseLabel, browse === id && styles.browseLabelOn]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
         </View>
 
         {/* Граница, которую двигают. У него это тонкая полоса во всю высоту
@@ -942,6 +1079,75 @@ const styles = StyleSheet.create({
   },
   recommendLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
   recommendGear: { padding: 6 },
+
+  // Плитка категории: цветная полоса сверху, название, «N поз.» внизу.
+  // Плитка категории такой же высоты, как товарная: витрина не должна
+  // рассыпаться, когда в неё смотрят категориями.
+  catTile: { height: 214 },
+  catStripe: { height: 10, marginHorizontal: -10, marginTop: -8, marginBottom: 12 },
+  catName: { fontFamily: pos.font, fontSize: 17, color: pos.text, lineHeight: 22 },
+  catCount: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 'auto', paddingTop: 14 },
+
+  crumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: pos.tile,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+  },
+  crumbBack: { fontFamily: pos.font, fontSize: 22, color: pos.bar },
+  crumbLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+
+  browseShade: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2 },
+  browsePanel: {
+    position: 'absolute',
+    top: 58,
+    left: 0,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomRightRadius: 6,
+    zIndex: 3,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  browseTile: {
+    width: 132,
+    height: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    borderRadius: 6,
+    backgroundColor: pos.bg,
+  },
+  browseTileOn: { backgroundColor: pos.accent },
+  browseIcon: { height: 34, justifyContent: 'center' },
+  browseLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  browseLabelOn: { color: '#FFFFFF' },
+  browseNote: {
+    fontFamily: pos.font,
+    fontSize: 14,
+    color: pos.muted,
+    width: '100%',
+    padding: 16,
+  },
+
+  glyphGrid: { width: 32, height: 32, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  glyphSquare: { width: 14, height: 14 },
+  glyphDiamond: { width: 14, height: 14, transform: [{ rotate: '45deg' }] },
+  glyphRow: { width: 34, height: 30, flexDirection: 'row', gap: 4 },
+  glyphTall: { width: 11, height: 30 },
+  glyphCol: { flex: 1, gap: 4 },
+  glyphWide: { flex: 1 },
+  glyphFolder: { width: 34, height: 30, justifyContent: 'flex-end' },
+  glyphTab: { width: 16, height: 6, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  glyphBody: { height: 22, borderWidth: 3, borderRadius: 2 },
 
   recoStrip: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: pos.border },
   recoTile: {

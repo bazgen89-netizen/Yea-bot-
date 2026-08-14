@@ -129,9 +129,14 @@ export function setRecoItems(db: SqlDriver, listId: Id, productIds: Id[]): void 
  * Что показать к этому чеку.
  *
  * Товары, уже лежащие в чеке, из подбора исключаются: советовать взять то,
- * что покупатель уже взял, — не совет.
+ * что покупатель уже взял, — не совет. На пустом чеке не советуется ничего.
  */
 export function recommendedFor(db: SqlDriver, inCart: Id[]): ProductWithStock[] {
+  // Пустой чек — рекомендовать не с чего. Весь смысл в том, чтобы посмотреть,
+  // что берут **с этими** товарами; пока их не выбрали, любой список — просто
+  // витрина, показанная второй раз.
+  if (inCart.length === 0) return [];
+
   const lists = listRecoLists(db).filter((list) => list.enabled);
   if (lists.length === 0) return [];
 
@@ -157,27 +162,8 @@ export function recommendedFor(db: SqlDriver, inCart: Id[]): ProductWithStock[] 
     .filter((product): product is ProductWithStock => Boolean(product));
 }
 
-/**
- * Что чаще всего лежало в одном чеке с этими товарами.
- *
- * Пустой чек — тоже вопрос: тогда «вместе» не с чем, и показываем просто
- * самое ходовое. Иначе строка рекомендаций пустовала бы до первого товара,
- * а именно в этот момент подсказка полезнее всего.
- */
+/** Что чаще всего лежало в одном чеке с этими товарами. */
 function boughtTogether(db: SqlDriver, inCart: Id[], limit: number): Id[] {
-  if (inCart.length === 0) {
-    return db
-      .all<{ product_id: Id }>(
-        `SELECT product_id, COUNT(*) AS n
-         FROM sale_items
-         GROUP BY product_id
-         ORDER BY n DESC, product_id
-         LIMIT ?`,
-        [limit],
-      )
-      .map((row) => row.product_id);
-  }
-
   const holes = inCart.map(() => '?').join(',');
 
   return db

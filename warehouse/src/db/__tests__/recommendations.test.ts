@@ -119,14 +119,12 @@ describe('что предложить к чеку', () => {
     expect(recommendedFor(db, [tea, cup])).toHaveLength(0);
   });
 
-  it('на пустом чеке показывает самое ходовое', () => {
+  it('на пустом чеке не советует ничего: не с чем сравнивать', () => {
     const tea = product('Шу пуэр');
     const cup = product('Пиала');
-    createSale(db, { lines: [line(tea, 'Шу пуэр')], locationId: shop });
-    createSale(db, { lines: [line(tea, 'Шу пуэр')], locationId: shop });
-    createSale(db, { lines: [line(cup, 'Пиала')], locationId: shop });
+    createSale(db, { lines: [line(tea, 'Шу пуэр'), line(cup, 'Пиала')], locationId: shop });
 
-    expect(recommendedFor(db, []).map((item) => item.id)).toEqual([tea, cup]);
+    expect(recommendedFor(db, [])).toHaveLength(0);
   });
 
   it('выключенный список не советует ничего', () => {
@@ -141,12 +139,14 @@ describe('что предложить к чеку', () => {
   it('свой список показывает отобранное руками, без всяких чеков', () => {
     const tea = product('Шу пуэр');
     const cup = product('Пиала');
+    const nuts = product('Арахис');
 
     updateRecoList(db, listRecoLists(db)[0].id, { enabled: false });
     const mine = createRecoList(db, 'Новинки');
-    setRecoItems(db, mine, [cup, tea]);
+    setRecoItems(db, mine, [cup, nuts]);
 
-    expect(recommendedFor(db, []).map((item) => item.id)).toEqual([cup, tea]);
+    // Чеков нет вовсе, но к набранному чаю список своё показывает.
+    expect(recommendedFor(db, [tea]).map((item) => item.id)).toEqual([cup, nuts]);
   });
 
   it('не показывает больше, чем просили', () => {

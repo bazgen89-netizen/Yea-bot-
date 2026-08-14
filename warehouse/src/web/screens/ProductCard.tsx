@@ -38,6 +38,7 @@ import { PRODUCT_KIND_HINT, PRODUCT_KIND_LABEL, type Id, type ProductKind } from
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { WebIcon } from '../../ui/icons';
+import { pickPhoto } from '../../ui/pickPhoto';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 import { Drawer, DrawerButton } from '../Drawer';
 import { Dropdown } from '../Dropdown';
@@ -127,6 +128,7 @@ export function ProductCard({ id, onClose }: { id: string; onClose: () => void }
   const [markingType, setMarkingType] = useState(product?.marking_type ?? '');
   const [taxSystem, setTaxSystem] = useState(product?.tax_system ?? '');
   const [excisable, setExcisable] = useState(Boolean(product?.excisable));
+  const [photo, setPhoto] = useState<string | null>(product?.photo_uri ?? null);
   const [chosenCategories, setChosenCategories] = useState<string[]>(savedCategories);
   const [unit, setUnit] = useState(product?.unit ?? 'шт');
   const [weighted, setWeighted] = useState(Boolean(product?.weighted));
@@ -229,7 +231,7 @@ export function ProductCard({ id, onClose }: { id: string; onClose: () => void }
       marking_type: markingType || null,
       tax_system: taxSystem || null,
       excisable: excisable ? 1 : 0,
-      photo_uri: product?.photo_uri ?? null,
+      photo_uri: photo,
     };
 
     try {
@@ -505,13 +507,28 @@ export function ProductCard({ id, onClose }: { id: string; onClose: () => void }
           ) : null}
 
           <Field label="Изображение">
-            <View style={styles.photo}>
-              {product?.photo_uri ? (
-                <Image source={{ uri: product.photo_uri }} style={styles.photoImage} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Выбрать фотографию товара"
+              onPress={() => pickPhoto().then((uri) => uri && setPhoto(uri))}
+              style={styles.photo}
+            >
+              {photo ? (
+                <Image source={{ uri: photo }} style={styles.photoImage} />
               ) : (
-                <Text style={styles.photoHint}>Фотография добавляется с телефона</Text>
+                <Text style={styles.photoHint}>Нажмите, чтобы выбрать фотографию</Text>
               )}
-            </View>
+            </Pressable>
+
+            {photo ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPhoto(null)}
+                style={styles.photoClear}
+              >
+                <Text style={styles.photoClearLabel}>Убрать фотографию</Text>
+              </Pressable>
+            ) : null}
           </Field>
 
           <Field label="Категории">
@@ -1164,6 +1181,8 @@ const styles = StyleSheet.create({
   },
   photoImage: { width: '100%', height: '100%' },
   photoHint: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+  photoClear: { paddingTop: 8 },
+  photoClearLabel: { fontFamily: WEB_FONT, fontSize: 13, color: web.link },
 
   // 30 сверху — как `style="padding-top: 30px"` в его разметке: столько
   // занимает подпись соседнего поля, и переключатель встаёт вровень с вводом,

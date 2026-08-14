@@ -1,5 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
@@ -128,6 +138,18 @@ export function CashierPayment({
     }
   });
 
+  // Ползунок «Печатать чек» ездит, а не перескакивает.
+  const print = useRef(new Animated.Value(printReceipt ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(print, {
+      toValue: printReceipt ? 1 : 0,
+      duration: 160,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [printReceipt, print]);
+
   const creditBlocked = method === 'credit' && !customer;
 
   return (
@@ -172,9 +194,33 @@ export function CashierPayment({
               style={styles.printRow}
             >
               <Text style={styles.printLabel}>Печатать чек</Text>
-              <View style={[styles.track, printReceipt && styles.trackOn]}>
-                <View style={[styles.knob, printReceipt && styles.knobOn]} />
-              </View>
+              <Animated.View
+                style={[
+                  styles.track,
+                  {
+                    backgroundColor: print.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['rgba(0,0,0,0.12)', pos.bar],
+                    }),
+                  },
+                ]}
+              >
+                <Animated.View
+                  style={[
+                    styles.knob,
+                    {
+                      transform: [
+                        {
+                          translateX: print.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 24],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              </Animated.View>
             </Pressable>
 
             <Pressable accessibilityRole="button" onPress={onClose} style={styles.cancel}>
@@ -378,9 +424,7 @@ const styles = StyleSheet.create({
   },
   printLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   track: { width: 44, height: 20, borderRadius: 10, backgroundColor: '#D4D4D5', padding: 2 },
-  trackOn: { backgroundColor: pos.green },
   knob: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' },
-  knobOn: { transform: [{ translateX: 24 }] },
 
   cancel: { marginTop: 16, alignItems: 'center', paddingVertical: 10 },
   cancelLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },

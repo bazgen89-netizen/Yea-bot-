@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { WebIcon } from '../ui/icons';
 import {
@@ -170,6 +170,25 @@ export function Toggle({
   hint?: string;
   disabled?: boolean;
 }) {
+  /**
+   * Ползунок ездит, а не перескакивает.
+   *
+   * Раньше кружок менял отступ разом, и переключатель отвечал рывком: по
+   * такому не видно, что он вообще переключился, — глазу нужно движение.
+   */
+  const slide = useRef(new Animated.Value(on ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(slide, {
+      toValue: on ? 1 : 0,
+      duration: 160,
+      easing: Easing.out(Easing.cubic),
+      // Цвет дорожки анимируется вместе с кружком, а такое умеет только
+      // родной драйвер выключённым.
+      useNativeDriver: false,
+    }).start();
+  }, [on, slide]);
+
   return (
     <Pressable
       accessibilityRole="switch"
@@ -178,9 +197,24 @@ export function Toggle({
       onPress={() => !disabled && onChange(!on)}
       style={[styles.toggleRow, disabled && styles.toggleDisabled]}
     >
-      <View style={[styles.track, on && styles.trackOn]}>
-        <View style={[styles.knob, on && styles.knobOn]} />
-      </View>
+      <Animated.View
+        style={[
+          styles.track,
+          {
+            backgroundColor: slide.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['rgba(0,0,0,0.05)', web.link],
+            }),
+          },
+        ]}
+      >
+        <Animated.View
+          style={[
+            styles.knob,
+            { transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, 28] }) }] },
+          ]}
+        />
+      </Animated.View>
       <View style={styles.toggleText}>
         <Text style={styles.toggleLabel}>{label}</Text>
         {hint ? <Text style={styles.toggleHint}>{hint}</Text> : null}
@@ -401,7 +435,7 @@ const styles = StyleSheet.create({
   toggleDisabled: { opacity: 0.5 },
   // 49 × 21 — `3.5rem × 1.5rem` при базе 14.
   track: { width: 49, height: 21, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.05)' },
-  trackOn: { backgroundColor: web.link },
+
   knob: {
     width: 21,
     height: 21,
@@ -410,8 +444,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(34,36,38,0.15)',
   },
-  // `left: 2.15rem` у включённой — 30 пикселей.
-  knobOn: { marginLeft: 30 },
+
   toggleText: { flex: 1 },
   toggleLabel: { fontFamily: WEB_FONT, fontSize: 14, color: FORM_LABEL, lineHeight: 21 },
   toggleHint: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, lineHeight: 17 },

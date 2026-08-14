@@ -167,10 +167,13 @@ export function shiftReport(db: SqlDriver, shiftId: Id): ShiftReport {
     transfer: number;
     receipts: number;
   }>(
+    // Выручка — вся сумма чеков, включая отсроченную: товар продан. А вот
+    // в ящик и на терминал попадает только то, что реально взяли, поэтому
+    // из способов оплаты отсрочка вычитается.
     `SELECT COALESCE(SUM(total), 0) AS revenue,
-            COALESCE(SUM(CASE WHEN payment = 'cash'     THEN total END), 0) AS cash,
-            COALESCE(SUM(CASE WHEN payment = 'card'     THEN total END), 0) AS card,
-            COALESCE(SUM(CASE WHEN payment = 'transfer' THEN total END), 0) AS transfer,
+            COALESCE(SUM(CASE WHEN payment = 'cash'     THEN total - debt END), 0) AS cash,
+            COALESCE(SUM(CASE WHEN payment = 'card'     THEN total - debt END), 0) AS card,
+            COALESCE(SUM(CASE WHEN payment = 'transfer' THEN total - debt END), 0) AS transfer,
             COUNT(*) AS receipts
      FROM sales s
      WHERE s.shift_id = ?

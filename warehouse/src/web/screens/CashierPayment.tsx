@@ -52,11 +52,17 @@ export function CashierPayment({
   customer?: CounterpartyWithTotals | null;
   onClose: () => void;
   /**
-   * Чек проведён. `payment` — способ, которым принято больше всего: чек
+   * Чек проведён. `payment` — способ, которым принято больше живых денег: чек
    * хранит один способ, и делить его на три значило бы менять и отчёты,
-   * и движение денег.
+   * и движение денег. `changeDue` — сдача, `debt` — сколько ушло в отсрочку,
+   * то есть осталось за покупателем.
+   *
+   * Сдачу считает окно, а не касса: только здесь известно, сколько денег
+   * положили на прилавок и каким способом. Раньше касса получала «внесено» и
+   * вычитала из суммы чека сама — и после отсрочки объявляла сдачу с денег,
+   * которых никто не приносил.
    */
-  onPay: (payment: PaymentMethod, tendered: Kopecks, note: string) => void;
+  onPay: (payment: PaymentMethod, changeDue: Kopecks, note: string, debt: Kopecks) => void;
   /**
    * Продажа или возврат. У возврата деньги идут в обратную сторону: сдачи не
    * бывает, вносить нечего, и вопрос один — чем выдать.
@@ -103,11 +109,11 @@ export function CashierPayment({
     const total_ = next.cash + next.card + next.credit;
 
     if (total_ >= total) {
-      // Чек хранит один способ оплаты — тот, которым приняли больше всего.
-      const winner = (Object.keys(next) as (keyof Taken)[]).reduce((a, b) =>
-        next[a] >= next[b] ? a : b,
-      );
-      onPay(winner === 'credit' ? 'transfer' : winner, entered, note);
+      // Чек хранит один способ оплаты — тот, которым приняли больше живых
+      // денег. Отсрочка способом оплаты быть не может: по ней не приняли
+      // ничего, она уходит отдельно, долгом покупателя.
+      const winner: PaymentMethod = next.card > next.cash ? 'card' : 'cash';
+      onPay(winner, rest, note, next.credit);
       return;
     }
 

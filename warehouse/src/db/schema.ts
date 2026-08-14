@@ -568,6 +568,32 @@ export const MIGRATIONS: string[] = [
   -- Без колонки поле было бы обманом — набранное исчезало бы с чеком.
   ALTER TABLE sales ADD COLUMN note TEXT;
   `,
+
+  // 18 — долги покупателей
+  `
+  -- Отсрочка: товар отдали, деньги не взяли. Столько из чека осталось за
+  -- покупателем. Раньше окно оплаты отсрочку принимало, а записывать её было
+  -- некуда — чек уходил как оплаченный, и деньги, которых нет, попадали
+  -- в кассу.
+  ALTER TABLE sales ADD COLUMN debt INTEGER NOT NULL DEFAULT 0;
+
+  -- Погашения долга. Отдельной записью, а не убыванием числа в чеке: долг
+  -- гасят частями и в разные дни, и «когда и сколько занёс» — это история,
+  -- которую нельзя терять, как нельзя терять движения товара.
+  CREATE TABLE debt_payments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sale_id     INTEGER REFERENCES sales(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL REFERENCES counterparties(id),
+    amount      INTEGER NOT NULL,
+    payment     TEXT    NOT NULL DEFAULT 'cash',
+    location_id INTEGER REFERENCES locations(id),
+    staff_id    INTEGER REFERENCES staff(id),
+    created_at  TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_debt_payments_customer ON debt_payments(customer_id);
+  CREATE INDEX idx_debt_payments_sale ON debt_payments(sale_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

@@ -223,6 +223,9 @@ export const WebIcon = {
   receiptLong: (p: Props) => (
     <MaterialCommunityIcons name="receipt-text-outline" size={p.size ?? 22} color={p.color} />
   ),
+  handshake: (p: Props) => (
+    <MaterialCommunityIcons name="handshake-outline" size={p.size ?? 22} color={p.color} />
+  ),
   done: (p: Props) => <Ionicons name="checkmark" size={p.size ?? 19} color={p.color} />,
   comment: (p: Props) => (
     <MaterialCommunityIcons name="comment" size={p.size ?? 17} color={p.color ?? '#9AA0A6'} />

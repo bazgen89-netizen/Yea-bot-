@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CashierDebts } from './CashierDebts';
 import { listCounterparties } from '../../db/counterparties';
 import { listProducts } from '../../db/products';
 import { listSales } from '../../db/sales';
@@ -28,6 +29,7 @@ export type CashierView =
   | 'clients'
   | 'products'
   | 'shifts'
+  | 'debts'
   | 'money'
   | 'xreport'
   | 'settings';
@@ -43,6 +45,7 @@ export const VIEW_TITLE: Record<Exclude<CashierView, 'sale'>, string> = {
   clients: 'Клиенты',
   products: 'Товары',
   shifts: 'Смены',
+  debts: 'Возврат долга',
   money: 'Внесение и изъятие',
   xreport: 'X-отчёт',
   settings: 'Настройки',
@@ -53,6 +56,7 @@ export function CashierPanel({ view }: { view: Exclude<CashierView, 'sale'> }) {
   if (view === 'clients') return <Clients />;
   if (view === 'products') return <Products />;
   if (view === 'shifts') return <Shifts />;
+  if (view === 'debts') return <CashierDebts />;
   if (view === 'money') return <Money />;
   if (view === 'xreport') return <XReport />;
   return <Settings />;

@@ -329,7 +329,8 @@ export function importCounterparties(db: SqlDriver, rows: PartyInput[]): ImportP
   return result;
 }
 
-function normalize(value: string): string {
+/** Строка для поиска: как её кладут в `search_text`, так и ищут. */
+export function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 

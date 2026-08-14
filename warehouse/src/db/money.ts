@@ -96,8 +96,11 @@ export function accountBalances(db: SqlDriver): AccountBalance[] {
 
   for (const name of ACCOUNTS) at(name);
 
+  // Из чека вычитается отсрочка: она — долг покупателя, а не деньги на счёте.
+  // Занесённое по долгу приходит отдельным приходным документом, поэтому
+  // дважды одни и те же деньги не считаются.
   for (const row of db.all<{ payment: string; total: number }>(
-    `SELECT payment, COALESCE(SUM(total), 0) AS total
+    `SELECT payment, COALESCE(SUM(total - debt), 0) AS total
      FROM sales s
      WHERE NOT EXISTS (
        SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'

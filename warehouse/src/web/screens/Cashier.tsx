@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
 import { CashierCloseShift } from './CashierCloseShift';
@@ -28,6 +37,28 @@ import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
+
+/** Доля ширины, отданная витрине: где стоит граница с чеком. */
+const SPLIT_KEY = 'pos.split';
+const SPLIT_MIN = 0.25;
+const SPLIT_MAX = 0.8;
+/** 1.55 к 1 — то, как полоса стояла до того, как её стало можно двигать. */
+const SPLIT_DEFAULT = 1.55 / 2.55;
+
+/**
+ * Курсор «двигать вбок».
+ *
+ * Мимо типов React Native: там `cursor` знает только про `auto` и `pointer`,
+ * а в браузере значений больше, и полоса без такого курсора не выглядит той,
+ * которую можно тянуть.
+ */
+const RESIZE_CURSOR = { cursor: 'col-resize', userSelect: 'none' } as unknown as ViewStyle;
+
+function readSplit(): number {
+  const saved = Number(globalThis.localStorage?.getItem(SPLIT_KEY));
+  if (!Number.isFinite(saved) || saved < SPLIT_MIN || saved > SPLIT_MAX) return SPLIT_DEFAULT;
+  return saved;
+}
 
 /**
  * Интерфейс кассира.
@@ -68,6 +99,24 @@ export function Cashier() {
    * Скидка суммой процент сбрасывает: там обещали ровно эти рубли.
    */
   const [discountPercent, setDiscountPercent] = useState<number | null>(null);
+
+  /**
+   * Где стоит граница между витриной и чеком — доля ширины, отданная витрине.
+   *
+   * Её двигают: в чайной длинные названия, и кому-то нужнее видеть их целиком,
+   * а кому-то — больше плиток на витрине. Положение переживает перезагрузку:
+   * подвинуть границу заново при каждом открытии кассы никто не станет.
+   */
+  const [split, setSplit] = useState(readSplit);
+  const [bodyWidth, setBodyWidth] = useState(0);
+
+  function dragSplit(pageX: number, save = false): void {
+    if (bodyWidth <= 0) return;
+    // Ни витрину, ни чек нельзя сжать в ничто: за краями держим четверть.
+    const next = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pageX / bodyWidth));
+    setSplit(next);
+    if (save) globalThis.localStorage?.setItem(SPLIT_KEY, String(next));
+  }
 
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
@@ -128,7 +177,7 @@ export function Cashier() {
     setPaying(true);
   };
 
-  const pay = (payment: PaymentMethod, tendered: number, note: string): void => {
+  const pay = (payment: PaymentMethod, changeDue: number, note: string, debt = 0): void => {
     try {
       // Возврат проводится своей операцией: товар возвращается на склад, а
       // деньги уходят из кассы — списывать остаток здесь было бы наоборот.
@@ -138,6 +187,8 @@ export function Cashier() {
         note,
         discount: cart.discount,
         payment,
+        // Отсрочка бывает только у продажи: возврат долга не создаёт.
+        debt: mode === 'sale' ? debt : 0,
         lines: cart.lines,
         locationId: locations[0]?.id ?? null,
       });
@@ -163,7 +214,9 @@ export function Cashier() {
       return;
     }
 
-    const rest = mode === 'sale' && payment === 'cash' ? tendered - cart.totals.total : 0;
+    // Сдачу посчитало окно оплаты: только там известно, сколько денег легло
+    // на прилавок и каким способом.
+    const rest = mode === 'sale' ? changeDue : 0;
     const done = mode === 'sale' ? 'Чек пробит' : 'Возврат проведён';
 
     cart.clear();
@@ -185,9 +238,12 @@ export function Cashier() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.body}>
+      <View
+        style={styles.body}
+        onLayout={(event) => setBodyWidth(event.nativeEvent.layout.width)}
+      >
         {/* Витрина */}
-        <View style={styles.left}>
+        <View style={[styles.left, { flex: split }]}>
           <View style={styles.searchBar}>
             <View style={styles.gridButton}>
               <WebIcon.home size={22} color="#FFFFFF" />
@@ -248,8 +304,22 @@ export function Cashier() {
           </ScrollView>
         </View>
 
+        {/* Граница, которую двигают. У него это тонкая полоса во всю высоту
+            с двумя стрелками посередине. */}
+        <View
+          accessibilityRole="adjustable"
+          accessibilityLabel="Ширина витрины"
+          style={[styles.splitter, RESIZE_CURSOR]}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderMove={(event) => dragSplit(event.nativeEvent.pageX)}
+          onResponderRelease={(event) => dragSplit(event.nativeEvent.pageX, true)}
+        >
+          <Text style={styles.splitterGrip}>◄│►</Text>
+        </View>
+
         {/* Чек */}
-        <View style={styles.right}>
+        <View style={[styles.right, { flex: 1 - split }]}>
           {/* Строка покупателя — это поиск, а не подпись: клиент называет
               телефон, кассир набирает четыре цифры и выбирает нужного. */}
           <Pressable
@@ -638,7 +708,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: pos.bg },
   body: { flex: 1, flexDirection: 'row' },
 
-  left: { flex: 1.55, backgroundColor: pos.bg },
+  left: { backgroundColor: pos.bg, minWidth: 0 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,7 +775,20 @@ const styles = StyleSheet.create({
   },
   tilePrice: { fontSize: 17, fontWeight: '600', color: pos.text, textAlign: 'center' },
 
-  right: { flex: 1, backgroundColor: pos.tile, borderLeftWidth: 1, borderLeftColor: pos.border },
+  right: { backgroundColor: pos.tile, minWidth: 0 },
+
+  // Полоса шире самой черты: пальцем в единственный пиксель не попасть.
+  splitter: {
+    width: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pos.tile,
+    borderLeftWidth: 1,
+    borderLeftColor: pos.border,
+    borderRightWidth: 1,
+    borderRightColor: pos.border,
+  },
+  splitterGrip: { fontFamily: pos.font, fontSize: 9, color: pos.muted },
   customerBar: {
     flexDirection: 'row',
     alignItems: 'center',

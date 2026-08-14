@@ -2,6 +2,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { totalDebt } from '../../db/debts';
 import { openShiftAnywhere } from '../../db/shifts';
 import { currentStaff } from '../../db/staff';
 import { ROLE_LABEL } from '../../domain/permissions';
@@ -30,8 +31,10 @@ import { pos } from '../../ui/webTheme';
  *   — «Открыть смену». У него для этого отдельный экран, на который касса
  *     сама уводит, пока смена закрыта. У нас его нет, и без пункта в меню
  *     смену было бы не открыть вовсе.
- *   — «Возврат долга». У него появляется, когда за клиентами числится долг.
- *     Мы долги не ведём, и пункт, ведущий в пустоту, читался бы как поломка.
+ *
+ * «Возврат долга» появляется по тому же условию, что у него: смена открыта и
+ * за покупателями что-то числится. Пока долгов нет, пункта нет ни у него, ни
+ * у нас.
  */
 
 interface Item {
@@ -84,6 +87,7 @@ export function CashierMenu({
   // Кто за прилавком. Пока сотрудника не выбрали, касса подписана точкой —
   // так же, как у него: там в шапке меню стоит «Чайный бар» и «Кассир».
   const staff = useQuery((database) => currentStaff(database));
+  const debts = useQuery((database) => totalDebt(database));
   const name = staff?.name ?? who;
   const role = staff ? ROLE_LABEL[staff.role] : 'Кассир';
 
@@ -130,6 +134,19 @@ export function CashierMenu({
       ];
 
   const rest: Item[] = [
+    // «Возврат долга» появляется, только когда за покупателями что-то
+    // числится, — как у него. Пустой раздел «долгов нет» никому не нужен,
+    // а пункт, который то есть, то нет, сам говорит, есть ли долги.
+    ...(shift && debts > 0
+      ? [
+          {
+            label: 'Возврат долга',
+            icon: <WebIcon.handshake size={22} color={tint} />,
+            view: 'debts' as const,
+            key: '3',
+          },
+        ]
+      : []),
     ...(shift
       ? [
           {

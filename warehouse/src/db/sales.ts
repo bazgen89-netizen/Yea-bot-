@@ -4,6 +4,7 @@ import { openShiftAnywhere } from './shifts';
 import { currentStaffId } from './staff';
 import { cartTotals, findStockIssues } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
+import type { Kopecks } from '../domain/money';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
 
 /** Магазин, к которому привязана касса открытой смены. */
@@ -49,6 +50,13 @@ export interface SaleInput {
   customerId?: Id | null;
   /** Комментарий к продаже — то, что кассир написал в окне оплаты. */
   note?: string | null;
+  /**
+   * Сколько из чека приняли отсрочкой, копейки.
+   *
+   * Это долг покупателя: товар отдали, деньги не взяли. Отсрочку нельзя дать
+   * розничному — долг некому записать, — и нельзя дать больше, чем в чеке.
+   */
+  debt?: Kopecks;
 }
 
 /**
@@ -85,10 +93,14 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
     // спрашивать его о том же второй раз незачем.
     const locationId = input.locationId ?? shiftLocation(db, shift?.id ?? null);
 
+    // Долг без покупателя записать некуда, поэтому его и не бывает: розничный
+    // ушёл — спросить не с кого.
+    const debt = input.customerId ? Math.min(Math.max(0, input.debt ?? 0), totals.total) : 0;
+
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          customer_id, note, staff_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          customer_id, note, debt, staff_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         totals.total,
@@ -98,6 +110,7 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         locationId,
         input.customerId ?? null,
         input.note?.trim() || null,
+        debt,
         // Чек помнит, кто его пробил: без этого отчёт по сотрудникам
         // считать не из чего.
         currentStaffId(db),

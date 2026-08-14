@@ -124,29 +124,37 @@ export function CashierCustomer({
               onPress={onClose}
               style={styles.close}
             >
-              <Text style={styles.closeSign}>✕</Text>
+              <Text style={styles.closeLabel}>ЗАКРЫТЬ</Text>
+              <View style={styles.key}>
+                <Text style={styles.keyLabel}>ESC</Text>
+              </View>
             </Pressable>
           </View>
 
-          <Pressable accessibilityRole="button" onPress={create} style={styles.create}>
-            <Text style={styles.createPlus}>+</Text>
-            <Text style={styles.createLabel}>
-              {search.trim() ? `Создать клиента «${search.trim()}»` : 'Создать клиента'}
-            </Text>
-          </Pressable>
+          {/* «Создать клиента» появляется, только когда никого не нашли: у
+              него окно — это список покупателей, и первой строкой в нём стоит
+              покупатель, а не кнопка. */}
+          {found.length === 0 && search.trim() ? (
+            <Pressable accessibilityRole="button" onPress={create} style={styles.create}>
+              <Text style={styles.createPlus}>+</Text>
+              <Text style={styles.createLabel}>Создать клиента «{search.trim()}»</Text>
+            </Pressable>
+          ) : null}
 
           <ScrollView style={styles.list}>
-            {/* Розничный покупатель — тоже выбор, а не отсутствие выбора:
-                им отменяют ранее выбранного клиента, не закрывая чек. */}
-            <Row
-              title="Розничный покупатель"
-              subtitle="Без карточки и без скидки"
-              active={chosen === null}
-              onPress={() => {
-                onPick(null);
-                onClose();
-              }}
-            />
+            {/* Розничный покупатель — не отсутствие выбора, а выбор: им
+                снимают ранее выбранного клиента, не закрывая чек. Пока никто
+                не выбран, снимать нечего, и строки нет. */}
+            {chosen ? (
+              <Row
+                title="Розничный покупатель"
+                subtitle="Снять покупателя с чека"
+                onPress={() => {
+                  onPick(null);
+                  onClose();
+                }}
+              />
+            ) : null}
 
             {found.map((party) => (
               <Row
@@ -164,7 +172,10 @@ export function CashierCustomer({
                       <Text style={styles.discount}>{party.discount_bp / 100} %</Text>
                     ) : null}
                     {party.bonus_balance > 0 ? (
-                      <Text style={styles.bonus}>{formatMoneyWeb(party.bonus_balance)} ⛁</Text>
+                      <View style={styles.bonusRow}>
+                        <WebIcon.coins size={17} color={pos.accent} />
+                        <Text style={styles.bonus}>{formatMoneyWeb(party.bonus_balance)}</Text>
+                      </View>
                     ) : null}
                   </>
                 }
@@ -233,7 +244,11 @@ const styles = StyleSheet.create({
     maxWidth: '96%',
     maxHeight: '85%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 6,
+    borderRadius: 4,
+    // Оранжевая рамка вокруг всего окна — его примета: пока идёт поиск
+    // покупателя, касса обведена, и видно, что она ждёт именно этого.
+    borderWidth: 2,
+    borderColor: pos.accent,
     overflow: 'hidden',
     zIndex: 1,
   },
@@ -247,15 +262,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  searchInput: {
+  searchInput: { outlineWidth: 0,
     flex: 1,
     fontFamily: pos.font,
     fontSize: 20,
     fontWeight: '700',
     color: pos.text,
   },
-  close: { padding: 6 },
-  closeSign: { fontSize: 20, color: pos.muted },
+  close: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 10 },
+  closeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted, letterSpacing: 0.6 },
+  key: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: pos.border,
+    borderRadius: 3,
+  },
+  keyLabel: { fontFamily: pos.font, fontSize: 11, color: pos.muted },
 
   create: {
     flexDirection: 'row',
@@ -270,22 +293,23 @@ const styles = StyleSheet.create({
   createLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
 
   list: { flexGrow: 0 },
+  // Строки высокие: по ним попадают пальцем, а не мышью.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: pos.border,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    minHeight: 74,
   },
   rowActive: { backgroundColor: '#E8F4FD' },
   rowText: { flex: 1 },
-  rowTitle: { fontFamily: pos.font, fontSize: 17, color: pos.text },
-  rowSubtitle: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
+  rowTitle: { fontFamily: pos.font, fontSize: 18, fontWeight: '500', color: pos.text },
+  rowSubtitle: { fontFamily: pos.font, fontSize: 15, color: pos.muted, marginTop: 2 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  discount: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
-  bonus: { fontFamily: pos.font, fontSize: 15, color: '#7B5FD3' },
+  discount: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  bonusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bonus: { fontFamily: pos.font, fontSize: 17, color: pos.text },
 
   empty: { fontFamily: pos.font, fontSize: 15, color: pos.muted, padding: 24, textAlign: 'center' },
 });

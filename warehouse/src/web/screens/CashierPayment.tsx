@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   lineStrong: { color: pos.text, fontWeight: '700' },
   lineAccent: { color: pos.accent },
 
-  note: {
+  note: { outlineWidth: 0,
     minHeight: 70,
     marginTop: 10,
     padding: 10,

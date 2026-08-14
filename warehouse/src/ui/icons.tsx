@@ -223,6 +223,10 @@ export const WebIcon = {
   receiptLong: (p: Props) => (
     <MaterialCommunityIcons name="receipt-text-outline" size={p.size ?? 22} color={p.color} />
   ),
+  /** Бонусы покупателя — стопка монет, как у него в поиске клиентов. */
+  coins: (p: Props) => (
+    <MaterialCommunityIcons name="database" size={p.size ?? 18} color={p.color} />
+  ),
   handshake: (p: Props) => (
     <MaterialCommunityIcons name="handshake-outline" size={p.size ?? 22} color={p.color} />
   ),

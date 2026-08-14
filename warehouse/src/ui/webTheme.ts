@@ -69,21 +69,44 @@ export const web = {
 
 /**
  * Экран кассира — отдельное приложение со своей палитрой и своим шрифтом.
- * Значения сняты с его бандла и разметки, а не с кабинета: там Material,
- * а не Semantic, и синий с зелёным другие.
+ *
+ * Значения — не подбор на глаз, а их тема Material, слово в слово:
+ *
+ * ```
+ * light: {
+ *   primary:   { main: 'rgb(25, 118, 210)' },
+ *   secondary: { main: '#ed6c02' },
+ *   background:{ paper: 'rgb(255, 255, 255)', default: 'rgb(247, 249, 252)' },
+ *   text:      { primary: 'rgb(31, 35, 40)', secondary: 'rgb(101, 109, 118)' },
+ *   divider:   'rgb(216, 222, 228)',
+ * },
+ * typography: { fontFamily: "'Oswald', sans-serif" }
+ * ```
+ *
+ * Шрифт **обязан** быть Oswald: он узкий, и с Roboto ни одна плитка витрины,
+ * ни одна строка чека не встают так, как у них. Сам файл вшивается в сборку —
+ * `assets/fonts/oswald.css`, собирается `scripts/fetch-oswald.mjs`.
  */
 export const pos = {
-  /** Полоса «ПРОДАЖА» внизу. */
-  bar: '#2196F3',
-  barDark: '#266798',
-  /** Кнопка добавления клиента справа вверху. */
-  accent: '#F57C00',
-  green: '#4CAF50',
-  bg: '#F2F2F7',
+  /** Полоса «ПРОДАЖА» внизу; она же — главная кнопка. `primary.main`. */
+  bar: '#1976D2',
+  barDark: '#115293',
+  /** Кнопка добавления клиента и подтверждения. `secondary.main`. */
+  accent: '#ED6C02',
+  green: '#2E7D32',
+  red: '#D32F2F',
+  /** `background.default` — подложка витрины. */
+  bg: '#F7F9FC',
+  /** `background.paper` — плитки, чек, окна. */
   tile: '#FFFFFF',
-  border: '#EEEEEE',
-  text: '#3C3C43',
-  muted: '#9E9E9E',
+  /** `divider`. */
+  border: '#D8DEE4',
+  /** `text.primary`. */
+  text: '#1F2328',
+  /** `text.secondary`. */
+  muted: '#656D76',
+  /** `action.hover` — подсветка строки под курсором. */
+  hover: 'rgba(0,0,0,0.04)',
   font: 'Oswald, Roboto, sans-serif',
 };
 

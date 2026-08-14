@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
 
   field: { paddingHorizontal: 26, marginTop: 18, gap: 6 },
   fieldLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
-  input: {
+  input: { outlineWidth: 0,
     height: 42,
     borderBottomWidth: 1,
     borderBottomColor: pos.border,

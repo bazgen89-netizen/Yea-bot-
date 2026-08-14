@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -38,6 +39,9 @@ import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
+/** Ширина разделительной полосы; ею же расступается нижняя панель. */
+const SPLITTER_WIDTH = 11;
+
 /** Доля ширины, отданная витрине: где стоит граница с чеком. */
 const SPLIT_KEY = 'pos.split';
 const SPLIT_MIN = 0.25;
@@ -53,6 +57,37 @@ const SPLIT_DEFAULT = 1.55 / 2.55;
  * которую можно тянуть.
  */
 const RESIZE_CURSOR = { cursor: 'col-resize', userSelect: 'none' } as unknown as ViewStyle;
+
+/**
+ * Сколько плиток в ряду — их таблица, снятая с кассы. Считается по ширине
+ * **окна**: на их экране 1440 точек витрина показывает шесть плиток в ряду,
+ * и это x3l, то есть окно, а не панель.
+ *
+ * ```
+ * breakpoints: {xs:0, sm:370, md:400, lg:500, l:600, xl:700,
+ *               x2l:900, x3l:1200, x4l:1500, x5l:1900, x6l:2300, x7l:2600}
+ * columns:     {xs:2, sm:3, md:3, lg:4, xl:5, x2l:4, x3l:6,
+ *               x4l:7, x5l:8, x6l:9, x7l:10}
+ * ```
+ *
+ * Ширина плитки задаётся долей — `100 / колонок` процентов, — а не числом
+ * точек. От этого ряд всегда заполнен целиком: витрина тянется вместе с
+ * границей, плитки плавно меняют размер, и справа не остаётся пустой полосы.
+ * Раньше у плитки была наименьшая ширина в 150 точек, и на узкой витрине
+ * проценты переставали сходиться — последний столбец обрывался в пустоту.
+ */
+export function tileColumns(width: number): number {
+  if (width >= 2600) return 10;
+  if (width >= 2300) return 9;
+  if (width >= 1900) return 8;
+  if (width >= 1500) return 7;
+  if (width >= 1200) return 6;
+  if (width >= 900) return 4;
+  if (width >= 700) return 5;
+  if (width >= 500) return 4;
+  if (width >= 370) return 3;
+  return 2;
+}
 
 function readSplit(): number {
   const saved = Number(globalThis.localStorage?.getItem(SPLIT_KEY));
@@ -109,6 +144,10 @@ export function Cashier() {
    */
   const [split, setSplit] = useState(readSplit);
   const [bodyWidth, setBodyWidth] = useState(0);
+  // Колонок на витрине — по ширине окна, а не панели. От этого плитки при
+  // перетаскивании границы просто плавно меняют размер, а не перестраиваются
+  // рывком: число столбцов не меняется, меняется их ширина.
+  const columns = tileColumns(useWindowDimensions().width);
 
   function dragSplit(pageX: number, save = false): void {
     if (bodyWidth <= 0) return;
@@ -155,6 +194,50 @@ export function Cashier() {
    * хватает остатка — исключение уходило в пустоту, и со стороны это выглядело
    * так, будто касса «не поняла» и сбросила чек.
    */
+  /**
+   * Нажали плитку на витрине.
+   *
+   * Ссылка на обработчик держится неизменной: плитки запоминаются
+   * (`React.memo`), и новая функция на каждую отрисовку заставляла бы
+   * перерисовываться всю витрину — в том числе на каждое движение
+   * разделительной полосы. Отсюда и рывки при перетаскивании.
+   */
+  const pickRef = useRef<(product: ProductWithStock) => void>(() => {});
+  const pick = useCallback((product: ProductWithStock) => pickRef.current(product), []);
+
+  pickRef.current = (product: ProductWithStock) => {
+    // Остаток проверяется при нажатии, а не при оплате: узнать, что товара
+    // нет, кассир должен сразу, а не после того, как назвал сумму.
+    //
+    // В возврате остаток не проверяется вовсе: товар приносят обратно, и на
+    // складе его как раз и нет — потому и продали.
+    if (mode === 'sale' && product.kind !== 'service' && product.stock <= 0) {
+      say(
+        'Товара нет на остатке',
+        `«${product.name}» — остаток ${formatQty(product.stock)} ${product.unit}. ` +
+          'Оприходуйте товар или проведите инвентаризацию.',
+      );
+      return;
+    }
+
+    const inCart = cart.lines.find((line) => line.product_id === product.id);
+    if (
+      mode === 'sale' &&
+      product.kind !== 'service' &&
+      (inCart?.qty ?? 0) + 1000 > product.stock
+    ) {
+      say(
+        'Больше нет',
+        `«${product.name}»: на складе ${formatQty(product.stock)} ${product.unit}, ` +
+          'столько уже в чеке.',
+      );
+      return;
+    }
+
+    setSelected(product.id);
+    cart.add(product, 1000);
+  };
+
   const startPay = () => {
     if (cart.lines.length === 0) {
       say(
@@ -265,40 +348,9 @@ export function Cashier() {
               <Tile
                 key={product.id}
                 product={product}
+                columns={columns}
                 selected={selected === product.id}
-                onPress={() => {
-                  // Остаток проверяется при нажатии, а не при оплате: узнать,
-                  // что товара нет, кассир должен сразу, а не после того, как
-                  // назвал покупателю сумму.
-                  //
-                  // В возврате остаток не проверяется вовсе: товар приносят
-                  // обратно, и на складе его как раз и нет — потому и продали.
-                  if (mode === 'sale' && product.kind !== 'service' && product.stock <= 0) {
-                    say(
-                      'Товара нет на остатке',
-                      `«${product.name}» — остаток ${formatQty(product.stock)} ${product.unit}. ` +
-                        'Оприходуйте товар или проведите инвентаризацию.',
-                    );
-                    return;
-                  }
-
-                  const inCart = cart.lines.find((line) => line.product_id === product.id);
-                  if (
-                    mode === 'sale' &&
-                    product.kind !== 'service' &&
-                    (inCart?.qty ?? 0) + 1000 > product.stock
-                  ) {
-                    say(
-                      'Больше нет',
-                      `«${product.name}»: на складе ${formatQty(product.stock)} ${product.unit}, ` +
-                        'столько уже в чеке.',
-                    );
-                    return;
-                  }
-
-                  setSelected(product.id);
-                  cart.add(product, 1000);
-                }}
+                onPick={pick}
               />
             ))}
           </ScrollView>
@@ -495,7 +547,7 @@ export function Cashier() {
         {/* Левая часть нижней полосы повторяет пропорцию витрины, а синяя
             кнопка — пропорцию чека. Тогда кнопка стоит ровно под чеком при
             любой ширине окна; заданная процентами, она не совпадала с ним. */}
-        <View style={styles.bottomLeft}>
+        <View style={[styles.bottomLeft, { flex: split }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Меню"
@@ -513,10 +565,14 @@ export function Cashier() {
           <Text style={styles.bottomClock}>{today()}</Text>
         </View>
 
+        {/* Просвет ровно под разделительной полосой: ни кнопка продажи, ни
+            строка с магазином и часами на неё не заходят. */}
+        <View style={styles.bottomGap} />
+
         <Pressable
           accessibilityRole="button"
           onPress={startPay}
-          style={({ pressed }) => [styles.sellBar, pressed && { opacity: 0.9 }]}
+          style={({ pressed }) => [styles.sellBar, { flex: 1 - split }, pressed && { opacity: 0.9 }]}
         >
           {/* Отступы — на внутренней обёртке, а не на самой полосе.
               У полосы `flex: 1` с нулевой основой, и её собственные
@@ -633,20 +689,30 @@ export function Cashier() {
   );
 }
 
-function Tile({
+/**
+ * Плитка витрины.
+ *
+ * Запоминается: витрина — это шестьсот с лишним плиток, и перерисовывать их
+ * все ради того, что сдвинулась граница с чеком, незачем. Все её свойства
+ * при перетаскивании остаются прежними, и React не трогает ни одну.
+ */
+const Tile = memo(function Tile({
   product,
+  columns,
   selected,
-  onPress,
+  onPick,
 }: {
   product: ProductWithStock;
+  /** Сколько плиток в ряду: от этого её ширина. */
+  columns: number;
   selected: boolean;
-  onPress: () => void;
+  onPick: (product: ProductWithStock) => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
-      style={[styles.tile, selected && styles.tileSelected]}
+      onPress={() => onPick(product)}
+      style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
     >
       <Text style={styles.tileStock}>
         {formatQty(product.stock)} {product.unit}
@@ -670,7 +736,7 @@ function Tile({
       </View>
     </Pressable>
   );
-}
+});
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
 const MONTHS = [
@@ -725,9 +791,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchInput: {
+  searchInput: { outlineWidth: 0,
     flex: 1,
-    fontSize: 19,
+    fontFamily: pos.font, fontSize: 19,
     color: pos.text,
     paddingHorizontal: 20,
     outlineStyle: 'none',
@@ -741,21 +807,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyHintText: { fontSize: 14, color: pos.muted },
+  keyHintText: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
 
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 2 },
+  // Ни зазоров, ни отступов у самой сетки: ширина плиток задана долей, и
+  // всё, что прибавлено сверху, ломает сумму в сто процентов. Просвет между
+  // плитками рисует их собственная рамка.
+  tiles: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: {
-    width: '16.3%',
-    minWidth: 150,
     backgroundColor: pos.tile,
     paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 10,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: pos.bg,
   },
   tileSelected: { borderColor: pos.accent },
-  tileStock: { fontSize: 13, color: pos.muted, textAlign: 'center' },
+  tileStock: { fontFamily: pos.font, fontSize: 13, color: pos.muted, textAlign: 'center' },
   tileImage: {
     height: 128,
     backgroundColor: '#F5F5F5',
@@ -765,30 +832,28 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tilePhoto: { width: '100%', height: '100%' },
-  tileName: { fontSize: 15, color: pos.text, textAlign: 'center', lineHeight: 19 },
-  tileСode: { fontSize: 13, color: pos.muted, textAlign: 'center', marginTop: 2 },
+  tileName: { fontFamily: pos.font, fontSize: 15, color: pos.text, textAlign: 'center', lineHeight: 19 },
+  tileСode: { fontFamily: pos.font, fontSize: 13, color: pos.muted, textAlign: 'center', marginTop: 2 },
   tilePriceRow: {
     borderTopWidth: 1,
     borderTopColor: pos.border,
     marginTop: 8,
     paddingTop: 8,
   },
-  tilePrice: { fontSize: 17, fontWeight: '600', color: pos.text, textAlign: 'center' },
+  tilePrice: { fontFamily: pos.font, fontSize: 17, fontWeight: '600', color: pos.text, textAlign: 'center' },
 
   right: { backgroundColor: pos.tile, minWidth: 0 },
 
   // Полоса шире самой черты: пальцем в единственный пиксель не попасть.
+  // Цветом отличается и от витрины, и от чека — её видно как границу, а не
+  // как шов между двумя белыми полями.
   splitter: {
-    width: 11,
+    width: SPLITTER_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: pos.tile,
-    borderLeftWidth: 1,
-    borderLeftColor: pos.border,
-    borderRightWidth: 1,
-    borderRightColor: pos.border,
+    backgroundColor: pos.border,
   },
-  splitterGrip: { fontFamily: pos.font, fontSize: 9, color: pos.muted },
+  splitterGrip: { fontFamily: pos.font, fontSize: 9, color: pos.text },
   customerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -799,8 +864,8 @@ const styles = StyleSheet.create({
     borderBottomColor: pos.border,
   },
   customerText: { flex: 1 },
-  customerName: { fontSize: 19, color: pos.text },
-  customerNote: { fontSize: 13, color: pos.muted },
+  customerName: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  customerNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   addCustomer: {
     width: 62,
     height: 62,
@@ -815,10 +880,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  recommendLabel: { fontSize: 16, color: pos.text },
+  recommendLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
 
   emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
-  emptyReceiptText: { fontSize: 34, color: '#C7C7CC' },
+  emptyReceiptText: { fontFamily: pos.font, fontSize: 34, color: '#C7C7CC' },
   // Синяя, а не зелёная: у него это обычная главная кнопка, того же цвета,
   // что и полоса продажи. Зелёный в кассе не значит ничего.
   openShift: {
@@ -841,8 +906,8 @@ const styles = StyleSheet.create({
     borderBottomColor: pos.border,
   },
   receiptBody: { flex: 1, gap: 2 },
-  receiptName: { fontSize: 16, color: pos.text },
-  receiptQty: { fontSize: 14, color: pos.muted },
+  receiptName: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  receiptQty: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   receiptMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   discountBadge: {
     paddingHorizontal: 6,
@@ -875,8 +940,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   totalsDiscount: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
-  receiptSum: { fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
-  receiptRemove: { fontSize: 17, color: pos.muted },
+  receiptSum: { fontFamily: pos.font, fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
+  receiptRemove: { fontFamily: pos.font, fontSize: 17, color: pos.muted },
 
   bottom: {
     flexDirection: 'row',
@@ -889,12 +954,13 @@ const styles = StyleSheet.create({
   // minWidth: 0 обеим половинам — иначе синюю полосу распирает её же
   // содержимое («⋮ ПРОДАЖА 60.00 руб» плюс отступы), она перестаёт слушаться
   // flex и вылезает левее чека на два десятка точек.
-  bottomLeft: { flex: 1.55, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
+  bottomLeft: { minWidth: 0, flexDirection: 'row', alignItems: 'center' },
+  bottomGap: { width: SPLITTER_WIDTH, alignSelf: 'stretch', backgroundColor: pos.border },
   bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
-  bottomMenuLabel: { fontSize: 17, color: pos.text },
-  bottomShop: { flex: 1, fontSize: 15, color: pos.muted, textAlign: 'center' },
-  bottomClock: { fontSize: 15, color: pos.muted, paddingRight: 24 },
-  sellBar: { flex: 1, minWidth: 0, height: 58, backgroundColor: pos.bar },
+  bottomMenuLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.muted, textAlign: 'center' },
+  bottomClock: { fontFamily: pos.font, fontSize: 15, color: pos.muted, paddingRight: 24 },
+  sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar },
   sellInner: {
     flex: 1,
     flexDirection: 'row',
@@ -902,7 +968,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 18,
   },
-  sellDots: { fontSize: 20, color: '#FFFFFF' },
-  sellLabel: { flex: 1, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.6 },
-  sellTotal: { fontSize: 21, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  sellDots: { fontFamily: pos.font, fontSize: 20, color: '#FFFFFF' },
+  sellLabel: { flex: 1, fontFamily: pos.font, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.6 },
+  sellTotal: { fontFamily: pos.font, fontSize: 21, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
 });

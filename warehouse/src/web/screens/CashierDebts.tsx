@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  search: { flex: 1, fontFamily: pos.font, fontSize: 16, color: pos.text },
+  search: { outlineWidth: 0, flex: 1, fontFamily: pos.font, fontSize: 16, color: pos.text },
   summary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
 
   field: { paddingHorizontal: 26, marginTop: 18, gap: 6 },
   fieldLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
-  input: {
+  input: { outlineWidth: 0,
     height: 42,
     borderBottomWidth: 1,
     borderBottomColor: pos.border,

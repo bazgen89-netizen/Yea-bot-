@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  input: {
+  input: { outlineWidth: 0,
     flex: 1,
     height: 46,
     fontFamily: pos.font,

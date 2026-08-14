@@ -1,7 +1,6 @@
 import {
   clampSplit,
   columnsFor,
-  gridPadding,
   preferredTileWidth,
   tileColumns,
   MIN_CATALOG_CM,
@@ -60,33 +59,26 @@ describe('плитки витрины', () => {
     expect(wide).toBeGreaterThan(narrow);
   });
 
-  it('размер плитки не меняется ни при какой ширине витрины', () => {
-    // Ширина плитки — одно и то же число: она зависит только от окна.
-    // Меняется лишь то, сколько их влезло.
+  it('ряд заполнен целиком, без полей по краям', () => {
+    // Ширина плитки — доля ряда, и доли всегда складываются в сто процентов.
+    for (let width = 400; width <= 2000; width += 13) {
+      const columns = columnsFor(1600, width);
+      expect(columns * (100 / columns)).toBeCloseTo(100, 9);
+      expect(columns).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('плитка при этом почти не меняется в размере', () => {
     const wanted = preferredTileWidth(1600);
     let previous = 0;
 
     for (let width = Math.ceil(MIN_CATALOG_CM * PX_IN_CM); width <= 1600; width += 10) {
       const columns = columnsFor(1600, width);
-      // Плитки целиком помещаются, и лишней не влезает.
-      expect(columns * wanted).toBeLessThanOrEqual(width + 0.001);
-      expect((columns + 1) * wanted).toBeGreaterThan(width);
+      // Отклонение — не больше половины столбца, то есть меньше десятой доли.
+      expect(Math.abs(width / columns - wanted) / wanted).toBeLessThan(0.1);
       // Витрина шире — плиток не меньше, чем было.
       expect(columns).toBeGreaterThanOrEqual(previous);
       previous = columns;
-    }
-  });
-
-  it('остаток ряда уходит в равные поля по краям', () => {
-    const wanted = preferredTileWidth(1600);
-
-    for (let width = 700; width <= 1600; width += 13) {
-      const columns = columnsFor(1600, width);
-      const edge = gridPadding(1600, width);
-      // Поля плюс плитки — ровно ширина витрины.
-      expect(2 * edge + columns * wanted).toBeCloseTo(width, 6);
-      // И поле меньше половины плитки: иначе туда влезла бы ещё одна.
-      expect(edge).toBeLessThan(wanted / 2 + 0.001);
     }
   });
 

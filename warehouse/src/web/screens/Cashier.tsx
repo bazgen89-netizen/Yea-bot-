@@ -29,13 +29,7 @@ import { recommendedFor } from '../../db/recommendations';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
-import {
-  clampSplit,
-  columnsFor,
-  DEFAULT_SPLIT,
-  gridPadding,
-  preferredTileWidth,
-} from '../../domain/split';
+import { clampSplit, columnsFor, DEFAULT_SPLIT } from '../../domain/split';
 import { formatQty } from '../../domain/qty';
 import type {
   CounterpartyWithTotals,
@@ -194,11 +188,9 @@ export function Cashier() {
   // Размер плитки задаёт окно, число плиток — ширина витрины. Двигаем
   // границу — товаров видно больше или меньше, а карточки остаются теми же.
   const windowWidth = useWindowDimensions().width;
-  const catalogWidth = Math.max(0, (bodyWidth - SPLITTER_WIDTH) * split);
-  const columns = columnsFor(windowWidth, catalogWidth);
-  // Ширина плитки — в точках и неизменна; остаток ряда уходит в поля.
-  const tileWidth = preferredTileWidth(windowWidth);
-  const gridEdge = gridPadding(windowWidth, catalogWidth);
+  // Ряд заполняется целиком: ширина плитки — доля ряда, а не число точек.
+  // Столбцов столько, чтобы плитка была как можно ближе к своему размеру.
+  const columns = columnsFor(windowWidth, Math.max(0, (bodyWidth - SPLITTER_WIDTH) * split));
 
   function dragSplit(pageX: number, save = false): void {
     if (bodyWidth <= 0) return;
@@ -440,7 +432,7 @@ export function Cashier() {
           ) : null}
 
           {browse === 'categories' ? (
-            <ScrollView contentContainerStyle={[styles.tiles, { paddingHorizontal: gridEdge }]}>
+            <ScrollView contentContainerStyle={styles.tiles}>
               {categories.map((item) => (
                 <Pressable
                   key={item.id}
@@ -450,7 +442,7 @@ export function Cashier() {
                     setCategory({ id: item.id, name: item.name });
                     setBrowse('products');
                   }}
-                  style={[styles.tile, styles.catTile, { width: tileWidth }]}
+                  style={[styles.tile, styles.catTile, { width: `${100 / columns}%` }]}
                 >
                   {/* Цветная полоса сверху — их примета. Цвет берётся от
                       самого названия, чтобы у категории он был всегда один
@@ -470,7 +462,7 @@ export function Cashier() {
               ) : null}
             </ScrollView>
           ) : (
-            <ScrollView contentContainerStyle={[styles.tiles, { paddingHorizontal: gridEdge }]}>
+            <ScrollView contentContainerStyle={styles.tiles}>
               {browse === 'groups' ? (
                 <Text style={styles.browseNote}>
                   Групп в каталоге пока нет — ниже всё, что вне групп.
@@ -481,7 +473,7 @@ export function Cashier() {
                 <Tile
                   key={product.id}
                   product={product}
-                  width={tileWidth}
+                  columns={columns}
                   selected={selected === product.id}
                   onPick={pick}
                 />
@@ -918,13 +910,13 @@ export function Cashier() {
  */
 const Tile = memo(function Tile({
   product,
-  width,
+  columns,
   selected,
   onPick,
 }: {
   product: ProductWithStock;
-  /** Ширина в точках. Одна и та же, куда бы ни двигали границу. */
-  width: number;
+  /** Сколько плиток в ряду: её ширина — доля от него. */
+  columns: number;
   selected: boolean;
   onPick: (product: ProductWithStock) => void;
 }) {
@@ -932,7 +924,7 @@ const Tile = memo(function Tile({
     <Pressable
       accessibilityRole="button"
       onPress={() => onPick(product)}
-      style={[styles.tile, { width }, selected && styles.tileSelected]}
+      style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
     >
       <Text style={styles.tileStock}>
         {formatQty(product.stock)} {product.unit}

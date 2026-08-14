@@ -41,6 +41,7 @@ export function CashierNewClient({
   const [discount, setDiscount] = useState(0);
   const [savings, setSavings] = useState(false);
   const [card, setCard] = useState('');
+  const [birthday, setBirthday] = useState('');
 
   useEffect(() => {
     if (visible) return;
@@ -51,6 +52,7 @@ export function CashierNewClient({
     setDiscount(0);
     setSavings(false);
     setCard('');
+    setBirthday('');
   }, [visible]);
 
   function create(): void {
@@ -69,6 +71,7 @@ export function CashierNewClient({
       discount_bp: loyalty === 'discount' ? discount : 0,
       enable_savings: savings,
       discount_card: card.trim() || null,
+      birthday: birthday.trim() || null,
     });
     refresh();
 
@@ -227,9 +230,24 @@ export function CashierNewClient({
                 </Pressable>
               </View>
             ) : (
-              <Text style={styles.hint}>
-                Бонусы начисляются по правилам компании — «Лояльность / Бонусы».
-              </Text>
+              /* Правила бонусов — не текст в кассе, а настройки компании
+                 («Лояльность / Бонусы»). Кассир должен видеть их такими,
+                 какие они сейчас: обещать «3 %», когда в настройках 5,
+                 хуже, чем не обещать ничего. */
+              <View style={styles.info}>
+                <WebIcon.info size={20} color={pos.bar} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLine}>
+                    {settings.cashbackRateBp / 100}% с покупки на бонусный счет
+                  </Text>
+                  <Text style={styles.infoLine}>
+                    {settings.bonusLimitBp / 100}% чека можно оплатить бонусами
+                  </Text>
+                  <Text style={styles.infoLine}>
+                    1 бонус = {settings.redemptionRateBp / 10000} руб скидки в чеке
+                  </Text>
+                </View>
+              </View>
             )}
 
             <View style={styles.field}>
@@ -242,6 +260,20 @@ export function CashierNewClient({
                 style={styles.input}
               />
               <WebIcon.billing size={20} color={pos.text} />
+            </View>
+
+            {/* День рождения — последняя строка: ради него и заводят карточку
+                тем, кто заходит редко. */}
+            <View style={styles.field}>
+              <TextInput
+                value={birthday}
+                onChangeText={setBirthday}
+                placeholder="Дата рождения"
+                placeholderTextColor={pos.muted}
+                accessibilityLabel="Дата рождения"
+                style={styles.input}
+              />
+              <WebIcon.calendar size={20} color={pos.text} />
             </View>
           </ScrollView>
 
@@ -390,7 +422,16 @@ const styles = StyleSheet.create({
   checkMark: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF' },
   checkLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
 
-  hint: { fontFamily: pos.font, fontSize: 14, color: pos.muted, lineHeight: 20 },
+  // Голубая плашка с правилами бонусов — её же.
+  info: {
+    flexDirection: 'row',
+    gap: 14,
+    padding: 18,
+    backgroundColor: '#E8F1FB',
+    borderRadius: 6,
+  },
+  infoText: { flex: 1, gap: 4 },
+  infoLine: { fontFamily: pos.font, fontSize: 16, color: pos.bar, lineHeight: 22 },
 
   create: {
     height: 66,

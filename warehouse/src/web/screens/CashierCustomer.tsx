@@ -131,6 +131,7 @@ export function CashierCustomer({
             </Pressable>
           </View>
 
+          <View style={styles.sheet}>
           {/* «Создать клиента» появляется, только когда никого не нашли: у
               него окно — это список покупателей, и первой строкой в нём стоит
               покупатель, а не кнопка. */}
@@ -193,6 +194,7 @@ export function CashierCustomer({
               </Text>
             ) : null}
           </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -243,24 +245,32 @@ const styles = StyleSheet.create({
     width: 680,
     maxWidth: '96%',
     maxHeight: '85%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 4,
-    // Оранжевая рамка вокруг всего окна — его примета: пока идёт поиск
-    // покупателя, касса обведена, и видно, что она ждёт именно этого.
-    borderWidth: 2,
-    borderColor: pos.accent,
-    overflow: 'hidden',
     zIndex: 1,
   },
 
+  // Обведена именно строка поиска, а не всё окно: пока ищут покупателя,
+  // оранжевым горит поле, в которое набирают.
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     height: 70,
     paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: pos.border,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: pos.accent,
+    borderRadius: 4,
+  },
+  // Список — отдельный лист под строкой, со своей тенью.
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    marginTop: 6,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
   },
   searchInput: { outlineWidth: 0,
     flex: 1,

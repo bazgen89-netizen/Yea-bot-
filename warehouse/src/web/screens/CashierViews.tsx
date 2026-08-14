@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CashierDebts } from './CashierDebts';
+import { CashierShifts } from './CashierShifts';
 import { listCounterparties } from '../../db/counterparties';
 import { listProducts } from '../../db/products';
 import { listSales } from '../../db/sales';
@@ -51,11 +52,18 @@ export const VIEW_TITLE: Record<Exclude<CashierView, 'sale'>, string> = {
   settings: 'Настройки',
 };
 
-export function CashierPanel({ view }: { view: Exclude<CashierView, 'sale'> }) {
+export function CashierPanel({
+  view,
+  onCloseShift,
+}: {
+  view: Exclude<CashierView, 'sale'>;
+  /** Закрыть смену — красной кнопкой из карточки смены. */
+  onCloseShift?: () => void;
+}) {
   if (view === 'receipts') return <Receipts />;
   if (view === 'clients') return <Clients />;
   if (view === 'products') return <Products />;
-  if (view === 'shifts') return <Shifts />;
+  if (view === 'shifts') return <CashierShifts onCloseShift={onCloseShift} />;
   if (view === 'debts') return <CashierDebts />;
   if (view === 'money') return <Money />;
   if (view === 'xreport') return <XReport />;

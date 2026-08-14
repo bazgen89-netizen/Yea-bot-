@@ -879,7 +879,7 @@ export function Cashier() {
             </Pressable>
             <Text style={styles.panelTitle}>{VIEW_TITLE[view]}</Text>
           </View>
-          <CashierPanel view={view} />
+          <CashierPanel view={view} onCloseShift={() => setAskClose(true)} />
         </View>
       ) : null}
     </View>

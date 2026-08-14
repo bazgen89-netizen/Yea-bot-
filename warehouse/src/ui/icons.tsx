@@ -227,6 +227,9 @@ export const WebIcon = {
   coins: (p: Props) => (
     <MaterialCommunityIcons name="database" size={p.size ?? 18} color={p.color} />
   ),
+  printer: (p: Props) => (
+    <MaterialCommunityIcons name="printer-outline" size={p.size ?? 20} color={p.color} />
+  ),
   handshake: (p: Props) => (
     <MaterialCommunityIcons name="handshake-outline" size={p.size ?? 22} color={p.color} />
   ),

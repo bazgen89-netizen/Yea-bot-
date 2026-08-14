@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { Scrollable } from '../Scrollable';
+import { useCashierKeys } from './useCashierKeys';
 import { CashierMenu } from './CashierMenu';
 import { CashierCloseShift } from './CashierCloseShift';
 import { CashierCustomer } from './CashierCustomer';
@@ -153,6 +154,7 @@ export function Cashier() {
   const [closing, setClosing] = useState(false);
   const [recoSettings, setRecoSettings] = useState(false);
   const [newClient, setNewClient] = useState(false);
+  const searchField = useRef<TextInput>(null);
   /**
    * Что показывает витрина: товары, категории или группы.
    *
@@ -306,6 +308,36 @@ export function Cashier() {
     cart.add(product, 1000);
   };
 
+  /**
+   * Буквы в рамках — не украшение, а клавиши.
+   *
+   * У них рядом с поиском товара стоит ⌐F¬, рядом с покупателем — ⌐C¬, и это
+   * ровно то, чем их вызывают, не отрывая рук от клавиатуры. Ловим по коду
+   * клавиши, а не по букве: в русской раскладке на тех же местах «а» и «с»,
+   * и по букве сочетание работало бы через раз.
+   *
+   * Пока открыто любое окно или набирают в поле, клавиши молчат: «с» в имени
+   * покупателя должна быть буквой, а не командой.
+   */
+  const busy =
+    menu || paying || opening || askClose || closing || pickingCustomer ||
+    discounting || recoSettings || newClient || browseMenu || view !== 'sale';
+
+  useCashierKeys(!busy, (event) => {
+    const tag = (event.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    if (event.code === 'KeyF') {
+      event.preventDefault();
+      searchField.current?.focus();
+    }
+    if (event.code === 'KeyC') {
+      event.preventDefault();
+      setPickingCustomer(true);
+    }
+  });
+
   const startPay = () => {
     if (cart.lines.length === 0) {
       say(
@@ -405,6 +437,7 @@ export function Cashier() {
               <WebIcon.home size={22} color="#FFFFFF" />
             </Pressable>
             <TextInput
+              ref={searchField}
               value={search}
               onChangeText={setSearch}
               placeholder="Поиск по наименованию, артикулу, штрихкоду, коду и описанию"

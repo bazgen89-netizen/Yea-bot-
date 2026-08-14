@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { Scrollable } from '../Scrollable';
 
 import {
   createCounterparty,
@@ -142,7 +144,7 @@ export function CashierCustomer({
             </Pressable>
           ) : null}
 
-          <ScrollView style={styles.list}>
+          <Scrollable style={styles.list}>
             {/* Розничный покупатель — не отсутствие выбора, а выбор: им
                 снимают ранее выбранного клиента, не закрывая чек. Пока никто
                 не выбран, снимать нечего, и строки нет. */}
@@ -193,7 +195,7 @@ export function CashierCustomer({
                 Клиент не найден. Проверьте номер или заведите нового — Enter.
               </Text>
             ) : null}
-          </ScrollView>
+          </Scrollable>
           </View>
         </View>
       </View>
@@ -263,6 +265,8 @@ const styles = StyleSheet.create({
   },
   // Список — отдельный лист под строкой, со своей тенью.
   sheet: {
+    flexShrink: 1,
+    minHeight: 0,
     backgroundColor: '#FFFFFF',
     borderRadius: 4,
     marginTop: 6,
@@ -302,7 +306,10 @@ const styles = StyleSheet.create({
   createPlus: { fontFamily: pos.font, fontSize: 18, color: pos.bar },
   createLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
 
-  list: { flexGrow: 0 },
+  // Список занимает всю оставшуюся высоту окна и прокручивается: клиентов
+  // тысячи, и раньше он просто обрывался по нижнему краю — докрутить до
+  // конца было нельзя.
+  list: { flex: 1, minHeight: 0 },
   // Строки высокие: по ним попадают пальцем, а не мышью.
   row: {
     flexDirection: 'row',

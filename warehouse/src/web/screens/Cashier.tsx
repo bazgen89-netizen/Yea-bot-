@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CashierMenu } from './CashierMenu';
+import { CashierCloseShift } from './CashierCloseShift';
 import { CashierCustomer } from './CashierCustomer';
 import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierPayment } from './CashierPayment';
+import { CashierSheet } from './CashierSheet';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { formatPhone } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
@@ -49,6 +51,11 @@ export function Cashier() {
   // пунктом меню «Создать возврат»; касса при этом остаётся той же.
   const [mode, setMode] = useState<'sale' | 'return'>('sale');
   const [opening, setOpening] = useState(false);
+  // Замок на панели закрытой смены открывается под курсором на кнопке.
+  const [unlocking, setUnlocking] = useState(false);
+  // Закрытие смены в два шага: сначала «действительно?», потом пересчёт ящика.
+  const [askClose, setAskClose] = useState(false);
+  const [closing, setClosing] = useState(false);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
   const [pickingCustomer, setPickingCustomer] = useState(false);
@@ -288,28 +295,36 @@ export function Cashier() {
             </Pressable>
           </Pressable>
 
-          <View style={styles.recommendRow}>
-            <Text style={styles.recommendLabel}>Рекомендации</Text>
-            <WebIcon.gear size={18} color="#8E8E93" />
-          </View>
+          {shift ? (
+            <View style={styles.recommendRow}>
+              <Text style={styles.recommendLabel}>Рекомендации</Text>
+              <WebIcon.gear size={18} color="#8E8E93" />
+            </View>
+          ) : (
+            <View style={styles.recommendRow}>
+              <Text style={styles.recommendLabel}>Смена закрыта</Text>
+            </View>
+          )}
 
-          {/* Пока смена закрыта, продавать нечего — и вместо пустого чека
-              справа стоит предложение её открыть. У него для этого отдельный
-              экран, на который касса сама уводит: продажа без смены не имеет
-              смысла, и узнать об этом кассир должен до того, как набрал чек. */}
+          {/* Пока смена закрыта, чека нет вовсе: вместо него — замок и
+              кнопка. Объяснять тут нечего, и он ничего не объясняет: замок
+              закрыт, кнопка одна, и под курсором на ней замок открывается.
+              Ровно это и надо понять. */}
           {!shift ? (
             <View style={styles.emptyReceipt}>
-              <WebIcon.lockClosed size={54} color="#C7C7CC" />
-              <Text style={styles.shiftClosedTitle}>Смена закрыта</Text>
-              <Text style={styles.shiftClosedNote}>
-                Чтобы продавать, откройте смену. Чеки будут копиться в ней, пока её не закроют.
-              </Text>
+              {unlocking ? (
+                <WebIcon.lockOpen size={106} color="#C7C7CC" />
+              ) : (
+                <WebIcon.lockClosed size={106} color="#C7C7CC" />
+              )}
               <Pressable
                 accessibilityRole="button"
                 onPress={openShiftNow}
+                onHoverIn={() => setUnlocking(true)}
+                onHoverOut={() => setUnlocking(false)}
                 style={({ pressed }) => [styles.openShift, pressed && { opacity: 0.9 }]}
               >
-                <Text style={styles.openShiftLabel}>Открыть смену</Text>
+                <Text style={styles.openShiftLabel}>ОТКРЫТЬ СМЕНУ</Text>
               </Pressable>
             </View>
           ) : cart.lines.length === 0 ? (
@@ -487,12 +502,37 @@ export function Cashier() {
         onOpened={() => say('Смена открыта', 'Чеки будут копиться в ней, пока её не закроют.')}
       />
 
+      {/* Закрытие смены спрашивает дважды, и первым — «действительно?».
+          Закрытие необратимо, а мимо пункта меню попадают легко; пересчёт
+          ящика идёт вторым шагом, когда кассир уже понял, что закрывает. */}
+      <CashierSheet
+        visible={askClose}
+        title="Вы действительно хотите закрыть смену?"
+        onClose={() => setAskClose(false)}
+        items={[
+          {
+            label: 'Закрыть смену',
+            severity: 'error',
+            shortKey: 'Enter',
+            onPress: () => setClosing(true),
+          },
+        ]}
+      />
+
+      <CashierCloseShift
+        shiftId={shift?.id ?? null}
+        visible={closing}
+        onClose={() => setClosing(false)}
+      />
+
       <CashierMenu
         visible={menu}
         onClose={() => setMenu(false)}
         onOpenView={setView}
         mode={mode}
+        who={shop}
         onOpenShift={openShiftNow}
+        onCloseShift={() => setAskClose(true)}
         onToggleMode={() => {
           // Набранное не переносится из продажи в возврат: это разные чеки, и
           // молча превратить один в другой значило бы вернуть покупателю то,
@@ -696,23 +736,16 @@ const styles = StyleSheet.create({
 
   emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   emptyReceiptText: { fontSize: 34, color: '#C7C7CC' },
-  shiftClosedTitle: { fontFamily: pos.font, fontSize: 26, color: pos.text },
-  shiftClosedNote: {
-    fontFamily: pos.font,
-    fontSize: 15,
-    color: pos.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 320,
-  },
+  // Синяя, а не зелёная: у него это обычная главная кнопка, того же цвета,
+  // что и полоса продажи. Зелёный в кассе не значит ничего.
   openShift: {
     marginTop: 8,
-    paddingHorizontal: 34,
-    paddingVertical: 15,
+    paddingHorizontal: 26,
+    paddingVertical: 12,
     borderRadius: 4,
-    backgroundColor: pos.green,
+    backgroundColor: pos.bar,
   },
-  openShiftLabel: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
+  openShiftLabel: { fontFamily: pos.font, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.6 },
 
   receipt: { flex: 1 },
   receiptRow: {

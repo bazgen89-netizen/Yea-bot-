@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useCashierKeys } from './useCashierKeys';
 import { getSettings } from '../../db/settings';
 import { discountFromPercent, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb, parseMoney, type Kopecks } from '../../domain/money';
@@ -91,19 +92,12 @@ export function CashierDiscount({
       // настроенных значило бы обещать скидку, которой в компании нет.
       [];
 
-  useEffect(() => {
-    if (!visible) return;
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        apply();
-      }
-    };
-
-    globalThis.addEventListener?.('keydown', onKey);
-    return () => globalThis.removeEventListener?.('keydown', onKey);
+  useCashierKeys(visible, (event) => {
+    if (event.key === 'Escape') onClose();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      apply();
+    }
   });
 
   return (

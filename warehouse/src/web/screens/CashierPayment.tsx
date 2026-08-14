@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useCashierKeys } from './useCashierKeys';
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
 import { cashOptions, change } from '../../domain/payment';
 import type { Kopecks } from '../../domain/money';
@@ -113,19 +114,12 @@ export function CashierPayment({
     setTaken(next);
   }
 
-  useEffect(() => {
-    if (!visible) return;
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        accept();
-      }
-    };
-
-    globalThis.addEventListener?.('keydown', onKey);
-    return () => globalThis.removeEventListener?.('keydown', onKey);
+  useCashierKeys(visible, (event) => {
+    if (event.key === 'Escape') onClose();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      accept();
+    }
   });
 
   const creditBlocked = method === 'credit' && !customer;

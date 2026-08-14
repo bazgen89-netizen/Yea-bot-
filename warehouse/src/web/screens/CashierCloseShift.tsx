@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useCashierKeys } from './useCashierKeys';
-import { Dropdown } from '../Dropdown';
-import { lastClosingCash, listRegisters, openShift } from '../../db/shifts';
+import { closeShift, shiftReport } from '../../db/shifts';
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
 import type { Id } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -11,100 +10,104 @@ import { say } from '../../ui/alert';
 import { pos } from '../../ui/webTheme';
 
 /**
- * «Открытие смены» — окно кассы.
+ * «Закрытие смены» — окно кассы.
  *
- * Смена не открывается одним нажатием: у неё есть начало, и начало это —
- * **сверка денег в ящике**. Кассир выбирает кассу и подтверждает сумму, с
- * которой начинает; без неё в конце смены не с чем сравнивать пересчёт, и
- * расхождение показать было бы неоткуда.
+ * Зеркало «Открытия смены»: смена началась со сверки денег в ящике и ею же
+ * заканчивается. Кассир пересчитывает ящик и вводит, сколько в нём вышло; из
+ * разницы с ожидаемым и получается расхождение, ради которого смену вообще
+ * закрывают, а не просто перестают продавать.
  *
- * Сумма подставляется та, что осталась с прошлой смены этой кассы: ящик на
- * ночь не опустошают, и пересчитывать его заново кассир не должен — он его
- * сверяет.
+ * Спрашивается это **после** подтверждения — «Вы действительно хотите закрыть
+ * смену?». Порядок важен: закрытие необратимо, и понять, что закрываешь смену,
+ * кассир должен до того, как начал считать деньги.
  *
- * Управление клавишами его же: Esc закрывает, Enter открывает смену.
+ * Сумма подставляется ожидаемая — та, что должна быть в ящике по чекам. Это
+ * подсказка, а не ответ: если ящик сошёлся, кассиру нечего вводить, а если
+ * нет — он видит, от чего отклоняется.
  */
-export function CashierOpenShift({
+export function CashierCloseShift({
+  shiftId,
   visible,
   onClose,
-  onOpened,
 }: {
+  shiftId: Id | null;
   visible: boolean;
   onClose: () => void;
-  onOpened: () => void;
 }) {
   const { db, refresh } = useDatabase();
-  const registers = useQuery((database) => listRegisters(database));
+  const report = useQuery(
+    (database) => (shiftId ? shiftReport(database, shiftId) : null),
+    [shiftId],
+  );
 
-  // Свободные кассы: на занятой смена уже идёт, и открыть вторую нельзя.
-  const free = registers.filter((register) => register.open_shift_id === null);
-
-  const [registerId, setRegisterId] = useState<Id | null>(null);
   const [cash, setCash] = useState('');
   const [touched, setTouched] = useState(false);
 
-  const chosen = free.find((register) => register.id === registerId) ?? free[0] ?? null;
-
-  // Пока сумму не трогали, она следует за выбранной кассой: у каждой свой
-  // ящик, и остаток в нём свой.
+  // Пока сумму не трогали, она следует за ожидаемой: касса пересчитала её
+  // сама, и переписывать одно и то же кассир не должен.
   useEffect(() => {
-    if (!visible || !chosen || touched) return;
-    setCash(String(lastClosingCash(db, chosen.id) / 100));
-  }, [visible, chosen?.id, touched, db, chosen]);
+    if (!visible || !report || touched) return;
+    setCash(String(report.expectedCash / 100));
+  }, [visible, report, touched]);
 
-  // Окно закрылось — следующее открытие начинается с чистого листа.
   useEffect(() => {
-    if (!visible) {
-      setTouched(false);
-      setRegisterId(null);
-    }
+    if (!visible) setTouched(false);
   }, [visible]);
 
-  function start(): void {
-    if (!chosen) {
-      say('Нет свободной кассы', 'Смена уже открыта на всех кассах.');
-      return;
-    }
+  function finish(): void {
+    if (!report) return;
 
-    const opening = parseMoney(cash);
-    if (opening === null) {
+    const counted = parseMoney(cash);
+    if (counted === null) {
       say('Проверьте сумму', 'Сумма денег в кассе — число.');
       return;
     }
 
+    let z;
     try {
-      openShift(db, { registerId: chosen.id, openingCash: opening, cashier: 'waystea' });
+      z = closeShift(db, report.shift.id, counted);
     } catch (error) {
-      say('Смена не открыта', String(error));
+      say('Смена не закрыта', String(error));
       return;
     }
 
     refresh();
-    onOpened();
     onClose();
+    say(
+      `Z-отчёт по смене №${z.shift.id}`,
+      [
+        `Чеков: ${z.receipts}`,
+        `Выручка: ${formatMoneyWeb(z.revenue)} руб`,
+        `Ожидалось в кассе: ${formatMoneyWeb(z.expectedCash)} руб`,
+        `Пересчитано: ${formatMoneyWeb(counted)} руб`,
+        `Расхождение: ${formatMoneyWeb(z.difference ?? 0)} руб`,
+      ].join('\n'),
+    );
   }
 
   useCashierKeys(visible, (event) => {
     if (event.key === 'Escape') onClose();
     if (event.key === 'Enter') {
       event.preventDefault();
-      start();
+      finish();
     }
   });
+
+  if (!report) return null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.root}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Закрыть окно открытия смены"
+          accessibilityLabel="Закрыть окно закрытия смены"
           style={StyleSheet.absoluteFill}
           onPress={onClose}
         />
 
         <View style={styles.panel}>
           <View style={styles.head}>
-            <Text style={styles.title}>Открытие смены</Text>
+            <Text style={styles.title}>Закрытие смены</Text>
             <Pressable accessibilityRole="button" onPress={onClose} style={styles.closeRow}>
               <Text style={styles.closeLabel}>ЗАКРЫТЬ</Text>
               <View style={styles.key}>
@@ -117,25 +120,15 @@ export function CashierOpenShift({
 
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Касса</Text>
-            {free.length === 0 ? (
-              <Text style={styles.empty}>Все кассы заняты — смена уже открыта.</Text>
-            ) : (
-              <Dropdown
-                value={chosen ? String(chosen.id) : ''}
-                options={free.map((register) => ({
-                  value: String(register.id),
-                  // Магазин приписывается только если его нет в названии
-                  // кассы: «Касса — Рынок · Рынок» читается как ошибка.
-                  label:
-                    register.location_name && !register.name.includes(register.location_name)
-                      ? `${register.name} · ${register.location_name}`
-                      : register.name,
-                }))}
-                onChange={(value) => setRegisterId(Number(value))}
-                variant="field"
-                label="Касса"
-              />
-            )}
+            <Text style={styles.value}>
+              {report.location_name && !report.register_name.includes(report.location_name)
+                ? `${report.register_name} · ${report.location_name}`
+                : report.register_name}
+            </Text>
+            <Text style={styles.hint}>
+              Смена №{report.shift.id}, чеков {report.receipts} на{' '}
+              {formatMoneyWeb(report.revenue)} руб
+            </Text>
           </View>
 
           <View style={styles.field}>
@@ -151,18 +144,12 @@ export function CashierOpenShift({
               style={styles.input}
             />
             <Text style={styles.hint}>
-              Осталось с прошлой смены:{' '}
-              {formatMoneyWeb(chosen ? lastClosingCash(db, chosen.id) : 0)} руб
+              Ожидается по чекам: {formatMoneyWeb(report.expectedCash)} руб
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: free.length === 0 }}
-            onPress={start}
-            style={[styles.confirm, free.length === 0 && styles.confirmOff]}
-          >
-            <Text style={styles.confirmLabel}>ОТКРЫТЬ СМЕНУ</Text>
+          <Pressable accessibilityRole="button" onPress={finish} style={styles.confirm}>
+            <Text style={styles.confirmLabel}>ЗАКРЫТЬ СМЕНУ</Text>
             <View style={styles.confirmKey}>
               <Text style={styles.confirmKeyLabel}>ENTER</Text>
             </View>
@@ -207,16 +194,11 @@ const styles = StyleSheet.create({
   },
   keyLabel: { fontFamily: pos.font, fontSize: 11, color: pos.muted },
 
-  section: {
-    fontFamily: pos.font,
-    fontSize: 17,
-    color: pos.text,
-    paddingHorizontal: 26,
-    marginTop: 26,
-  },
+  section: { fontFamily: pos.font, fontSize: 17, color: pos.text, paddingHorizontal: 26, marginTop: 26 },
 
   field: { paddingHorizontal: 26, marginTop: 18, gap: 6 },
   fieldLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
+  value: { fontFamily: pos.font, fontSize: 18, color: pos.text },
   input: {
     height: 42,
     borderBottomWidth: 1,
@@ -227,8 +209,9 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   hint: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
-  empty: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
 
+  // Закрытие красное, а не оранжевое: это конец смены, и перепутать его с
+  // открытием нельзя — у него в меню этот пункт единственный красный.
   confirm: {
     marginTop: 26,
     height: 52,
@@ -236,9 +219,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,
-    backgroundColor: pos.accent,
+    backgroundColor: '#D32F2F',
   },
-  confirmOff: { opacity: 0.5 },
   confirmLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
   confirmKey: {
     paddingHorizontal: 7,

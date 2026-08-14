@@ -1,13 +1,14 @@
 import { useRouter, type Href } from 'expo-router';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { closeShift, openShiftAnywhere, shiftReport } from '../../db/shifts';
-import { formatMoneyWeb } from '../../domain/money';
+import { openShiftAnywhere } from '../../db/shifts';
+import { currentStaff } from '../../db/staff';
+import { ROLE_LABEL } from '../../domain/permissions';
+import { useCashierKeys } from './useCashierKeys';
 import type { CashierView } from './CashierViews';
-import { useDatabase, useQuery } from '../../state/DatabaseProvider';
-import { confirm, say } from '../../ui/alert';
-import { Icon, WebIcon } from '../../ui/icons';
+import { useQuery } from '../../state/DatabaseProvider';
+import { WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
 /**
@@ -54,6 +55,8 @@ export function CashierMenu({
   mode,
   onToggleMode,
   onOpenShift,
+  onCloseShift,
+  who,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -64,61 +67,25 @@ export function CashierMenu({
   onToggleMode: () => void;
   /** Показать окно «Открытие смены» — оно живёт на самой кассе. */
   onOpenShift: () => void;
+  /**
+   * Начать закрытие смены.
+   *
+   * Само закрытие живёт на кассе, а не здесь: оно спрашивает дважды —
+   * «действительно?» нижним листом и пересчёт ящика окном, — а меню к этому
+   * моменту уже закрыто, и показать что-либо из-под него оно не может.
+   */
+  onCloseShift: () => void;
+  /** Чем подписана касса внизу — «Чайный бар». Им же подписан и вход. */
+  who: string;
 }) {
   const router = useRouter();
-  const { db, refresh } = useDatabase();
 
   const shift = useQuery((database) => openShiftAnywhere(database));
-  const report = useQuery(
-    (database) => (shift ? shiftReport(database, shift.id) : null),
-    [shift?.id],
-  );
-
-  /**
-   * Закрыть смену.
-   *
-   * Сначала спрашиваем, точно ли закрывать, и только потом пересчитываем
-   * ящик: закрытие необратимо, а нажать пункт меню мимо легко. Раньше первым
-   * шёл пересчёт, и кассир вводил сумму, ещё не понимая, что закрывает смену.
-   */
-  function finish() {
-    if (!report) return;
-
-    confirm(
-      'Действительно хотите закрыть смену?',
-      `Смена №${report.shift.id}, чеков ${report.receipts} на ${formatMoneyWeb(report.revenue)}. ` +
-        'После закрытия чеки пойдут в следующую смену. Отменить нельзя.',
-      'Закрыть смену',
-      () => {
-        // Пересчитанные наличные спрашиваем: смысл закрытия — сверить ящик
-        // с чеками, а не переписать одно в другое.
-        const answer = globalThis.prompt?.(
-          `Сколько наличных в кассе?\nОжидается ${formatMoneyWeb(report.expectedCash)}`,
-          String(report.expectedCash / 100),
-        );
-        if (answer === null || answer === undefined) return;
-
-        const counted = Math.round(Number(answer.replace(',', '.')) * 100);
-        if (!Number.isFinite(counted)) {
-          say('Проверьте сумму', 'Наличные — число.');
-          return;
-        }
-
-        const z = closeShift(db, report.shift.id, counted);
-        refresh();
-        say(
-          `Z-отчёт по смене №${z.shift.id}`,
-          [
-            `Чеков: ${z.receipts}`,
-            `Выручка: ${formatMoneyWeb(z.revenue)}`,
-            `Ожидалось в кассе: ${formatMoneyWeb(z.expectedCash)}`,
-            `Пересчитано: ${formatMoneyWeb(counted)}`,
-            `Расхождение: ${formatMoneyWeb(z.difference ?? 0)}`,
-          ].join('\n'),
-        );
-      },
-    );
-  }
+  // Кто за прилавком. Пока сотрудника не выбрали, касса подписана точкой —
+  // так же, как у него: там в шапке меню стоит «Чайный бар» и «Кассир».
+  const staff = useQuery((database) => currentStaff(database));
+  const name = staff?.name ?? who;
+  const role = staff ? ROLE_LABEL[staff.role] : 'Кассир';
 
   const tint = pos.text;
 
@@ -129,7 +96,7 @@ export function CashierMenu({
       // У него это «Выйти» — выход из кассирского приложения. Входа у нас
       // нет, и единственное, куда отсюда выходят, — кабинет.
       label: 'Выйти',
-      icon: <WebIcon.chevronLeft size={22} color={tint} />,
+      icon: <WebIcon.logout size={22} color={tint} />,
       href: '/',
       key: '6',
     },
@@ -142,14 +109,14 @@ export function CashierMenu({
           // у него он так и устроен — `toggleDocType`, и подпись меняется
           // на обратную, пока возврат набирается.
           label: mode === 'sale' ? 'Создать возврат' : 'Вернуться к продаже',
-          icon: <WebIcon.goods size={22} color={tint} />,
+          icon: <WebIcon.loop size={22} color={tint} />,
           action: onToggleMode,
           key: '4',
         },
         {
           label: 'Закрыть смену',
-          icon: <WebIcon.lockClosed size={22} color="#D32F2F" />,
-          action: finish,
+          icon: <WebIcon.closeCircle size={22} color="#D32F2F" />,
+          action: onCloseShift,
           key: '5',
           tone: 'danger',
         },
@@ -167,7 +134,7 @@ export function CashierMenu({
       ? [
           {
             label: 'Журнал чеков',
-            icon: <Icon.journal size={22} color={tint} />,
+            icon: <WebIcon.receiptLong size={22} color={tint} />,
             view: 'receipts' as const,
           },
         ]
@@ -204,25 +171,46 @@ export function CashierMenu({
     }, 0);
   };
 
-  // Цифра открывает раздел, пока меню на экране — как у него. Esc закрывает.
-  useEffect(() => {
-    if (!visible) return;
+  /**
+   * Цифры справа от пунктов показываются, только пока держат Shift.
+   *
+   * У него так же. Меню от этого читается как список слов, а не как список
+   * слов с номерами: цифры нужны тому, кто их уже знает, и он их спросит сам.
+   */
+  const [showKeys, setShowKeys] = useState(false);
 
-    const all = groups.flat();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-        return;
-      }
-      const item = all.find((entry) => entry.key === event.key);
-      if (item) {
-        event.preventDefault();
-        go(item);
-      }
+  useEffect(() => {
+    if (!visible) {
+      setShowKeys(false);
+      return;
+    }
+
+    const down = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') setShowKeys(true);
+    };
+    const up = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') setShowKeys(false);
     };
 
-    globalThis.addEventListener?.('keydown', onKey);
-    return () => globalThis.removeEventListener?.('keydown', onKey);
+    globalThis.addEventListener?.('keydown', down, true);
+    globalThis.addEventListener?.('keyup', up, true);
+    return () => {
+      globalThis.removeEventListener?.('keydown', down, true);
+      globalThis.removeEventListener?.('keyup', up, true);
+    };
+  }, [visible]);
+
+  // Цифра открывает раздел, пока меню на экране — как у него. Esc закрывает.
+  useCashierKeys(visible, (event) => {
+    if (event.key === 'Escape') {
+      onClose();
+      return;
+    }
+    const item = groups.flat().find((entry) => entry.key === event.key);
+    if (item) {
+      event.preventDefault();
+      go(item);
+    }
   });
 
   return (
@@ -243,11 +231,11 @@ export function CashierMenu({
               видеть, под кем открыта смена, важнее названия меню. */}
           <View style={styles.who}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarLetter}>W</Text>
+              <Text style={styles.avatarLetter}>{name.trim().slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={styles.whoText}>
-              <Text style={styles.whoName}>waystea</Text>
-              <Text style={styles.whoRole}>Владелец</Text>
+              <Text style={styles.whoName}>{name}</Text>
+              <Text style={styles.whoRole}>{role}</Text>
             </View>
           </View>
 
@@ -255,7 +243,7 @@ export function CashierMenu({
             {groups.map((items, index) => (
               <View key={index}>
                 <Divider />
-                <Group items={items} onPick={go} />
+                <Group items={items} onPick={go} showKeys={showKeys} />
               </View>
             ))}
           </ScrollView>
@@ -265,7 +253,15 @@ export function CashierMenu({
   );
 }
 
-function Group({ items, onPick }: { items: Item[]; onPick: (item: Item) => void }) {
+function Group({
+  items,
+  onPick,
+  showKeys,
+}: {
+  items: Item[];
+  onPick: (item: Item) => void;
+  showKeys: boolean;
+}) {
   return (
     <View>
       {items.map((item) => (
@@ -282,7 +278,9 @@ function Group({ items, onPick }: { items: Item[]; onPick: (item: Item) => void 
           <Text style={[styles.itemLabel, item.tone === 'danger' && styles.danger]}>
             {item.label}
           </Text>
-          {item.key ? <Text style={styles.itemKey}>{item.key}</Text> : null}
+          {item.key ? (
+            <Text style={[styles.itemKey, !showKeys && styles.itemKeyHidden]}>{item.key}</Text>
+          ) : null}
         </Pressable>
       ))}
     </View>
@@ -332,5 +330,7 @@ const styles = StyleSheet.create({
   itemLabel: { flex: 1, fontSize: 16, color: pos.text, fontFamily: pos.font },
   danger: { color: '#D32F2F' },
   itemKey: { fontSize: 13, color: pos.muted, fontFamily: pos.font },
+  // Прозрачная, а не убранная: иначе подписи прыгали бы вбок под Shift.
+  itemKeyHidden: { opacity: 0 },
   divider: { height: 1, backgroundColor: pos.border, marginVertical: 6 },
 });

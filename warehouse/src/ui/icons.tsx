@@ -198,11 +198,30 @@ export const WebIcon = {
   folder: (p: Props) => <Ionicons name="folder" size={p.size ?? 22} color={p.color ?? '#5B9BD5'} />,
   pencil: (p: Props) => <Ionicons name="pencil" size={p.size ?? 16} color={p.color} />,
   gear: (p: Props) => <Ionicons name="settings-sharp" size={p.size ?? 20} color={p.color} />,
+  // Замок кассы — контурный, как у неё: закрытый, пока смена закрыта, и
+  // открывающийся под курсором на кнопке «Открыть смену».
   lockOpen: (p: Props) => (
-    <MaterialCommunityIcons name="lock-open-variant" size={p.size ?? 20} color={p.color} />
+    <MaterialCommunityIcons name="lock-open-variant-outline" size={p.size ?? 20} color={p.color} />
   ),
   lockClosed: (p: Props) => (
-    <MaterialCommunityIcons name="lock" size={p.size ?? 20} color={p.color} />
+    <MaterialCommunityIcons name="lock-outline" size={p.size ?? 20} color={p.color} />
+  ),
+
+  /**
+   * Значки меню кассы — те же, что в кассирском приложении.
+   *
+   * Названия там материальные: Logout, Loop, HighlightOff, ReceiptLong,
+   * CalendarMonth. Здесь — их пары из наборов, которые в проекте уже есть.
+   */
+  logout: (p: Props) => (
+    <MaterialCommunityIcons name="logout" size={p.size ?? 22} color={p.color} />
+  ),
+  loop: (p: Props) => <MaterialCommunityIcons name="sync" size={p.size ?? 22} color={p.color} />,
+  closeCircle: (p: Props) => (
+    <MaterialCommunityIcons name="close-circle-outline" size={p.size ?? 22} color={p.color} />
+  ),
+  receiptLong: (p: Props) => (
+    <MaterialCommunityIcons name="receipt-text-outline" size={p.size ?? 22} color={p.color} />
   ),
   done: (p: Props) => <Ionicons name="checkmark" size={p.size ?? 19} color={p.color} />,
   comment: (p: Props) => (

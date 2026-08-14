@@ -7,6 +7,7 @@ import {
   listCounterparties,
   parseList,
 } from '../../db/counterparties';
+import { useCashierKeys } from './useCashierKeys';
 import { formatMoneyWeb } from '../../domain/money';
 import type { CounterpartyWithTotals } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -87,19 +88,12 @@ export function CashierCustomer({
     onClose();
   }
 
-  useEffect(() => {
-    if (!visible) return;
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'Enter' && found.length === 0 && search.trim().length >= 3) {
-        event.preventDefault();
-        create();
-      }
-    };
-
-    globalThis.addEventListener?.('keydown', onKey);
-    return () => globalThis.removeEventListener?.('keydown', onKey);
+  useCashierKeys(visible, (event) => {
+    if (event.key === 'Escape') onClose();
+    if (event.key === 'Enter' && found.length === 0 && search.trim().length >= 3) {
+      event.preventDefault();
+      create();
+    }
   });
 
   return (

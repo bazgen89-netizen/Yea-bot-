@@ -99,7 +99,7 @@ export function CashierMenu({
       // У него это «Выйти» — выход из кассирского приложения. Входа у нас
       // нет, и единственное, куда отсюда выходят, — кабинет.
       label: 'Выйти',
-      icon: <WebIcon.logout size={24} color={tint} />,
+      icon: <WebIcon.logout size={26} color={tint} />,
       href: '/',
       key: '6',
     },
@@ -112,13 +112,13 @@ export function CashierMenu({
           // у него он так и устроен — `toggleDocType`, и подпись меняется
           // на обратную, пока возврат набирается.
           label: mode === 'sale' ? 'Создать возврат' : 'Вернуться к продаже',
-          icon: <WebIcon.loop size={24} color={tint} />,
+          icon: <WebIcon.loop size={26} color={tint} />,
           action: onToggleMode,
           key: '4',
         },
         {
           label: 'Закрыть смену',
-          icon: <WebIcon.closeCircle size={24} color="#D32F2F" />,
+          icon: <WebIcon.closeCircle size={26} color="#D32F2F" />,
           action: onCloseShift,
           key: '5',
           tone: 'danger',
@@ -127,7 +127,7 @@ export function CashierMenu({
     : [
         {
           label: 'Открыть смену',
-          icon: <WebIcon.lockOpen size={24} color={tint} />,
+          icon: <WebIcon.lockOpen size={26} color={tint} />,
           action: onOpenShift,
         },
       ];
@@ -140,7 +140,7 @@ export function CashierMenu({
       ? [
           {
             label: 'Возврат долга',
-            icon: <WebIcon.handshake size={24} color={tint} />,
+            icon: <WebIcon.handshake size={26} color={tint} />,
             view: 'debts' as const,
             key: '3',
           },
@@ -150,13 +150,13 @@ export function CashierMenu({
       ? [
           {
             label: 'Журнал чеков',
-            icon: <WebIcon.receiptLong size={24} color={tint} />,
+            icon: <WebIcon.receiptLong size={26} color={tint} />,
             view: 'receipts' as const,
           },
         ]
       : []),
-    { label: 'Смены', icon: <WebIcon.calendar size={24} color={tint} />, view: 'shifts', key: '2' },
-    { label: 'Настройки', icon: <WebIcon.gear size={24} color={tint} />, view: 'settings', key: '1' },
+    { label: 'Смены', icon: <WebIcon.calendar size={26} color={tint} />, view: 'shifts', key: '2' },
+    { label: 'Настройки', icon: <WebIcon.gear size={26} color={tint} />, view: 'settings', key: '1' },
   ];
 
   const groups = [exit, shiftItems, rest];
@@ -321,9 +321,10 @@ const styles = StyleSheet.create({
   // 240 — минимальная ширина его списка. Панель у него узкая: пунктов мало,
   // и растягивать её не на что.
   panel: {
-    // 240 — их `PaperProps: { sx: { minWidth: 240 } }`; дальше панель
-    // растягивается под самую длинную подпись.
-    minWidth: 240,
+    // 240 — их наименьшая ширина, но на снимке меню заметно шире и выше:
+    // по нему попадают пальцем, а не мышью, и мелкий список для этого не
+    // годится. Поэтому строка выше, подпись крупнее, панель шире.
+    minWidth: 340,
     maxHeight: '92%',
     paddingVertical: 8,
     backgroundColor: '#FFFFFF',
@@ -336,35 +337,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: pos.bar,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLetter: { color: '#FFFFFF', fontSize: 18, fontFamily: pos.font },
+  avatarLetter: { color: '#FFFFFF', fontSize: 21, fontFamily: pos.font },
   whoText: { flex: 1 },
-  whoName: { fontFamily: pos.font, fontSize: 16, lineHeight: 24, color: pos.text },
-  whoRole: { fontFamily: pos.font, fontSize: 14, lineHeight: 21, color: pos.muted },
+  whoName: { fontFamily: pos.font, fontSize: 20, lineHeight: 27, color: pos.text },
+  whoRole: { fontFamily: pos.font, fontSize: 17, lineHeight: 24, color: pos.muted },
   // Мерки — их же, из Material: строка не ниже 48 при отступах 8 и 16,
   // столбец значка 56, сам значок 24, подпись 16.
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 48,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    minHeight: 62,
   },
   itemHover: { backgroundColor: pos.bg },
   itemIcon: { width: 56, alignItems: 'flex-start' },
-  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 16, lineHeight: 24, color: pos.text },
+  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 19, lineHeight: 26, color: pos.text },
   danger: { color: '#D32F2F' },
-  itemKey: { fontSize: 13, color: pos.muted, fontFamily: pos.font },
+  itemKey: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   // Прозрачная, а не убранная: иначе подписи прыгали бы вбок под Shift.
   itemKeyHidden: { opacity: 0 },
   divider: { height: 1, backgroundColor: pos.border },

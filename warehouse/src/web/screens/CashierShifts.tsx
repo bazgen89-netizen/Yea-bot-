@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { Scrollable } from '../Scrollable';
 
 import {
   listShifts,
@@ -50,7 +52,7 @@ export function CashierShifts({ onCloseShift }: { onCloseShift?: () => void }) {
 
   return (
     <View style={styles.root}>
-      <ScrollView style={styles.list}>
+      <Scrollable style={styles.list}>
         {groupByDay(shifts).map((day) => (
           <View key={day.label}>
             <View style={styles.dayRow}>
@@ -82,7 +84,7 @@ export function CashierShifts({ onCloseShift }: { onCloseShift?: () => void }) {
             })}
           </View>
         ))}
-      </ScrollView>
+      </Scrollable>
 
       {report ? <ShiftCard report={report} onCloseShift={onCloseShift} /> : null}
     </View>
@@ -103,7 +105,7 @@ function ShiftCard({
   const open = !report.shift.closed_at;
 
   return (
-    <ScrollView style={styles.card} contentContainerStyle={styles.cardBody}>
+    <Scrollable style={styles.card} contentContainerStyle={styles.cardBody}>
       <View style={styles.cardHead}>
         <View>
           <Text style={styles.cardTitle}>Смена #{report.shift.id}</Text>
@@ -253,7 +255,7 @@ function ShiftCard({
           </View>
         ))
       )}
-    </ScrollView>
+    </Scrollable>
   );
 }
 
@@ -402,6 +404,9 @@ const styles = StyleSheet.create({
     width: 320,
     flexGrow: 0,
     flexShrink: 0,
+    // Основа — своя ширина, а не ноль: прокручиваемая область объявляет
+    // `flex: 1`, и с нулевой основой столбец схлопывался в ничто.
+    flexBasis: 'auto',
     backgroundColor: pos.tile,
     borderRightWidth: 1,
     borderRightColor: pos.border,
@@ -431,7 +436,10 @@ const styles = StyleSheet.create({
   shiftSum: { fontFamily: pos.font, fontSize: 15, color: '#2E7D32' },
 
   card: { flex: 1 },
-  cardBody: { padding: 26, gap: 18 },
+  // Содержимое не растягивается на весь экран: у них карточка смены — колонка
+  // постоянной ширины, а справа от неё просто фон. Читать строку во весь
+  // широкий монитор невозможно, и они этого не просят.
+  cardBody: { padding: 26, gap: 18, width: 820, maxWidth: '100%' },
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   cardTitle: { fontFamily: pos.font, fontSize: 30, color: pos.text },
   cardSub: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 4 },

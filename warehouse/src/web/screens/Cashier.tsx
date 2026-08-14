@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { Scrollable } from '../Scrollable';
 import { CashierMenu } from './CashierMenu';
 import { CashierCloseShift } from './CashierCloseShift';
 import { CashierCustomer } from './CashierCustomer';
@@ -432,7 +432,7 @@ export function Cashier() {
           ) : null}
 
           {browse === 'categories' ? (
-            <ScrollView contentContainerStyle={styles.tiles}>
+            <Scrollable toTop contentContainerStyle={styles.tiles}>
               {categories.map((item) => (
                 <Pressable
                   key={item.id}
@@ -460,9 +460,9 @@ export function Cashier() {
                   Категорий пока нет — их заводят в карточке товара.
                 </Text>
               ) : null}
-            </ScrollView>
+            </Scrollable>
           ) : (
-            <ScrollView contentContainerStyle={styles.tiles}>
+            <Scrollable toTop contentContainerStyle={styles.tiles}>
               {browse === 'groups' ? (
                 <Text style={styles.browseNote}>
                   Групп в каталоге пока нет — ниже всё, что вне групп.
@@ -478,7 +478,7 @@ export function Cashier() {
                   onPick={pick}
                 />
               ))}
-            </ScrollView>
+            </Scrollable>
           )}
 
           {/* Панель выбора: Товары, Категории, Группы. */}
@@ -600,7 +600,7 @@ export function Cashier() {
                   в чек: подсказка, которую нельзя принять одним касанием, не
                   подсказка. */}
               {reco.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recoStrip}>
+                <Scrollable horizontal style={styles.recoStrip}>
                   {reco.map((product) => (
                     <Pressable
                       key={product.id}
@@ -617,7 +617,7 @@ export function Cashier() {
                       </Text>
                     </Pressable>
                   ))}
-                </ScrollView>
+                </Scrollable>
               ) : null}
             </>
           ) : (
@@ -653,7 +653,7 @@ export function Cashier() {
             </View>
           ) : (
             <>
-              <ScrollView style={styles.receipt}>
+              <Scrollable style={styles.receipt}>
                 {cart.lines.map((line) => {
                   const gross = Math.round((line.price * line.qty) / 1000);
                   const own = lineDiscountOf(line);
@@ -703,7 +703,7 @@ export function Cashier() {
                     </View>
                   );
                 })}
-              </ScrollView>
+              </Scrollable>
 
               {/* Подытог и скидка — у него они стоят над кнопкой продажи, и
                   по строке скидки в неё же и заходят. */}

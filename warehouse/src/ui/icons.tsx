@@ -227,6 +227,13 @@ export const WebIcon = {
   coins: (p: Props) => (
     <MaterialCommunityIcons name="database" size={p.size ?? 18} color={p.color} />
   ),
+  phone: (p: Props) => (
+    <MaterialCommunityIcons name="phone-outline" size={p.size ?? 20} color={p.color} />
+  ),
+  /** «Добавить покупателя» — человечек с плюсом, оранжевая кнопка кассы. */
+  personPlus: (p: Props) => (
+    <MaterialCommunityIcons name="account-plus" size={p.size ?? 22} color={p.color} />
+  ),
   printer: (p: Props) => (
     <MaterialCommunityIcons name="printer-outline" size={p.size ?? 20} color={p.color} />
   ),

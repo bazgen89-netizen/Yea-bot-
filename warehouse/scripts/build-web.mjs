@@ -168,6 +168,26 @@ html body *::-webkit-scrollbar-thumb:hover{background:#9AA3AB!important;backgrou
 
 page = replaceOnce(page, '</head>', `<style id="scrollbars">${SCROLLBARS}</style></head>`);
 
+/**
+ * Синяя обводка фокуса.
+ *
+ * Браузер обводит поле, в которое печатают, и кнопку, которую нажали. В кассе
+ * это лишнее: там своя разметка, и синяя рамка поверх оранжевого окна поиска
+ * покупателя читалась как ошибка. Убирается стилем, а не свойством у каждого
+ * поля, — обводку рисует браузер, и в React Native Web заглушить её со
+ * стороны стилей элемента получается не везде.
+ */
+const NO_FOCUS_RING = `
+html body input:focus,html body input:focus-visible,
+html body textarea:focus,html body textarea:focus-visible,
+html body select:focus,html body select:focus-visible,
+html body button:focus,html body button:focus-visible,
+html body [role="button"]:focus,html body [role="button"]:focus-visible,
+html body [tabindex]:focus,html body [tabindex]:focus-visible{outline:none!important}
+`;
+
+page = replaceOnce(page, '</head>', `<style id="focus">${NO_FOCUS_RING}</style></head>`);
+
 // Сборка для показа наполняется примером. Обычная приходит пустой: каталог
 // в ней заводит тот, кто её поставил, а не тот, кто собирал.
 if (process.env.DEMO === '1') {

@@ -90,19 +90,32 @@ export const DEFAULT_SPLIT = 1.55 / 2.55;
 /**
  * Сколько плиток поместится в витрину такой ширины.
  *
- * **Двигаем границу — меняется число плиток, а не их размер.** Ровно этого и
- * ждут: витрина шире — товаров видно больше, уже — меньше, а сами карточки
- * остаются прежними.
+ * **Двигаем границу — меняется число плиток, а не их размер.** Витрина шире —
+ * товаров видно больше, уже — меньше, а карточки остаются ровно теми же.
  *
- * Совсем без изменения размера не обойтись: остаток ряда надо куда-то деть,
- * иначе справа зияет пустая полоса. Поэтому плитки добирают его на себя —
- * между появлением соседнего столбца и следующим они тянутся не больше чем
- * на половину своей ширины, и на глаз это уже не «изменение размера», а
- * подгонка.
+ * Поэтому здесь `floor`, а не округление: плитка имеет свою ширину в точках,
+ * и в ряд их встаёт столько, сколько влезло целиком. Остаток ряда уходит в
+ * поля по краям (см. `gridPadding`) — не в растяжение плиток.
  */
 export function columnsFor(windowWidth: number, catalogWidth: number): number {
   if (catalogWidth <= 0) return tileColumns(windowWidth);
 
   const wanted = preferredTileWidth(windowWidth);
-  return Math.min(Math.max(1, Math.round(catalogWidth / wanted)), 12);
+  return Math.min(Math.max(1, Math.floor(catalogWidth / wanted)), 12);
+}
+
+/**
+ * Поле по краям витрины — половина остатка ряда.
+ *
+ * Остаток надо куда-то деть. Растянуть на него плитки нельзя: их размер и
+ * должен оставаться постоянным. Оставить справа — получится пустая полоса,
+ * которая читается как обрыв. Поэтому он делится поровну на оба края и
+ * выглядит полем, а не дырой.
+ */
+export function gridPadding(windowWidth: number, catalogWidth: number): number {
+  if (catalogWidth <= 0) return 0;
+
+  const wanted = preferredTileWidth(windowWidth);
+  const columns = columnsFor(windowWidth, catalogWidth);
+  return Math.max(0, (catalogWidth - columns * wanted) / 2);
 }

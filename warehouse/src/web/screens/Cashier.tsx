@@ -16,6 +16,7 @@ import { CashierCloseShift } from './CashierCloseShift';
 import { CashierCustomer } from './CashierCustomer';
 import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
+import { CashierNewClient } from './CashierNewClient';
 import { CashierPayment } from './CashierPayment';
 import { CashierReco } from './CashierReco';
 import { CashierSheet } from './CashierSheet';
@@ -28,7 +29,13 @@ import { recommendedFor } from '../../db/recommendations';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
-import { clampSplit, columnsFor, DEFAULT_SPLIT } from '../../domain/split';
+import {
+  clampSplit,
+  columnsFor,
+  DEFAULT_SPLIT,
+  gridPadding,
+  preferredTileWidth,
+} from '../../domain/split';
 import { formatQty } from '../../domain/qty';
 import type {
   CounterpartyWithTotals,
@@ -151,6 +158,7 @@ export function Cashier() {
   const [askClose, setAskClose] = useState(false);
   const [closing, setClosing] = useState(false);
   const [recoSettings, setRecoSettings] = useState(false);
+  const [newClient, setNewClient] = useState(false);
   /**
    * Что показывает витрина: товары, категории или группы.
    *
@@ -186,7 +194,11 @@ export function Cashier() {
   // Размер плитки задаёт окно, число плиток — ширина витрины. Двигаем
   // границу — товаров видно больше или меньше, а карточки остаются теми же.
   const windowWidth = useWindowDimensions().width;
-  const columns = columnsFor(windowWidth, Math.max(0, (bodyWidth - SPLITTER_WIDTH) * split));
+  const catalogWidth = Math.max(0, (bodyWidth - SPLITTER_WIDTH) * split);
+  const columns = columnsFor(windowWidth, catalogWidth);
+  // Ширина плитки — в точках и неизменна; остаток ряда уходит в поля.
+  const tileWidth = preferredTileWidth(windowWidth);
+  const gridEdge = gridPadding(windowWidth, catalogWidth);
 
   function dragSplit(pageX: number, save = false): void {
     if (bodyWidth <= 0) return;
@@ -428,7 +440,7 @@ export function Cashier() {
           ) : null}
 
           {browse === 'categories' ? (
-            <ScrollView contentContainerStyle={styles.tiles}>
+            <ScrollView contentContainerStyle={[styles.tiles, { paddingHorizontal: gridEdge }]}>
               {categories.map((item) => (
                 <Pressable
                   key={item.id}
@@ -438,7 +450,7 @@ export function Cashier() {
                     setCategory({ id: item.id, name: item.name });
                     setBrowse('products');
                   }}
-                  style={[styles.tile, styles.catTile, { width: `${100 / columns}%` }]}
+                  style={[styles.tile, styles.catTile, { width: tileWidth }]}
                 >
                   {/* Цветная полоса сверху — их примета. Цвет берётся от
                       самого названия, чтобы у категории он был всегда один
@@ -458,7 +470,7 @@ export function Cashier() {
               ) : null}
             </ScrollView>
           ) : (
-            <ScrollView contentContainerStyle={styles.tiles}>
+            <ScrollView contentContainerStyle={[styles.tiles, { paddingHorizontal: gridEdge }]}>
               {browse === 'groups' ? (
                 <Text style={styles.browseNote}>
                   Групп в каталоге пока нет — ниже всё, что вне групп.
@@ -469,7 +481,7 @@ export function Cashier() {
                 <Tile
                   key={product.id}
                   product={product}
-                  columns={columns}
+                  width={tileWidth}
                   selected={selected === product.id}
                   onPick={pick}
                 />
@@ -565,16 +577,16 @@ export function Cashier() {
             <View style={styles.keyHint}>
               <Text style={styles.keyHintText}>C</Text>
             </View>
-            {/* Клиенты открываются внутри кассы, а не в кабинете: раньше эта
-                кнопка уводила на карточку контрагента, и кассир оказывался
-                вне кассы с недобитым чеком. */}
+            {/* Человечек с плюсом — «добавить покупателя», и ничего больше.
+                Раньше кнопка открывала список клиентов, то есть отвечала не
+                на тот вопрос: список нужен, чтобы найти, а тут — завести. */}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Клиенты"
-              onPress={() => setView('clients')}
+              accessibilityLabel="Добавить покупателя"
+              onPress={() => setNewClient(true)}
               style={styles.addCustomer}
             >
-              <WebIcon.parties size={22} color="#FFFFFF" />
+              <WebIcon.personPlus size={24} color="#FFFFFF" />
             </Pressable>
           </Pressable>
 
@@ -847,6 +859,18 @@ export function Cashier() {
 
       <CashierReco visible={recoSettings} onClose={() => setRecoSettings(false)} />
 
+      <CashierNewClient
+        visible={newClient}
+        onClose={() => setNewClient(false)}
+        onCreated={(created) => {
+          // Заведённый клиент сразу встаёт в чек — за этим его и заводили,
+          // пока он стоит у прилавка.
+          setCustomer(created);
+          const personal = created.loyalty_type !== 'bonus' ? created.discount_bp / 100 : 0;
+          setDiscountPercent(personal > 0 ? personal : null);
+        }}
+      />
+
       <CashierMenu
         visible={menu}
         onClose={() => setMenu(false)}
@@ -894,13 +918,13 @@ export function Cashier() {
  */
 const Tile = memo(function Tile({
   product,
-  columns,
+  width,
   selected,
   onPick,
 }: {
   product: ProductWithStock;
-  /** Сколько плиток в ряду: от этого её ширина. */
-  columns: number;
+  /** Ширина в точках. Одна и та же, куда бы ни двигали границу. */
+  width: number;
   selected: boolean;
   onPick: (product: ProductWithStock) => void;
 }) {
@@ -908,7 +932,7 @@ const Tile = memo(function Tile({
     <Pressable
       accessibilityRole="button"
       onPress={() => onPick(product)}
-      style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
+      style={[styles.tile, { width }, selected && styles.tileSelected]}
     >
       <Text style={styles.tileStock}>
         {formatQty(product.stock)} {product.unit}

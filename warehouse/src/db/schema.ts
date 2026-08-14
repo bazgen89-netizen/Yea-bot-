@@ -594,6 +594,38 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX idx_debt_payments_customer ON debt_payments(customer_id);
   CREATE INDEX idx_debt_payments_sale ON debt_payments(sale_id);
   `,
+
+  // 19 — списки рекомендаций
+  `
+  -- «Рекомендации» на кассе. Список — это правило, по которому подбираются
+  -- товары к тому, что уже в чеке: «Покупают вместе» считает по прошлым
+  -- чекам, свой список — это отобранные руками товары.
+  --
+  -- Строка над чеком с надписью «Рекомендации» была одна и не показывала
+  -- ничего: подбирать было нечем и настраивать нечего.
+  CREATE TABLE reco_lists (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL,
+    -- 'together' — считается по чекам, 'manual' — отобран руками.
+    kind       TEXT    NOT NULL DEFAULT 'together',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    -- Сколько товаров показывать: «Количество товаров, шт».
+    size       INTEGER NOT NULL DEFAULT 8,
+    -- Порядок списков: их перетаскивают за уголок.
+    sort       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL
+  );
+
+  CREATE TABLE reco_items (
+    list_id    INTEGER NOT NULL REFERENCES reco_lists(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (list_id, product_id)
+  );
+
+  INSERT INTO reco_lists (name, kind, enabled, size, sort, created_at)
+  VALUES ('Покупают вместе', 'together', 1, 8, 0, datetime('now'));
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

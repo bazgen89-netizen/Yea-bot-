@@ -17,12 +17,14 @@ import { CashierCustomer } from './CashierCustomer';
 import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierPayment } from './CashierPayment';
+import { CashierReco } from './CashierReco';
 import { CashierSheet } from './CashierSheet';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { formatPhone } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
+import { recommendedFor } from '../../db/recommendations';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
@@ -122,6 +124,7 @@ export function Cashier() {
   // Закрытие смены в два шага: сначала «действительно?», потом пересчёт ящика.
   const [askClose, setAskClose] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [recoSettings, setRecoSettings] = useState(false);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
   const [pickingCustomer, setPickingCustomer] = useState(false);
@@ -160,6 +163,14 @@ export function Cashier() {
   const products = useQuery((database) => listProducts(database, { search }), [search]);
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
+  // Что предложить к набранному. Пересчитывается на каждое изменение чека:
+  // подсказка «возьмите ещё вот это» имеет смысл только про то, что в чеке
+  // лежит сейчас.
+  const cartIds = cart.lines.map((line) => line.product_id).join(',');
+  const reco = useQuery(
+    (database) => recommendedFor(database, cartIds ? cartIds.split(',').map(Number) : []),
+    [cartIds],
+  );
   const shop = locations[0]?.name ?? 'Магазин';
 
   /**
@@ -418,10 +429,43 @@ export function Cashier() {
           </Pressable>
 
           {shift ? (
-            <View style={styles.recommendRow}>
-              <Text style={styles.recommendLabel}>Рекомендации</Text>
-              <WebIcon.gear size={18} color="#8E8E93" />
-            </View>
+            <>
+              <View style={styles.recommendRow}>
+                <Text style={styles.recommendLabel}>Рекомендации</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Настройки рекомендаций"
+                  onPress={() => setRecoSettings(true)}
+                  style={styles.recommendGear}
+                >
+                  <WebIcon.gear size={18} color={pos.muted} />
+                </Pressable>
+              </View>
+
+              {/* Сами рекомендации — полоса под строкой. Нажатие кладёт товар
+                  в чек: подсказка, которую нельзя принять одним касанием, не
+                  подсказка. */}
+              {reco.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recoStrip}>
+                  {reco.map((product) => (
+                    <Pressable
+                      key={product.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Добавить «${product.name}»`}
+                      onPress={() => pick(product)}
+                      style={styles.recoTile}
+                    >
+                      <Text style={styles.recoName} numberOfLines={2}>
+                        {product.name}
+                      </Text>
+                      <Text style={styles.recoPrice}>
+                        {formatMoneyWeb(product.sale_price)} руб
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : null}
+            </>
           ) : (
             <View style={styles.recommendRow}>
               <Text style={styles.recommendLabel}>Смена закрыта</Text>
@@ -650,6 +694,8 @@ export function Cashier() {
         visible={closing}
         onClose={() => setClosing(false)}
       />
+
+      <CashierReco visible={recoSettings} onClose={() => setRecoSettings(false)} />
 
       <CashierMenu
         visible={menu}
@@ -881,6 +927,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   recommendLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  recommendGear: { padding: 6 },
+
+  recoStrip: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: pos.border },
+  recoTile: {
+    width: 132,
+    padding: 10,
+    marginLeft: 12,
+    marginBottom: 12,
+    backgroundColor: pos.bg,
+    borderRadius: 4,
+  },
+  recoName: { fontFamily: pos.font, fontSize: 13, color: pos.text, lineHeight: 17 },
+  recoPrice: { fontFamily: pos.font, fontSize: 14, color: pos.text, marginTop: 6 },
 
   emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   emptyReceiptText: { fontFamily: pos.font, fontSize: 34, color: '#C7C7CC' },

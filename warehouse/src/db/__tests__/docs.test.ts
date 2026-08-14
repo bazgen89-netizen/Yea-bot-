@@ -303,3 +303,76 @@ describe('возврат без чека', () => {
     expect(() => createReturn(db, { lines: [] })).toThrow();
   });
 });
+
+describe('скидка товара доходит до чека', () => {
+  it('чек пробивается по цене со скидкой товара', () => {
+    const shop = createLocation(db, 'Ереван');
+    const tea = product();
+
+    saveDoc(db, {
+      ...blankDoc('purchase'),
+      locationToId: shop,
+      lines: [{ product_id: tea, qty: 10000, price: 100000 }],
+    });
+
+    // 2 кг по 2000,00 = 4000,00; скидка товара 10 % — чек на 3600,00.
+    createSale(db, {
+      lines: [
+        {
+          product_id: tea,
+          name: 'Шу пуэр',
+          unit: 'кг',
+          qty: 2000,
+          price: 200000,
+          cost_price: 100000,
+          discount_bp: 1000,
+          stock: 10000,
+        },
+      ],
+      payment: 'cash',
+      locationId: shop,
+    });
+
+    const sale = db.get<{ total: number; discount: number }>(
+      'SELECT total, discount FROM sales ORDER BY id DESC LIMIT 1',
+    )!;
+    expect(sale.total).toBe(360000);
+
+    // В кассе денег ровно столько же.
+    const cash = new Map(accountBalances(db).map((row) => [row.name, row.balance]));
+    expect(cash.get('Касса магазина')).toBe(360000);
+  });
+
+  it('скидка чека ложится поверх скидки товара', () => {
+    const shop = createLocation(db, 'Ереван');
+    const tea = product();
+
+    saveDoc(db, {
+      ...blankDoc('purchase'),
+      locationToId: shop,
+      lines: [{ product_id: tea, qty: 10000, price: 100000 }],
+    });
+
+    // 4000,00 − 10 % товара = 3600,00; ещё 360,00 скидки чека = 3240,00.
+    createSale(db, {
+      discount: 36000,
+      lines: [
+        {
+          product_id: tea,
+          name: 'Шу пуэр',
+          unit: 'кг',
+          qty: 2000,
+          price: 200000,
+          cost_price: 100000,
+          discount_bp: 1000,
+          stock: 10000,
+        },
+      ],
+      payment: 'cash',
+      locationId: shop,
+    });
+
+    const sale = db.get<{ total: number }>('SELECT total FROM sales ORDER BY id DESC LIMIT 1')!;
+    expect(sale.total).toBe(324000);
+  });
+});

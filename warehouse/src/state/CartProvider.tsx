@@ -34,6 +34,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         qty,
         price: product.sale_price,
         cost_price: product.cost_price,
+        // Скидка, заведённая в карточке товара, действует и на кассе: её
+        // для того и заводят. Раньше касса продавала по полной цене, и
+        // «Скидка 10 %» в карточке ни на что не влияла.
+        discount_bp: product.discount_bp,
         stock: product.stock,
       }),
     );

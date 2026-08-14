@@ -3,6 +3,8 @@ import {
   cartTotals,
   discountFromPercent,
   findStockIssues,
+  lineDiscountOf,
+  lineNet,
   percentFromDiscount,
   setCartQty,
 } from '../cart';
@@ -134,5 +136,66 @@ describe('percentFromDiscount', () => {
       const money = discountFromPercent(subtotal, percent);
       expect(percentFromDiscount(subtotal, money)).toBeCloseTo(percent, 1);
     }
+  });
+});
+
+describe('скидка на сам товар', () => {
+  const line = (over: Partial<CartLine> = {}): CartLine => ({
+    product_id: 1,
+    name: 'Нож для колки пуэра',
+    unit: 'шт',
+    qty: 1000,
+    price: 70000,
+    cost_price: 30000,
+    stock: 10000,
+    ...over,
+  });
+
+  it('снимается до скидки чека', () => {
+    // Тот же случай, что на кассе: нож 700,00 со скидкой 10 % — 630,00.
+    const totals = cartTotals([line({ discount_bp: 1000 })]);
+    expect(totals.gross).toBe(70000);
+    expect(totals.lineDiscount).toBe(7000);
+    expect(totals.subtotal).toBe(63000);
+    expect(totals.total).toBe(63000);
+  });
+
+  it('скидка чека считается уже от сниженной суммы', () => {
+    // 700,00 − 10 % товара = 630,00; ещё 10 % чека = 567,00.
+    const totals = cartTotals([line({ discount_bp: 1000 })], 6300);
+    expect(totals.subtotal).toBe(63000);
+    expect(totals.discount).toBe(6300);
+    expect(totals.total).toBe(56700);
+  });
+
+  it('без скидки товара ничего не меняется', () => {
+    const totals = cartTotals([line()]);
+    expect(totals.gross).toBe(70000);
+    expect(totals.lineDiscount).toBe(0);
+    expect(totals.subtotal).toBe(70000);
+  });
+
+  it('складывает скидки разных товаров', () => {
+    const totals = cartTotals([
+      line({ product_id: 1, discount_bp: 1000 }),
+      line({ product_id: 2, price: 30000, discount_bp: 5000 }),
+      line({ product_id: 3, price: 10000 }),
+    ]);
+    // 70000 + 30000 + 10000 = 110000; скидки 7000 + 15000 = 22000.
+    expect(totals.gross).toBe(110000);
+    expect(totals.lineDiscount).toBe(22000);
+    expect(totals.subtotal).toBe(88000);
+  });
+
+  it('количество умножает и цену, и скидку', () => {
+    const totals = cartTotals([line({ qty: 3000, discount_bp: 1000 })]);
+    expect(totals.gross).toBe(210000);
+    expect(totals.lineDiscount).toBe(21000);
+    expect(totals.subtotal).toBe(189000);
+  });
+
+  it('lineNet — то, что печатается в строке чека', () => {
+    expect(lineNet(line({ discount_bp: 1000 }))).toBe(63000);
+    expect(lineNet(line())).toBe(70000);
   });
 });

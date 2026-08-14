@@ -12,7 +12,7 @@ import { listLocations } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { openShiftAnywhere } from '../../db/shifts';
-import { discountFromPercent, percentFromDiscount } from '../../domain/cart';
+import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type {
@@ -321,12 +321,18 @@ export function Cashier() {
               <ScrollView style={styles.receipt}>
                 {cart.lines.map((line) => {
                   const gross = Math.round((line.price * line.qty) / 1000);
+                  const own = lineDiscountOf(line);
                   // Скидка чека раскладывается на позиции пропорционально —
                   // так у него: у строки видно и цену до скидки, и после.
                   const share =
                     cart.totals.subtotal > 0
-                      ? Math.round((gross * cart.totals.discount) / cart.totals.subtotal)
+                      ? Math.round(((gross - own) * cart.totals.discount) / cart.totals.subtotal)
                       : 0;
+                  // В ярлыке — сколько сняли с этой строки всего: своя скидка
+                  // товара и доля скидки чека вместе. Показывать их порознь
+                  // значило бы спорить с ценой, которая тут же напечатана.
+                  const off = own + share;
+                  const percent = gross > 0 ? Math.round((off / gross) * 1000) / 10 : 0;
 
                   return (
                     <View key={line.product_id} style={styles.receiptRow}>
@@ -335,12 +341,9 @@ export function Cashier() {
                           {line.name}
                         </Text>
                         <View style={styles.receiptMeta}>
-                          {share > 0 ? (
+                          {off > 0 ? (
                             <View style={styles.discountBadge}>
-                              <Text style={styles.discountBadgeText}>
-                                {percentFromDiscount(cart.totals.subtotal, cart.totals.discount)}%
-                                Скидка
-                              </Text>
+                              <Text style={styles.discountBadgeText}>{percent}% Скидка</Text>
                             </View>
                           ) : null}
                           <Text style={styles.receiptQty}>
@@ -349,8 +352,8 @@ export function Cashier() {
                         </View>
                       </View>
                       <View style={styles.receiptSums}>
-                        <Text style={styles.receiptSum}>{formatMoneyWeb(gross - share)}</Text>
-                        {share > 0 ? (
+                        <Text style={styles.receiptSum}>{formatMoneyWeb(gross - off)}</Text>
+                        {off > 0 ? (
                           <Text style={styles.receiptWas}>{formatMoneyWeb(gross)}</Text>
                         ) : null}
                       </View>
@@ -372,10 +375,16 @@ export function Cashier() {
               <View style={styles.totals}>
                 <View style={styles.totalsRow}>
                   <Text style={styles.totalsLabel}>Подытог</Text>
-                  <Text style={styles.totalsValue}>
-                    {formatMoneyWeb(cart.totals.subtotal)} руб
-                  </Text>
+                  <Text style={styles.totalsValue}>{formatMoneyWeb(cart.totals.gross)} руб</Text>
                 </View>
+                {cart.totals.lineDiscount > 0 ? (
+                  <View style={styles.totalsRow}>
+                    <Text style={styles.totalsLabel}>Скидки на товары</Text>
+                    <Text style={styles.totalsValue}>
+                      {formatMoneyWeb(cart.totals.lineDiscount)} руб
+                    </Text>
+                  </View>
+                ) : null}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Размер скидки"
@@ -424,9 +433,15 @@ export function Cashier() {
           onPress={startPay}
           style={({ pressed }) => [styles.sellBar, pressed && { opacity: 0.9 }]}
         >
-          <Text style={styles.sellDots}>⋮</Text>
-          <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
-          <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
+          {/* Отступы — на внутренней обёртке, а не на самой полосе.
+              У полосы `flex: 1` с нулевой основой, и её собственные
+              горизонтальные отступы прибавлялись к доле сверху: полоса
+              выходила на 40 точек шире и вылезала левее чека. */}
+          <View style={styles.sellInner}>
+            <Text style={styles.sellDots}>⋮</Text>
+            <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
+            <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
+          </View>
         </Pressable>
       </View>
 
@@ -755,15 +770,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: pos.border,
   },
-  bottomLeft: { flex: 1.55, flexDirection: 'row', alignItems: 'center' },
+  // minWidth: 0 обеим половинам — иначе синюю полосу распирает её же
+  // содержимое («⋮ ПРОДАЖА 60.00 руб» плюс отступы), она перестаёт слушаться
+  // flex и вылезает левее чека на два десятка точек.
+  bottomLeft: { flex: 1.55, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
   bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
   bottomMenuLabel: { fontSize: 17, color: pos.text },
   bottomShop: { flex: 1, fontSize: 15, color: pos.muted, textAlign: 'center' },
   bottomClock: { fontSize: 15, color: pos.muted, paddingRight: 24 },
-  sellBar: {
+  sellBar: { flex: 1, minWidth: 0, height: 58, backgroundColor: pos.bar },
+  sellInner: {
     flex: 1,
-    height: 58,
-    backgroundColor: pos.bar,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,

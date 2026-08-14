@@ -62,9 +62,9 @@ describe('плитки витрины', () => {
   it('плитка при этом остаётся почти прежней', () => {
     const wanted = preferredTileWidth(1600);
 
-    // Любая ширина витрины от 18 см до края экрана: плитка не уходит от
+    // Любая ширина витрины от предела до края экрана: плитка не уходит от
     // желаемой больше чем в полтора раза в любую сторону.
-    for (let width = 680; width <= 1600; width += 20) {
+    for (let width = Math.ceil(MIN_CATALOG_CM * PX_IN_CM); width <= 1600; width += 20) {
       const actual = width / columnsFor(1600, width);
       expect(actual).toBeGreaterThan(wanted / 1.5);
       expect(actual).toBeLessThan(wanted * 1.5);

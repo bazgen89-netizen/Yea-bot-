@@ -518,8 +518,9 @@ export function Cashier() {
           ) : null}
         </View>
 
-        {/* Граница, которую двигают. У него это тонкая полоса во всю высоту
-            с двумя стрелками посередине. */}
+        {/* Граница, которую двигают: ровная полоса во всю высоту. Стрелок
+            посередине нет — курсор над ней и так меняется на «двигать вбок»,
+            а значок на белом фоне читался как случайный след. */}
         <View
           accessibilityRole="adjustable"
           accessibilityLabel="Ширина витрины"
@@ -528,9 +529,7 @@ export function Cashier() {
           onMoveShouldSetResponder={() => true}
           onResponderMove={(event) => dragSplit(event.nativeEvent.pageX)}
           onResponderRelease={(event) => dragSplit(event.nativeEvent.pageX, true)}
-        >
-          <Text style={styles.splitterGrip}>◄│►</Text>
-        </View>
+        />
 
         {/* Чек */}
         <View style={[styles.right, { flex: 1 - split }]}>
@@ -1044,13 +1043,7 @@ const styles = StyleSheet.create({
   // Полоса шире самой черты: пальцем в единственный пиксель не попасть.
   // Цветом отличается и от витрины, и от чека — её видно как границу, а не
   // как шов между двумя белыми полями.
-  splitter: {
-    width: SPLITTER_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: pos.border,
-  },
-  splitterGrip: { fontFamily: pos.font, fontSize: 9, color: pos.text },
+  splitter: { width: SPLITTER_WIDTH, backgroundColor: pos.border },
   customerBar: {
     flexDirection: 'row',
     alignItems: 'center',

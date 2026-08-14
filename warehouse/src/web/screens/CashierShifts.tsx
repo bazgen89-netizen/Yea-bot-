@@ -395,7 +395,17 @@ function groupByDay(shifts: ShiftReport[]): { label: string; shifts: ShiftReport
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: 'row', backgroundColor: pos.bg },
 
-  list: { width: 300, backgroundColor: pos.tile, borderRightWidth: 1, borderRightColor: pos.border },
+  // Ширина держится жёстко: список смен — узкий столбец сбоку, а не половина
+  // экрана. Без `flexGrow: 0` список растягивался на всё свободное место —
+  // у прокручиваемого списка в вебе рост включён по умолчанию.
+  list: {
+    width: 320,
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: pos.tile,
+    borderRightWidth: 1,
+    borderRightColor: pos.border,
+  },
   dayRow: {
     flexDirection: 'row',
     alignItems: 'center',

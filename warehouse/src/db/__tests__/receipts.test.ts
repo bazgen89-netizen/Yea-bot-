@@ -1,7 +1,7 @@
 import { createCounterparty } from '../counterparties';
 import type { SqlDriver } from '../driver';
 import { createProduct } from '../products';
-import { groupByDay, receiptJournal, receiptLines } from '../receipts';
+import { groupByDay, localDay, receiptJournal, receiptLines } from '../receipts';
 import { createSale } from '../sales';
 import { adjustStock } from '../stock';
 import { createTestDriver } from '../testDriver';
@@ -112,6 +112,19 @@ describe('журнал чеков', () => {
     expect(first.qty).toBe(1000);
     // Одна штука по 200,00 — двести рублей, а не двести тысяч копеек за тысячу.
     expect(first.total).toBe(20000);
+  });
+
+  it('чек ищется по местному дню, а не по дню по Гринвичу', () => {
+    const tea = product('Шу пуэр');
+    createSale(db, { lines: [line(tea, 'Шу пуэр')] });
+
+    const [receipt] = receiptJournal(db);
+    // День берём из самого чека, переведённого во время машины: так его
+    // видит кассир в карточке, так же он выбирает его в календаре.
+    const day = localDay(receipt.created_at);
+
+    expect(receiptJournal(db, { date: day })).toHaveLength(1);
+    expect(receiptJournal(db, { date: '1999-01-01' })).toHaveLength(0);
   });
 
   it('чеки одного дня собираются в одну группу', () => {

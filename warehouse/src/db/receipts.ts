@@ -65,9 +65,12 @@ export function receiptJournal(db: SqlDriver, filter: ReceiptFilter = {}): Recei
   const params: (string | number)[] = [];
 
   if (filter.date) {
-    // Даты хранятся строкой ISO, поэтому день — это просто её начало.
-    where.push('s.created_at LIKE ?');
-    params.push(`${filter.date}%`);
+    // Время чека хранится по Гринвичу, а день кассир выбирает свой. В Москве
+    // чек, пробитый в 02:30, лежит в базе вчерашним — по строке ISO он бы в
+    // выбранный день не попал. Поэтому день сравниваем после перевода
+    // во время машины, а не отрезаем первые десять знаков строки.
+    where.push("date(s.created_at, 'localtime') = ?");
+    params.push(filter.date);
   }
 
   if (filter.number) {
@@ -119,6 +122,18 @@ export function receiptLines(db: SqlDriver, saleId: Id): ReceiptLine[] {
 }
 
 /**
+ * День чека по местному времени, `YYYY-MM-DD`.
+ *
+ * Отрезать первые десять знаков от строки ISO нельзя: там время по Гринвичу,
+ * и ночные чеки уехали бы в соседний день — тот самый, по которому кассир их
+ * потом не найдёт.
+ */
+export function localDay(iso: string): string {
+  const when = new Date(iso);
+  return `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`;
+}
+
+/**
  * Дни, в которые были чеки, — для подписей-разделителей в журнале.
  *
  * Считается из тех же чеков, что уже загружены, а не отдельным запросом:
@@ -128,7 +143,7 @@ export function groupByDay(receipts: Receipt[]): { day: string; receipts: Receip
   const days: { day: string; receipts: Receipt[] }[] = [];
 
   for (const receipt of receipts) {
-    const day = receipt.created_at.slice(0, 10);
+    const day = localDay(receipt.created_at);
     const last = days[days.length - 1];
     if (last && last.day === day) last.receipts.push(receipt);
     else days.push({ day, receipts: [receipt] });

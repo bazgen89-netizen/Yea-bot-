@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CashierCalendar } from './CashierCalendar';
 import { useCashierKeys } from './useCashierKeys';
 import { formatPhone, listCounterparties } from '../../db/counterparties';
 import type { SqlDriver } from '../../db/driver';
@@ -73,10 +74,6 @@ export function CashierReceipts({ visible, onClose }: { visible: boolean; onClos
     (db) => receiptJournal(db, { date: day, number, customerId, productId }),
     [day, number, customerId, productId],
   );
-  // Дни для выбора даты берём из всех чеков, а не из отфильтрованных: иначе,
-  // выбрав день, из списка исчезли бы все остальные.
-  const days = useQuery((db) => groupByDay(receiptJournal(db, { limit: 500 })).map((g) => g.day));
-
   const groups = groupByDay(receipts);
 
   return (
@@ -119,41 +116,18 @@ export function CashierReceipts({ visible, onClose }: { visible: boolean; onClos
                   </Text>
                 </Pressable>
 
-                {/*
-                  Календаря нет намеренно: чеки бывают только в те дни, когда
-                  работали, и список этих дней короче любого календаря — в нём
-                  не выбрать пустое число.
-                */}
                 {pickingDay ? (
-                  <View style={styles.dayList}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setDay(null);
-                        setPickingDay(false);
-                      }}
-                      style={styles.dayRow}
-                    >
-                      <Text style={[styles.dayRowLabel, day === null && styles.dayRowActive]}>
-                        Все дни
-                      </Text>
-                    </Pressable>
-                    {days.map((value) => (
-                      <Pressable
-                        key={value}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setDay(value);
-                          setPickingDay(false);
-                        }}
-                        style={styles.dayRow}
-                      >
-                        <Text style={[styles.dayRowLabel, day === value && styles.dayRowActive]}>
-                          {dayTitle(value)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <CashierCalendar
+                    value={day}
+                    onPick={(picked) => {
+                      setDay(picked);
+                      setPickingDay(false);
+                    }}
+                    onClear={() => {
+                      setDay(null);
+                      setPickingDay(false);
+                    }}
+                  />
                 ) : null}
 
                 <Text style={styles.fieldLabel}>Номер документа</Text>
@@ -533,7 +507,7 @@ function Picker({
       </View>
 
       {found.length > 0 ? (
-        <View style={styles.dayList}>
+        <View style={styles.hintList}>
           {found.map((item) => (
             <Pressable
               key={item.id}
@@ -543,9 +517,9 @@ function Picker({
                 setText('');
                 onChange(item.id);
               }}
-              style={styles.dayRow}
+              style={styles.hintRow}
             >
-              <Text style={styles.dayRowLabel} numberOfLines={1}>
+              <Text style={styles.hintLabel} numberOfLines={1}>
                 {item.label}
               </Text>
             </Pressable>
@@ -626,7 +600,7 @@ const styles = StyleSheet.create({
   // Фильтр — слева, своей шириной: условия читаются в столбик, а карточкам
   // чеков нужно всё остальное место.
   filter: {
-    width: 300,
+    width: 340,
     flexGrow: 0,
     flexShrink: 0,
     borderRightWidth: 1,
@@ -661,7 +635,8 @@ const styles = StyleSheet.create({
   },
   dateLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar, letterSpacing: 0.6 },
 
-  dayList: {
+  // Подсказки поиска — список под полем.
+  hintList: {
     borderWidth: 1,
     borderColor: pos.border,
     borderRadius: 4,
@@ -669,9 +644,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: 'hidden',
   },
-  dayRow: { paddingHorizontal: 12, paddingVertical: 10 },
-  dayRowLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
-  dayRowActive: { color: pos.bar },
+  hintRow: { paddingHorizontal: 12, paddingVertical: 10 },
+  hintLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
 
   fieldLabel: {
     fontFamily: pos.font,

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useCashierKeys } from './useCashierKeys';
-import { listCounterparties } from '../../db/counterparties';
+import { formatPhone, listCounterparties } from '../../db/counterparties';
 import type { SqlDriver } from '../../db/driver';
 import { listProducts } from '../../db/products';
 import {
@@ -172,12 +172,15 @@ export function CashierReceipts({ visible, onClose }: { visible: boolean; onClos
                 <Text style={styles.fieldLabel}>Клиенты</Text>
                 <Picker
                   placeholder="Поиск по клиентам"
-                  value={customerId}
-                  options={(db) =>
-                    listCounterparties(db, { kind: 'customer' }).map((client) => ({
-                      id: client.id,
-                      label: client.name,
-                    }))
+                  search={(db, text) =>
+                    listCounterparties(db, { kind: 'customer', search: text })
+                      .slice(0, 8)
+                      .map((client) => ({
+                        id: client.id,
+                        label: client.phone
+                          ? `${client.name} · ${formatPhone(client.phone)}`
+                          : client.name,
+                      }))
                   }
                   onChange={setCustomerId}
                 />
@@ -185,9 +188,10 @@ export function CashierReceipts({ visible, onClose }: { visible: boolean; onClos
                 <Text style={styles.fieldLabel}>Товары</Text>
                 <Picker
                   placeholder="Поиск по товарам"
-                  value={productId}
-                  options={(db) =>
-                    listProducts(db).map((product) => ({ id: product.id, label: product.name }))
+                  search={(db, text) =>
+                    listProducts(db, { search: text })
+                      .slice(0, 8)
+                      .map((product) => ({ id: product.id, label: product.name }))
                   }
                   onChange={setProductId}
                 />
@@ -468,34 +472,42 @@ function Fold({ label, value }: { label: string; value: string }) {
 /**
  * Поле выбора из справочника: набирают часть названия, выбирают из найденного.
  *
- * Список читается из базы целиком, но показываются только совпадения и не
- * больше восьми: шестьсот товаров в раскрытом списке искать труднее, чем
- * набрать три буквы.
+ * Ищет **база**, а не программа в уже загруженном списке. Так было сначала, и
+ * поле молчало: у клиентов запрос считает по каждой карточке покупки,
+ * возвраты, закупки и деньги, и на трёх тысячах карточек он не успевает
+ * ответить, пока набирают. Теперь условие уходит в запрос, и считается только
+ * то, что нашлось.
+ *
+ * Меньше двух букв не ищем: по одной букве в справочнике совпадает почти всё,
+ * и такой список ничего не сужает.
  */
 function Picker({
   placeholder,
-  value,
-  options,
+  search,
   onChange,
 }: {
   placeholder: string;
-  value: Id | null;
-  options: (db: SqlDriver) => { id: Id; label: string }[];
+  /** Что искать в базе: возвращает совпадения, не больше горсти. */
+  search: (db: SqlDriver, text: string) => { id: Id; label: string }[];
   onChange: (id: Id | null) => void;
 }) {
   const [text, setText] = useState('');
-  const [open, setOpen] = useState(false);
-  const { db } = useDatabase();
-  const all = useQuery(options);
+  const [chosen, setChosen] = useState<{ id: Id; label: string } | null>(null);
 
-  const chosen = value === null ? null : all.find((item) => item.id === value);
+  const found = useQuery(
+    (db) => (text.trim().length < 2 ? [] : search(db, text)),
+    [text],
+  );
 
   if (chosen) {
     return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Убрать условие: ${chosen.label}`}
-        onPress={() => onChange(null)}
+        onPress={() => {
+          setChosen(null);
+          onChange(null);
+        }}
         style={[styles.field, styles.fieldFull]}
       >
         <Text style={styles.chosen} numberOfLines={1}>
@@ -506,22 +518,12 @@ function Picker({
     );
   }
 
-  const found =
-    text.trim().length === 0
-      ? []
-      : all
-          .filter((item) => item.label.toLowerCase().includes(text.trim().toLowerCase()))
-          .slice(0, 8);
-
   return (
     <View>
       <View style={styles.field}>
         <TextInput
           value={text}
-          onChangeText={(next) => {
-            setText(next);
-            setOpen(true);
-          }}
+          onChangeText={setText}
           placeholder={placeholder}
           placeholderTextColor={pos.muted}
           accessibilityLabel={placeholder}
@@ -530,19 +532,16 @@ function Picker({
         <WebIcon.caretDown color={pos.muted} size={14} />
       </View>
 
-      {open && found.length > 0 ? (
+      {found.length > 0 ? (
         <View style={styles.dayList}>
           {found.map((item) => (
             <Pressable
               key={item.id}
               accessibilityRole="button"
               onPress={() => {
-                onChange(item.id);
+                setChosen(item);
                 setText('');
-                setOpen(false);
-                // База не читается заново: список уже загружен, и здесь только
-                // выбор. `db` берём, чтобы не потерять зависимость на обновление.
-                void db;
+                onChange(item.id);
               }}
               style={styles.dayRow}
             >
@@ -552,6 +551,12 @@ function Picker({
             </Pressable>
           ))}
         </View>
+      ) : null}
+
+      {/* Набрали, а ничего не нашлось — так и говорим: пустое поле без
+          объяснения выглядит поломкой, а не отсутствием совпадений. */}
+      {text.trim().length >= 2 && found.length === 0 ? (
+        <Text style={styles.pickerEmpty}>Ничего не нашлось</Text>
       ) : null}
     </View>
   );
@@ -698,6 +703,7 @@ const styles = StyleSheet.create({
     outlineWidth: 0,
   },
   chosen: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
+  pickerEmpty: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 6 },
 
   list: { flex: 1, minHeight: 0 },
   listBody: { flex: 1, minHeight: 0, backgroundColor: pos.bg },

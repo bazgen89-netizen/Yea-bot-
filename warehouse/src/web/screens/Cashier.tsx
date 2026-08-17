@@ -30,6 +30,7 @@ import { listLocations } from '../../db/locations';
 import { listCategoryTiles, listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { recommendedFor } from '../../db/recommendations';
+import { getPosSettings } from '../../db/posSettings';
 import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
@@ -114,6 +115,38 @@ function categoryColor(name: string): string {
   let value = 0;
   for (let i = 0; i < name.length; i++) value = (value * 31 + name.charCodeAt(i)) >>> 0;
   return CATEGORY_COLORS[value % CATEGORY_COLORS.length];
+}
+
+/**
+ * Короткий сигнал, когда товар попадает в чек.
+ *
+ * Своим тоном, а не звуковым файлом: файл пришлось бы вшивать в сборку, а
+ * нужен один щелчок на сотую долю секунды. Настройка «Звук» в кассе включает
+ * и выключает ровно это.
+ */
+function beep(): void {
+  try {
+    const Ctor =
+      (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
+      (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+
+    const context = new Ctor();
+    const tone = context.createOscillator();
+    const volume = context.createGain();
+
+    tone.frequency.value = 880;
+    volume.gain.value = 0.05;
+    tone.connect(volume);
+    volume.connect(context.destination);
+    tone.start();
+    tone.stop(context.currentTime + 0.05);
+    // Контекст закрываем сами: браузер разрешает их немного, а чеков за день
+    // много.
+    tone.onended = () => void context.close();
+  } catch {
+    // Звук — не то, из-за чего касса должна падать.
+  }
 }
 
 /** Ширина разделительной полосы; ею же расступается нижняя панель. */
@@ -240,9 +273,20 @@ export function Cashier() {
     if (Math.abs(allowed - split) > 0.0005) setSplit(allowed);
   }, [bodyWidth, split]);
 
+  // Настройки кассы: порядок товаров и нулевые остатки на витрине, звук
+  // при добавлении, «печатать чек» в окне оплаты.
+  const settings = useQuery((database) => getPosSettings(database));
+
   const products = useQuery(
-    (database) => listProducts(database, { search, categoryId: category?.id ?? null }),
-    [search, category?.id],
+    (database) =>
+      listProducts(database, {
+        search,
+        categoryId: category?.id ?? null,
+        sortBy: settings.sortBy,
+        sortAsc: settings.sortAsc,
+        hideZeroStocks: !settings.showZeroStocks,
+      }),
+    [search, category?.id, settings.sortBy, settings.sortAsc, settings.showZeroStocks],
   );
   const categories = useQuery((database) => listCategoryTiles(database));
   const locations = useQuery((database) => listLocations(database));
@@ -342,6 +386,7 @@ export function Cashier() {
 
     setSelected(product.id);
     cart.add(product, 1000);
+    if (settings.sound) beep();
   };
 
   /**

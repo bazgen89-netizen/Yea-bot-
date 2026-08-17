@@ -12,6 +12,7 @@ import {
   receiptLines,
   type Receipt,
 } from '../../db/receipts';
+import { getPosSettings } from '../../db/posSettings';
 import { refundSale } from '../../db/sales';
 import { formatMoney } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
@@ -347,6 +348,9 @@ function Card({
  */
 function Print({ receipt, onDone }: { receipt: Receipt; onDone: () => void }) {
   const lines = useQuery((db) => receiptLines(db, receipt.id));
+  // Ширина ленты, поля и размер шрифта — из настроек кассы: у чекового
+  // принтера они свои, и подставлять 58 мм всем было бы наугад.
+  const paper = useQuery((db) => getPosSettings(db));
 
   useEffect(() => {
     const frame = globalThis.document?.createElement('iframe');
@@ -370,12 +374,16 @@ function Print({ receipt, onDone }: { receipt: Receipt; onDone: () => void }) {
       )
       .join('');
 
+    const width = paper.printer === 'a4' ? 210 : paper.tapeWidth;
+    const margin = paper.tapeMargin;
+    const font = paper.tapeFont;
+
     frame.contentDocument?.write(
       `<html><head><meta charset="utf-8"><style>
-        @page { size: 58mm auto; margin: 3mm }
-        body { width: 52mm; font: 11px/1.35 -apple-system, Roboto, sans-serif; color: #000 }
-        h1 { font-size: 13px; margin: 0 0 6px; text-align: center }
-        .meta { font-size: 10px; margin-bottom: 6px }
+        @page { size: ${width}mm auto; margin: ${margin}mm }
+        body { width: ${width - margin * 2}mm; font: ${font}mm/1.35 -apple-system, Roboto, sans-serif; color: #000 }
+        h1 { font-size: ${font * 1.2}mm; margin: 0 0 6px; text-align: center }
+        .meta { font-size: ${font * 0.85}mm; margin-bottom: 6px }
         table { width: 100%; border-collapse: collapse }
         td { vertical-align: top; padding: 2px 0 }
         .q, .s { text-align: right; white-space: nowrap; padding-left: 4px }

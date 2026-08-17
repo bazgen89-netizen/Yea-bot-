@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 
 import { CashierTerminal } from './CashierTerminal';
+import { getPosSettings } from '../../db/posSettings';
+import { useQuery } from '../../state/DatabaseProvider';
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoney, parseMoney } from '../../domain/money';
 import { cashOptions, change } from '../../domain/payment';
@@ -93,7 +95,11 @@ export function CashierPayment({
   const [amount, setAmount] = useState('');
   const [taken, setTaken] = useState<Taken>(EMPTY);
   const [note, setNote] = useState('');
-  const [printReceipt, setPrintReceipt] = useState(false);
+  // «Печатать чек» открывается тем, что стоит в настройках кассы: у одних
+  // печать нужна всегда, у других никогда, и спрашивать об этом каждый чек —
+  // лишнее нажатие.
+  const printDefault = useQuery((database) => getPosSettings(database).printByDefault);
+  const [printReceipt, setPrintReceipt] = useState(printDefault);
   /**
    * Ждём терминал.
    *
@@ -112,8 +118,9 @@ export function CashierPayment({
     setTaken(EMPTY);
     setNote('');
     setTerminal(false);
+    setPrintReceipt(printDefault);
     setAmount(String(total / 100));
-  }, [visible, total]);
+  }, [visible, total, printDefault]);
 
   // Введённая сумма следует за остатком, пока её не трогали руками.
   useEffect(() => {

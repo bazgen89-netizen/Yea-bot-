@@ -60,6 +60,16 @@ export interface ProductFilter {
   /** Готовые фильтры. Несколько складываются по «и», как в исходнике. */
   presets?: ProductPreset[];
   /**
+   * Чем сортировать и в какую сторону — настройка кассы «Сортировка товара по».
+   *
+   * По умолчанию название: справочник читают глазами, и алфавит — то,
+   * в чём его читают.
+   */
+  sortBy?: 'name' | 'price' | 'changed';
+  sortAsc?: boolean;
+  /** Убрать с витрины то, чего нет на остатке. */
+  hideZeroStocks?: boolean;
+  /**
    * Какой день считать сегодняшним — для сроков годности и «не продаётся
    * три месяца». Передаётся снаружи, чтобы отчёт о просрочке можно было
    * проверить тестом, а не ждать нужного числа календаря.
@@ -134,6 +144,10 @@ export function listProducts(db: SqlDriver, filter: ProductFilter = {}): Product
   // Фильтр по остатку — через HAVING: stock это агрегат, в WHERE он недоступен.
   if (filter.lowStockOnly) having.push('p.min_qty > 0 AND stock <= p.min_qty');
 
+  // «Товары с нулевым остатком: не показывать». Услуги остаются: у них
+  // остатка нет вовсе, и прятать их вместе с кончившимся чаем неправильно.
+  if (filter.hideZeroStocks) having.push("(stock > 0 OR p.kind = 'service')");
+
   const now = filter.today ?? today();
   for (const preset of filter.presets ?? []) {
     const part = presetSql(preset, now);
@@ -151,9 +165,26 @@ export function listProducts(db: SqlDriver, filter: ProductFilter = {}): Product
   const havingSql = having.length ? `HAVING ${having.join(' AND ')}` : '';
 
   return db.all<ProductWithStock>(
-    `${SELECT_PRODUCT} ${whereSql} GROUP BY p.id ${havingSql} ORDER BY p.name COLLATE NOCASE`,
+    `${SELECT_PRODUCT} ${whereSql} GROUP BY p.id ${havingSql} ORDER BY ${orderBy(filter)}`,
     [...whereParams, ...havingParams],
   );
+}
+
+/**
+ * Порядок строк для запроса.
+ *
+ * Собирается здесь, а не подставляется параметром: в SQL порядок — часть
+ * текста запроса, и подставлять в него что попало нельзя. Поэтому имена
+ * колонок выбираются из закрытого списка.
+ */
+function orderBy(filter: ProductFilter): string {
+  const direction = filter.sortAsc === false ? 'DESC' : 'ASC';
+
+  if (filter.sortBy === 'price') return `p.sale_price ${direction}, p.name COLLATE NOCASE`;
+  // «Дата изменения» — у нас это дата создания карточки: отдельного поля
+  // правки нет, и придумывать его задним числом нельзя.
+  if (filter.sortBy === 'changed') return `p.created_at ${direction}, p.name COLLATE NOCASE`;
+  return `p.name COLLATE NOCASE ${direction}`;
 }
 
 /** Сколько товаров попадает под каждый готовый фильтр — числа рядом с названиями. */

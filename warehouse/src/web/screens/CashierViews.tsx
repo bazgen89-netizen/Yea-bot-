@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CashierSettings } from './CashierSettings';
 import { CashierShifts } from './CashierShifts';
 import { listCounterparties } from '../../db/counterparties';
 import { listProducts } from '../../db/products';
@@ -65,7 +66,7 @@ export function CashierPanel({
   if (view === 'shifts') return <CashierShifts onCloseShift={onCloseShift} />;
   if (view === 'money') return <Money />;
   if (view === 'xreport') return <XReport />;
-  return <Settings />;
+  return <CashierSettings />;
 }
 
 function Receipts() {
@@ -210,9 +211,7 @@ function XReport() {
   );
 }
 
-function Settings() {
-  return <Empty text="Настройки кассы — раздел в работе." />;
-}
+
 
 function Line({ label, value }: { label: string; value: string }) {
   return (

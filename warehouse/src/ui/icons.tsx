@@ -254,6 +254,16 @@ export const WebIcon = {
   printer: (p: Props) => (
     <MaterialCommunityIcons name="printer-outline" size={p.size ?? 20} color={p.color} />
   ),
+  /** Разделы настроек кассы: полосы, штекер, ярлык, карточки. */
+  menu: (p: Props) => <Ionicons name="menu" size={p.size ?? 24} color={p.color} />,
+  plug: (p: Props) => (
+    <MaterialCommunityIcons name="power-plug-outline" size={p.size ?? 24} color={p.color} />
+  ),
+  tag: (p: Props) => <Ionicons name="pricetag" size={p.size ?? 22} color={p.color} />,
+  cards: (p: Props) => (
+    <MaterialCommunityIcons name="cards-outline" size={p.size ?? 24} color={p.color} />
+  ),
+
   /** Магазин в карточке чека. */
   store: (p: Props) => (
     <MaterialCommunityIcons name="storefront-outline" size={p.size ?? 20} color={p.color} />

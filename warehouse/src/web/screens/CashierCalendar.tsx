@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import {
-  isoDay,
-  monthGrid,
-  MONTHS,
-  MONTHS_SHORT,
-  shiftMonth,
-  WEEKDAYS,
-} from '../../domain/calendar';
+import { isoDay, monthGrid, MONTHS, shiftMonth, WEEKDAYS, yearWindow } from '../../domain/calendar';
+import { Scrollable } from '../Scrollable';
 import { WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
@@ -20,8 +14,9 @@ import { pos } from '../../ui/webTheme';
  * «двенадцатым в списке». Календарь отвечает на этот вопрос сразу, поэтому
  * он и стоит в кассе у них.
  *
- * Заголовок «август 2026» открывает выбор месяца, стрелки листают по одному,
- * сегодняшнее число обведено, выбранное залито, «ОЧИСТИТЬ» снимает условие.
+ * Стрелка у заголовка открывает **годы** — так у него: месяцы листают
+ * стрелками по одному, а до нужного года ими не долистать. Сегодняшнее число
+ * обведено, выбранное залито, «ОЧИСТИТЬ» снимает условие.
  */
 export function CashierCalendar({
   value,
@@ -40,15 +35,13 @@ export function CashierCalendar({
 
   const [year, setYear] = useState(start.getFullYear());
   const [month, setMonth] = useState(start.getMonth());
-  const [pickingMonth, setPickingMonth] = useState(false);
+  const [pickingYear, setPickingYear] = useState(false);
 
   const weeks = monthGrid(year, month);
   const todayIso = isoDay(today.getFullYear(), today.getMonth(), today.getDate());
 
   const step = (delta: number) => {
-    const next = pickingMonth
-      ? { year: year + delta, month }
-      : shiftMonth(year, month, delta);
+    const next = shiftMonth(year, month, delta);
     setYear(next.year);
     setMonth(next.month);
   };
@@ -58,59 +51,70 @@ export function CashierCalendar({
       <View style={styles.head}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Выбрать месяц"
-          onPress={() => setPickingMonth((open) => !open)}
+          accessibilityLabel={pickingYear ? 'Вернуться к числам' : 'Выбрать год'}
+          accessibilityState={{ expanded: pickingYear }}
+          onPress={() => setPickingYear((open) => !open)}
           style={styles.title}
         >
-          <Text style={styles.titleLabel}>
-            {pickingMonth ? year : `${MONTHS[month]} ${year}`}
-          </Text>
-          {pickingMonth ? (
-            <WebIcon.caretUp color={pos.text} size={16} />
-          ) : (
-            <WebIcon.caretDown color={pos.text} size={16} />
-          )}
+          <Text style={styles.titleLabel}>{`${MONTHS[month]} ${year}`}</Text>
+          {/* Раскрытая стрелка — в сером кружке: пока список годов открыт,
+              она единственная кнопка в шапке, и её видно. */}
+          <View style={[styles.caret, pickingYear && styles.caretOpen]}>
+            {pickingYear ? (
+              <WebIcon.caretUp color={pos.text} size={18} />
+            ) : (
+              <WebIcon.caretDown color={pos.text} size={18} />
+            )}
+          </View>
         </Pressable>
 
-        <View style={styles.arrows}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={pickingMonth ? 'Прошлый год' : 'Прошлый месяц'}
-            onPress={() => step(-1)}
-            style={styles.arrow}
-          >
-            <WebIcon.chevronLeft color={pos.muted} size={22} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={pickingMonth ? 'Следующий год' : 'Следующий месяц'}
-            onPress={() => step(1)}
-            style={styles.arrow}
-          >
-            <WebIcon.chevronRight color={pos.muted} size={22} />
-          </Pressable>
-        </View>
+        {/* Стрелки по месяцам в списке годов не нужны: там листают годы. */}
+        {pickingYear ? null : (
+          <View style={styles.arrows}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Прошлый месяц"
+              onPress={() => step(-1)}
+              style={styles.arrow}
+            >
+              <WebIcon.chevronLeft color={pos.muted} size={22} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Следующий месяц"
+              onPress={() => step(1)}
+              style={styles.arrow}
+            >
+              <WebIcon.chevronRight color={pos.muted} size={22} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      {pickingMonth ? (
-        <View style={styles.months}>
-          {MONTHS_SHORT.map((name, index) => (
-            <Pressable
-              key={name}
-              accessibilityRole="button"
-              accessibilityLabel={MONTHS[index]}
-              onPress={() => {
-                setMonth(index);
-                setPickingMonth(false);
-              }}
-              style={[styles.month, index === month && styles.monthActive]}
-            >
-              <Text style={[styles.monthLabel, index === month && styles.monthLabelActive]}>
-                {name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+      {pickingYear ? (
+        <Scrollable style={styles.years}>
+          <View style={styles.yearGrid}>
+            {yearWindow(year).map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityLabel={String(value)}
+                accessibilityState={{ selected: value === year }}
+                onPress={() => {
+                  setYear(value);
+                  setPickingYear(false);
+                }}
+                style={styles.year}
+              >
+                <View style={[styles.yearPill, value === year && styles.yearPillActive]}>
+                  <Text style={[styles.yearLabel, value === year && styles.yearLabelActive]}>
+                    {value}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </Scrollable>
       ) : (
         <>
           <View style={styles.week}>
@@ -195,6 +199,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   title: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  caret: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  caretOpen: { backgroundColor: '#EDEFF1' },
   titleLabel: { fontFamily: pos.font, fontSize: 18, fontWeight: '500', color: pos.text },
   arrows: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrow: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
@@ -227,16 +233,23 @@ const styles = StyleSheet.create({
   dayLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   dayLabelSelected: { color: '#FFFFFF' },
 
-  months: { flexDirection: 'row', flexWrap: 'wrap' },
-  month: {
-    width: '25%',
-    height: 46,
+  // Годы — тремя столбцами и с прокруткой, как у него: их много, и
+  // выбранный должен быть виден сразу, а не после долгого листания.
+  years: { height: 300 },
+  yearGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  year: { width: '33.333%', height: 50, alignItems: 'center', justifyContent: 'center' },
+  yearPill: {
+    paddingHorizontal: 18,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  monthActive: {},
-  monthLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
-  monthLabelActive: { color: pos.bar, fontWeight: '700' },
+  // Тёмно-синяя таблетка выбранного года — его же цвет, не тот синий,
+  // которым залито выбранное число.
+  yearPillActive: { backgroundColor: '#22467F' },
+  yearLabel: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  yearLabelActive: { color: '#FFFFFF' },
 
   clear: { alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 8, marginTop: 4 },
   clearLabel: { fontFamily: pos.font, fontSize: 14, color: pos.accent, letterSpacing: 0.6 },

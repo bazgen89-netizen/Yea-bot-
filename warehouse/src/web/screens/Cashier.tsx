@@ -1065,22 +1065,28 @@ const Tile = memo(function Tile({
   selected: boolean;
   onPick: (product: ProductWithStock) => void;
 }) {
-  /**
-   * Наведение мыши — для подсказки с полным названием.
-   *
-   * В плитке название обрезано двумя строками: иначе плитки в ряду выходят
-   * разной высоты, и витрина рассыпается. Но обрезанное название читать
-   * нечем — «Янь Сяо Чжун (копчёный…» это не ответ на вопрос, что за чай.
-   * Поэтому под курсором показывается всё название целиком, как у него.
-   */
-  const [hovered, setHovered] = useState(false);
-
   return (
     <Pressable
       accessibilityRole="button"
       onPress={() => onPick(product)}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+      /**
+       * Полное название под курсором.
+       *
+       * Плашку рисует **сам браузер**: у него на плитке обычный `title`, и та
+       * серая рамка на снимке — системная подсказка, а не часть страницы.
+       * Своя, нарисованная поверх плиток, выглядела иначе и вставала не там,
+       * где ждут: не под курсором, а по краю карточки.
+       *
+       * Атрибут ставится через ссылку на узел: React Native Web своих
+       * `title` не пропускает, а притворяться подсказкой не нужно — нужна она
+       * сама.
+       */
+      ref={(node) => {
+        (node as unknown as { setAttribute?: (name: string, value: string) => void })?.setAttribute?.(
+          'title',
+          product.name,
+        );
+      }}
       style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
     >
       <Text style={styles.tileStock}>
@@ -1102,13 +1108,6 @@ const Tile = memo(function Tile({
       </Text>
       <Text style={styles.tileСode}>{product.sku ?? ''}</Text>
 
-      {/* Подсказка рисуется поверх соседних плиток, поэтому лежит после
-          названия и не занимает места в потоке. */}
-      {hovered ? (
-        <View pointerEvents="none" style={styles.tip}>
-          <Text style={styles.tipText}>{product.name}</Text>
-        </View>
-      ) : null}
 
       <View style={styles.tilePriceRow}>
         <Text style={styles.tilePrice}>{formatMoney(product.sale_price)} руб</Text>
@@ -1150,21 +1149,6 @@ const styles = StyleSheet.create({
   panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   panelBackLabel: { fontFamily: pos.font, fontSize: 30, color: '#FFFFFF', lineHeight: 32 },
   panelTitle: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
-  // Тёмная подсказка с полным названием — как у него: серый прямоугольник
-  // со скруглением, белый текст, поверх соседних плиток.
-  tip: {
-    position: 'absolute',
-    left: 8,
-    right: -60,
-    top: '62%',
-    backgroundColor: '#4A4A4A',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    zIndex: 5,
-  },
-  tipText: { fontFamily: pos.font, fontSize: 13, color: '#FFFFFF', lineHeight: 17 },
-
   screen: { flex: 1, backgroundColor: pos.bg },
   body: { flex: 1, flexDirection: 'row' },
 

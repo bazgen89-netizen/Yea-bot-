@@ -55,8 +55,17 @@ import { pos } from '../../ui/webTheme';
  * четыре плитки у товаров, полосы у категорий, папка у групп, — и подобрать
  * их из набора точнее, чем сложить из прямоугольников, не выходит.
  */
-function BrowseGlyph({ kind, active }: { kind: string; active: boolean }) {
-  const tint = active ? '#FFFFFF' : pos.text;
+function BrowseGlyph({
+  kind,
+  active,
+  color,
+}: {
+  kind: string;
+  active: boolean;
+  /** Свой цвет — для пустой плитки витрины и синей кнопки каталога. */
+  color?: string;
+}) {
+  const tint = color ?? (active ? '#FFFFFF' : pos.text);
 
   if (kind === 'categories') {
     return (
@@ -475,7 +484,7 @@ export function Cashier() {
               onPress={() => setBrowseMenu((open) => !open)}
               style={styles.gridButton}
             >
-              <WebIcon.home size={22} color="#FFFFFF" />
+              <BrowseGlyph kind="products" active color="#FFFFFF" />
             </Pressable>
             <TextInput
               ref={searchField}
@@ -1011,10 +1020,22 @@ const Tile = memo(function Tile({
   selected: boolean;
   onPick: (product: ProductWithStock) => void;
 }) {
+  /**
+   * Наведение мыши — для подсказки с полным названием.
+   *
+   * В плитке название обрезано двумя строками: иначе плитки в ряду выходят
+   * разной высоты, и витрина рассыпается. Но обрезанное название читать
+   * нечем — «Янь Сяо Чжун (копчёный…» это не ответ на вопрос, что за чай.
+   * Поэтому под курсором показывается всё название целиком, как у него.
+   */
+  const [hovered, setHovered] = useState(false);
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={() => onPick(product)}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
     >
       <Text style={styles.tileStock}>
@@ -1025,7 +1046,9 @@ const Tile = memo(function Tile({
         {product.photo_uri ? (
           <Image source={{ uri: product.photo_uri }} style={styles.tilePhoto} />
         ) : (
-          <WebIcon.home size={34} color="#C7C7CC" />
+          // Без фотографии — тот же значок, что у него: четыре фигуры,
+          // а не сетка из девяти квадратиков.
+          <BrowseGlyph kind="products" active={false} color="#C7C7CC" />
         )}
       </View>
 
@@ -1033,6 +1056,14 @@ const Tile = memo(function Tile({
         {product.name}
       </Text>
       <Text style={styles.tileСode}>{product.sku ?? ''}</Text>
+
+      {/* Подсказка рисуется поверх соседних плиток, поэтому лежит после
+          названия и не занимает места в потоке. */}
+      {hovered ? (
+        <View pointerEvents="none" style={styles.tip}>
+          <Text style={styles.tipText}>{product.name}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.tilePriceRow}>
         <Text style={styles.tilePrice}>{formatMoney(product.sale_price)} руб</Text>
@@ -1074,6 +1105,21 @@ const styles = StyleSheet.create({
   panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   panelBackLabel: { fontFamily: pos.font, fontSize: 30, color: '#FFFFFF', lineHeight: 32 },
   panelTitle: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
+  // Тёмная подсказка с полным названием — как у него: серый прямоугольник
+  // со скруглением, белый текст, поверх соседних плиток.
+  tip: {
+    position: 'absolute',
+    left: 8,
+    right: -60,
+    top: '62%',
+    backgroundColor: '#4A4A4A',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    zIndex: 5,
+  },
+  tipText: { fontFamily: pos.font, fontSize: 13, color: '#FFFFFF', lineHeight: 17 },
+
   screen: { flex: 1, backgroundColor: pos.bg },
   body: { flex: 1, flexDirection: 'row' },
 

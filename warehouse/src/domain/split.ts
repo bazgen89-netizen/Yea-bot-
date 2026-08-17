@@ -73,39 +73,34 @@ export function tileColumns(windowWidth: number): number {
   return 2;
 }
 
-/**
- * К какой ширине плитки стремимся — от размера **окна**, а не витрины.
- *
- * Плитка задаёт размер шрифта и картинки; менять её от того, что двигают
- * границу, значит дёргать всю витрину. Поэтому размер берётся от окна: за
- * образец взята витрина при границе по умолчанию.
- */
-export function preferredTileWidth(windowWidth: number): number {
-  return (windowWidth * DEFAULT_SPLIT) / tileColumns(windowWidth);
-}
-
 /** Доля, отданная витрине по умолчанию: 1,55 к 1. */
 export const DEFAULT_SPLIT = 1.55 / 2.55;
 
 /**
- * Сколько плиток поместится в витрину такой ширины.
+ * Сколько плиток в ряду: от пяти до семи.
  *
- * Двигаем границу — меняется число плиток. При этом **ряд всегда заполнен
- * целиком**: пустых полей ни справа, ни по краям быть не должно.
+ * Пределы названы числами, а не выведены из желаемой ширины плитки, потому
+ * что так это и просят: сдвинул границу влево — пять в ряду, вправо — семь.
+ * Прежний расчёт («сколько плиток желаемой ширины поместится») давал на
+ * широком мониторе от шести до девяти, и на глаз это выглядело так, будто
+ * от движения границы не меняется ничего: плитки то же число, только шире.
  *
- * Полностью заполнить ряд и не тронуть размер плитки одновременно нельзя:
- * ширина витрины не делится нацело на желаемую ширину карточки. Поэтому ряд
- * заполняется всегда, а число столбцов выбирается **ближайшим** — тогда
- * плитка отклоняется от желаемой не больше чем на половину столбца:
- * при шести столбцах это ±8 %, а на деле выходит 3–4 %.
- *
- * Пробовали иначе — оставлять плитке точную ширину, а остаток ряда убирать в
- * поля по краям. Поля и оказались хуже: пустое место в витрине читается как
- * обрыв, а несколько процентов в размере карточки глаз не ловит.
+ * Ряд при этом всегда заполнен целиком — пустых полей справа не остаётся, —
+ * а размер плитки меняется вместе с числом столбцов. Иначе никак: ширина
+ * витрины не делится нацело на «правильную» карточку.
  */
-export function columnsFor(windowWidth: number, catalogWidth: number): number {
-  if (catalogWidth <= 0) return tileColumns(windowWidth);
+export const MIN_COLUMNS = 5;
+export const MAX_COLUMNS = 7;
 
-  const wanted = preferredTileWidth(windowWidth);
-  return Math.min(Math.max(1, Math.round(catalogWidth / wanted)), 12);
+export function columnsFor(windowWidth: number, catalogWidth: number): number {
+  // Раскладки ещё не было — начинаем с пяти, как при границе слева.
+  if (catalogWidth <= 0 || windowWidth <= 0) return MIN_COLUMNS;
+
+  // Крайние положения границы для этого окна — те же, что стережёт clampSplit.
+  const narrow = clampSplit(0, windowWidth) * windowWidth;
+  const wide = clampSplit(1, windowWidth) * windowWidth;
+  if (wide - narrow < 1) return MIN_COLUMNS;
+
+  const part = Math.min(1, Math.max(0, (catalogWidth - narrow) / (wide - narrow)));
+  return Math.round(MIN_COLUMNS + part * (MAX_COLUMNS - MIN_COLUMNS));
 }

@@ -93,9 +93,12 @@ export const web = {
  * typography: { fontFamily: "'Oswald', sans-serif" }
  * ```
  *
- * Шрифт **обязан** быть Oswald: он узкий, и с Roboto ни одна плитка витрины,
- * ни одна строка чека не встают так, как у них. Сам файл вшивается в сборку —
- * `assets/fonts/oswald.css`, собирается `scripts/fetch-oswald.mjs`.
+ * Шрифт в этой теме назван Oswald — и это ловушка, в которую я попал. Файла
+ * шрифта их касса **не отдаёт**: браузер имени не находит и берёт следующее
+ * в списке, `sans-serif`. На снимках их кассы буквы обычные, не узкие, — то
+ * есть Roboto, а не Oswald. Мы же честно вшили Oswald, и текст стал узким
+ * там, где у них широкий. Поэтому здесь то, что видит пользователь, а не то,
+ * что написано у них в теме.
  */
 export const pos = {
   /** Полоса «ПРОДАЖА» внизу; она же — главная кнопка. `primary.main`. */
@@ -117,7 +120,7 @@ export const pos = {
   muted: '#656D76',
   /** `action.hover` — подсветка строки под курсором. */
   hover: 'rgba(0,0,0,0.04)',
-  font: 'Oswald, Roboto, sans-serif',
+  font: 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
 };
 
 /**

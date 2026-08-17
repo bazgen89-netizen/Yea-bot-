@@ -132,19 +132,13 @@ for (const [file, weight] of ROBOTO) {
 page = replaceOnce(page, '</head>', `<style id="roboto">${faces.join('')}</style></head>`);
 
 /**
- * Oswald — шрифт кассы.
+ * Oswald больше не вшивается.
  *
- * Их кассирское приложение написано им целиком (`typography.fontFamily` в
- * теме — `'Oswald', sans-serif`). У нас он был назван в стилях, но файла не
- * было, и браузер молча подставлял Roboto: буквы шире, строки длиннее, и
- * ни одна плитка на витрине не совпадала с их плиткой.
- *
- * Готовые `@font-face` лежат в `assets/fonts/oswald.css`; собирает их
- * `node scripts/fetch-oswald.mjs`.
+ * Их тема называет его шрифтом кассы, но самого файла касса не отдаёт: браузер
+ * берёт следующее имя в списке, `sans-serif`, и на снимках их кассы буквы
+ * обычные, а не узкие. Мы вшивали шрифт, которого у них нет, и текст выходил
+ * уже их собственного — плюс 575 КБ в каждой сборке.
  */
-const oswald = await readFile(join(root, 'assets/fonts/oswald.css'), 'utf8').catch(() => null);
-if (!oswald) throw new Error('Нет assets/fonts/oswald.css — запустите scripts/fetch-oswald.mjs');
-page = replaceOnce(page, '</head>', `<style id="oswald">${oswald}</style></head>`);
 
 /**
  * Видимая полоса прокрутки.

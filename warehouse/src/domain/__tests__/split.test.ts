@@ -1,9 +1,9 @@
 import {
   clampSplit,
   columnsFor,
-  preferredTileWidth,
-  tileColumns,
+  MAX_COLUMNS,
   MIN_CATALOG_CM,
+  MIN_COLUMNS,
   MIN_RECEIPT_CM,
   PX_IN_CM,
 } from '../split';
@@ -46,17 +46,34 @@ describe('пределы разделительной полосы', () => {
 });
 
 describe('плитки витрины', () => {
-  it('размер плитки задаёт окно, а не витрина', () => {
-    // Ширина окна не менялась — значит, и желаемая ширина плитки та же,
-    // сколько бы места ни осталось витрине.
-    expect(preferredTileWidth(1600)).toBe(preferredTileWidth(1600));
-    expect(preferredTileWidth(1600)).toBeGreaterThan(preferredTileWidth(1200));
+  it('от пяти в ряду слева до семи справа', () => {
+    const window = 1600;
+    const narrow = clampSplit(0, window) * window;
+    const wide = clampSplit(1, window) * window;
+
+    expect(columnsFor(window, narrow)).toBe(MIN_COLUMNS);
+    expect(columnsFor(window, wide)).toBe(MAX_COLUMNS);
+    // Между крайними положениями — шесть, то есть ряд меняется постепенно.
+    expect(columnsFor(window, (narrow + wide) / 2)).toBe(6);
   });
 
-  it('витрина шире — плиток в ряду больше', () => {
-    const narrow = columnsFor(1600, 700);
-    const wide = columnsFor(1600, 1200);
-    expect(wide).toBeGreaterThan(narrow);
+  it('за пределы пяти и семи не выходит ни на каком экране', () => {
+    for (const window of [1024, 1280, 1440, 1600, 1920, 2560, 3440]) {
+      for (let width = 100; width <= window; width += 37) {
+        const columns = columnsFor(window, width);
+        expect(columns).toBeGreaterThanOrEqual(MIN_COLUMNS);
+        expect(columns).toBeLessThanOrEqual(MAX_COLUMNS);
+      }
+    }
+  });
+
+  it('витрина шире — плиток в ряду не меньше', () => {
+    let previous = 0;
+    for (let width = 600; width <= 1500; width += 10) {
+      const columns = columnsFor(1600, width);
+      expect(columns).toBeGreaterThanOrEqual(previous);
+      previous = columns;
+    }
   });
 
   it('ряд заполнен целиком, без полей по краям', () => {
@@ -64,25 +81,10 @@ describe('плитки витрины', () => {
     for (let width = 400; width <= 2000; width += 13) {
       const columns = columnsFor(1600, width);
       expect(columns * (100 / columns)).toBeCloseTo(100, 9);
-      expect(columns).toBeGreaterThanOrEqual(1);
     }
   });
 
-  it('плитка при этом почти не меняется в размере', () => {
-    const wanted = preferredTileWidth(1600);
-    let previous = 0;
-
-    for (let width = Math.ceil(MIN_CATALOG_CM * PX_IN_CM); width <= 1600; width += 10) {
-      const columns = columnsFor(1600, width);
-      // Отклонение — не больше половины столбца, то есть меньше десятой доли.
-      expect(Math.abs(width / columns - wanted) / wanted).toBeLessThan(0.1);
-      // Витрина шире — плиток не меньше, чем было.
-      expect(columns).toBeGreaterThanOrEqual(previous);
-      previous = columns;
-    }
-  });
-
-  it('без витрины отвечает по их таблице окна', () => {
-    expect(columnsFor(1440, 0)).toBe(tileColumns(1440));
+  it('до первой раскладки — пять, как при границе слева', () => {
+    expect(columnsFor(1440, 0)).toBe(MIN_COLUMNS);
   });
 });

@@ -15,6 +15,7 @@ import { useCashierKeys } from './useCashierKeys';
 import { CashierMenu } from './CashierMenu';
 import { CashierCloseShift } from './CashierCloseShift';
 import { CashierCustomer } from './CashierCustomer';
+import { CashierDebts } from './CashierDebts';
 import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierNewClient } from './CashierNewClient';
@@ -32,7 +33,7 @@ import { recommendedFor } from '../../db/recommendations';
 import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
-import { formatMoneyWeb } from '../../domain/money';
+import { formatMoney } from '../../domain/money';
 import { clampSplit, columnsFor, DEFAULT_SPLIT } from '../../domain/split';
 import { formatQty } from '../../domain/qty';
 import type {
@@ -631,7 +632,7 @@ export function Cashier() {
                       ? `скидка ${customer.discount_bp / 100} %`
                       : '',
                     customer.bonus_balance > 0
-                      ? `${formatMoneyWeb(customer.bonus_balance)} бонусов`
+                      ? `${formatMoney(customer.bonus_balance)} бонусов`
                       : '',
                   ]
                     .filter(Boolean)
@@ -686,7 +687,7 @@ export function Cashier() {
                         {product.name}
                       </Text>
                       <Text style={styles.recoPrice}>
-                        {formatMoneyWeb(product.sale_price)} руб
+                        {formatMoney(product.sale_price)} руб
                       </Text>
                     </Pressable>
                   ))}
@@ -755,14 +756,14 @@ export function Cashier() {
                             </View>
                           ) : null}
                           <Text style={styles.receiptQty}>
-                            {formatQty(line.qty)} {line.unit} × {formatMoneyWeb(line.price)}
+                            {formatQty(line.qty)} {line.unit} × {formatMoney(line.price)}
                           </Text>
                         </View>
                       </View>
                       <View style={styles.receiptSums}>
-                        <Text style={styles.receiptSum}>{formatMoneyWeb(gross - off)}</Text>
+                        <Text style={styles.receiptSum}>{formatMoney(gross - off)}</Text>
                         {off > 0 ? (
-                          <Text style={styles.receiptWas}>{formatMoneyWeb(gross)}</Text>
+                          <Text style={styles.receiptWas}>{formatMoney(gross)}</Text>
                         ) : null}
                       </View>
                       <Pressable
@@ -783,13 +784,13 @@ export function Cashier() {
               <View style={styles.totals}>
                 <View style={styles.totalsRow}>
                   <Text style={styles.totalsLabel}>Подытог</Text>
-                  <Text style={styles.totalsValue}>{formatMoneyWeb(cart.totals.gross)} руб</Text>
+                  <Text style={styles.totalsValue}>{formatMoney(cart.totals.gross)} руб</Text>
                 </View>
                 {cart.totals.lineDiscount > 0 ? (
                   <View style={styles.totalsRow}>
                     <Text style={styles.totalsLabel}>Скидки на товары</Text>
                     <Text style={styles.totalsValue}>
-                      {formatMoneyWeb(cart.totals.lineDiscount)} руб
+                      {formatMoney(cart.totals.lineDiscount)} руб
                     </Text>
                   </View>
                 ) : null}
@@ -804,7 +805,7 @@ export function Cashier() {
                     {percentFromDiscount(cart.totals.subtotal, cart.totals.discount).toFixed(2)} %
                   </Text>
                   <Text style={styles.totalsDiscount}>
-                    {formatMoneyWeb(cart.totals.discount)} руб
+                    {formatMoney(cart.totals.discount)} руб
                   </Text>
                 </Pressable>
               </View>
@@ -852,7 +853,7 @@ export function Cashier() {
           <View style={styles.sellInner}>
             <Text style={styles.sellDots}>⋮</Text>
             <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
-            <Text style={styles.sellTotal}>{formatMoneyWeb(cart.totals.total)} руб</Text>
+            <Text style={styles.sellTotal}>{formatMoney(cart.totals.total)} руб</Text>
           </View>
         </Pressable>
       </View>
@@ -967,7 +968,11 @@ export function Cashier() {
           из него возвращаются в тот же чек, который набирали. */}
       <CashierReceipts visible={view === 'receipts'} onClose={() => setView('sale')} />
 
-      {view !== 'sale' && view !== 'receipts' ? (
+      {/* «Возврат долга» — тоже окно поверх продажи: долг гасят между чеками,
+          не уходя с рабочего места. */}
+      <CashierDebts visible={view === 'debts'} onClose={() => setView('sale')} />
+
+      {view !== 'sale' && view !== 'receipts' && view !== 'debts' ? (
         <View style={styles.panel}>
           <View style={styles.panelHead}>
             <Pressable
@@ -1030,7 +1035,7 @@ const Tile = memo(function Tile({
       <Text style={styles.tileСode}>{product.sku ?? ''}</Text>
 
       <View style={styles.tilePriceRow}>
-        <Text style={styles.tilePrice}>{formatMoneyWeb(product.sale_price)} руб</Text>
+        <Text style={styles.tilePrice}>{formatMoney(product.sale_price)} руб</Text>
       </View>
     </Pressable>
   );

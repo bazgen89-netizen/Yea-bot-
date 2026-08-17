@@ -1,7 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCashierKeys } from './useCashierKeys';
-import { formatMoneyWeb, type Kopecks } from '../../domain/money';
+import { formatMoney, type Kopecks } from '../../domain/money';
 import { pos } from '../../ui/webTheme';
 
 /**
@@ -76,7 +76,7 @@ export function CashierSuccess({
           <View style={styles.change}>
             <Text style={styles.changeLabel}>{returning ? 'ВЫДАНО:' : 'СДАЧА:'}</Text>
             <Text style={styles.changeValue}>
-              {formatMoneyWeb(returning ? total : changeDue)} руб
+              {formatMoney(returning ? total : changeDue)} руб
             </Text>
           </View>
 
@@ -97,7 +97,7 @@ function Line({ label, value, strong }: { label: string; value: Kopecks; strong?
     <View style={styles.line}>
       <Text style={[styles.lineLabel, strong && styles.lineStrong]}>{label}</Text>
       <Text style={[styles.lineValue, strong && styles.lineStrong]}>
-        {formatMoneyWeb(value)} руб
+        {formatMoney(value)} руб
       </Text>
     </View>
   );

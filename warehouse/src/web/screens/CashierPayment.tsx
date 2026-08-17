@@ -13,7 +13,7 @@ import {
 
 import { CashierTerminal } from './CashierTerminal';
 import { useCashierKeys } from './useCashierKeys';
-import { formatMoneyWeb, parseMoney } from '../../domain/money';
+import { formatMoney, parseMoney } from '../../domain/money';
 import { cashOptions, change } from '../../domain/payment';
 import type { Kopecks } from '../../domain/money';
 import type { CounterpartyWithTotals, PaymentMethod } from '../../domain/types';
@@ -200,13 +200,13 @@ export function CashierPayment({
           <ScrollView style={styles.left} contentContainerStyle={styles.leftContent}>
             <Text style={styles.title}>Платежи</Text>
 
-            <Line label="Итог" value={formatMoneyWeb(total)} strong />
-            <Line label="Наличные" value={formatMoneyWeb(taken.cash)} />
-            <Line label="Безналичные" value={formatMoneyWeb(taken.card)} />
-            <Line label="Отсрочка" value={formatMoneyWeb(taken.credit)} />
-            <Line label="Принято" value={formatMoneyWeb(accepted)} strong />
+            <Line label="Итог" value={formatMoney(total)} strong />
+            <Line label="Наличные" value={formatMoney(taken.cash)} />
+            <Line label="Безналичные" value={formatMoney(taken.card)} />
+            <Line label="Отсрочка" value={formatMoney(taken.credit)} />
+            <Line label="Принято" value={formatMoney(accepted)} strong />
             {left > 0 && accepted > 0 ? (
-              <Line label="Осталось" value={formatMoneyWeb(left)} accent />
+              <Line label="Осталось" value={formatMoney(left)} accent />
             ) : null}
 
             <TextInput
@@ -324,11 +324,11 @@ export function CashierPayment({
                     <Pressable
                       key={option}
                       accessibilityRole="button"
-                      accessibilityLabel={`Принять ${formatMoneyWeb(option)}`}
+                      accessibilityLabel={`Принять ${formatMoney(option)}`}
                       onPress={() => setAmount(String(option / 100))}
                       style={styles.option}
                     >
-                      <Text style={styles.optionLabel}>{formatMoneyWeb(option)}</Text>
+                      <Text style={styles.optionLabel}>{formatMoney(option)}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -336,7 +336,7 @@ export function CashierPayment({
                 {rest > 0 ? (
                   <View style={styles.changeRow}>
                     <Text style={styles.changeLabel}>Сдача</Text>
-                    <Text style={styles.changeValue}>{formatMoneyWeb(rest)} руб</Text>
+                    <Text style={styles.changeValue}>{formatMoney(rest)} руб</Text>
                   </View>
                 ) : null}
               </>
@@ -349,7 +349,7 @@ export function CashierPayment({
               style={[styles.confirm, creditBlocked && styles.confirmOff]}
             >
               <Text style={styles.confirmLabel}>
-                {returning ? 'ВЕРНУТЬ' : 'ПРИНЯТЬ'} {formatMoneyWeb(applied)} РУБ
+                {returning ? 'ВЕРНУТЬ' : 'ПРИНЯТЬ'} {formatMoney(applied)} РУБ
               </Text>
               <View style={styles.key}>
                 <Text style={styles.keyLabel}>ENTER</Text>

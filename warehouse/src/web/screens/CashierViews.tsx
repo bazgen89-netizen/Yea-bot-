@@ -1,12 +1,11 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { CashierDebts } from './CashierDebts';
 import { CashierShifts } from './CashierShifts';
 import { listCounterparties } from '../../db/counterparties';
 import { listProducts } from '../../db/products';
 import { listSales } from '../../db/sales';
 import { listShifts, openShiftAnywhere, shiftReport } from '../../db/shifts';
-import { formatMoneyWeb } from '../../domain/money';
+import { formatMoney } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import { useQuery } from '../../state/DatabaseProvider';
 import { pos } from '../../ui/webTheme';
@@ -64,7 +63,6 @@ export function CashierPanel({
   if (view === 'clients') return <Clients />;
   if (view === 'products') return <Products />;
   if (view === 'shifts') return <CashierShifts onCloseShift={onCloseShift} />;
-  if (view === 'debts') return <CashierDebts />;
   if (view === 'money') return <Money />;
   if (view === 'xreport') return <XReport />;
   return <Settings />;
@@ -86,7 +84,7 @@ function Receipts() {
               {sale.refunded > 0 ? ' · возврат' : ''}
             </Text>
           </View>
-          <Text style={styles.rowValue}>{formatMoneyWeb(sale.total)}</Text>
+          <Text style={styles.rowValue}>{formatMoney(sale.total)}</Text>
         </View>
       ))}
     </ScrollView>
@@ -106,7 +104,7 @@ function Clients() {
             <Text style={styles.rowTitle}>{client.name}</Text>
             <Text style={styles.rowNote}>{client.phone ?? 'без телефона'}</Text>
           </View>
-          <Text style={styles.rowValue}>{formatMoneyWeb(client.purchases)}</Text>
+          <Text style={styles.rowValue}>{formatMoney(client.purchases)}</Text>
         </View>
       ))}
     </ScrollView>
@@ -126,7 +124,7 @@ function Products() {
               Остаток {formatQty(product.stock)} {product.unit}
             </Text>
           </View>
-          <Text style={styles.rowValue}>{formatMoneyWeb(product.sale_price)}</Text>
+          <Text style={styles.rowValue}>{formatMoney(product.sale_price)}</Text>
         </View>
       ))}
     </ScrollView>
@@ -156,11 +154,11 @@ function Shifts() {
         <View style={styles.stats}>
           <Text style={styles.statsTitle}>Смена №{current.id} — {report.register_name}</Text>
           <Line label="Количество продаж" value={String(report.receipts)} />
-          <Line label="Сумма продаж" value={formatMoneyWeb(report.revenue)} />
-          <Line label="Наличные" value={formatMoneyWeb(report.cash)} />
-          <Line label="Безналичные" value={formatMoneyWeb(report.card)} />
-          <Line label="Сумма на начало смены" value={formatMoneyWeb(current.opening_cash)} />
-          <Line label="Сумма на текущий момент" value={formatMoneyWeb(report.expectedCash)} />
+          <Line label="Сумма продаж" value={formatMoney(report.revenue)} />
+          <Line label="Наличные" value={formatMoney(report.cash)} />
+          <Line label="Безналичные" value={formatMoney(report.card)} />
+          <Line label="Сумма на начало смены" value={formatMoney(current.opening_cash)} />
+          <Line label="Сумма на текущий момент" value={formatMoney(report.expectedCash)} />
         </View>
       ) : null}
 
@@ -198,15 +196,15 @@ function XReport() {
 
   return (
     <View style={styles.list}>
-      <Line label="Наличными в кассе на начало" value={formatMoneyWeb(shift.opening_cash)} />
-      <Line label="Продажи наличными" value={formatMoneyWeb(report.cash)} />
-      <Line label="Продажи картой" value={formatMoneyWeb(report.card)} />
-      <Line label="Внесено" value={formatMoneyWeb(report.moneyIn)} />
-      <Line label="Изъято" value={formatMoneyWeb(report.moneyOut)} />
+      <Line label="Наличными в кассе на начало" value={formatMoney(shift.opening_cash)} />
+      <Line label="Продажи наличными" value={formatMoney(report.cash)} />
+      <Line label="Продажи картой" value={formatMoney(report.card)} />
+      <Line label="Внесено" value={formatMoney(report.moneyIn)} />
+      <Line label="Изъято" value={formatMoney(report.moneyOut)} />
       <Line label="Чеков" value={String(report.receipts)} />
       <View style={styles.total}>
         <Text style={styles.totalLabel}>Должно быть в ящике</Text>
-        <Text style={styles.totalValue}>{formatMoneyWeb(report.expectedCash)}</Text>
+        <Text style={styles.totalValue}>{formatMoney(report.expectedCash)}</Text>
       </View>
     </View>
   );

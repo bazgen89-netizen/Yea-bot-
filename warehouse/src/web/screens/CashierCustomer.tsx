@@ -10,7 +10,7 @@ import {
   parseList,
 } from '../../db/counterparties';
 import { useCashierKeys } from './useCashierKeys';
-import { formatMoneyWeb } from '../../domain/money';
+import { formatMoney } from '../../domain/money';
 import type { CounterpartyWithTotals } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
@@ -177,7 +177,7 @@ export function CashierCustomer({
                     {party.bonus_balance > 0 ? (
                       <View style={styles.bonusRow}>
                         <WebIcon.coins size={17} color={pos.accent} />
-                        <Text style={styles.bonus}>{formatMoneyWeb(party.bonus_balance)}</Text>
+                        <Text style={styles.bonus}>{formatMoney(party.bonus_balance)}</Text>
                       </View>
                     ) : null}
                   </>

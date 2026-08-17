@@ -5,10 +5,11 @@ import { useCashierKeys } from './useCashierKeys';
 import { formatPhone } from '../../db/counterparties';
 import { debtSales, listDebtors, payDebt, type Debtor } from '../../db/debts';
 import { debtAfter, debtTotal } from '../../domain/debt';
-import { formatMoneyWeb, parseMoney } from '../../domain/money';
+import { formatMoney, parseMoney } from '../../domain/money';
 import type { PaymentMethod } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
+import { Scrollable } from '../Scrollable';
 import { WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
@@ -25,9 +26,20 @@ import { pos } from '../../ui/webTheme';
  * Разносятся деньги по чекам сами, от старого к новому: покупатель говорит
  * «за прошлый раз», а не называет номер чека.
  */
-export function CashierDebts() {
+export function CashierDebts({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState<Debtor | null>(null);
+
+  // Пока открыт долг одного покупателя, Esc закрывает его, а не весь список.
+  useCashierKeys(visible && !picked, (event) => {
+    if (event.key === 'Escape') onClose();
+  });
 
   const debtors = useQuery((db) => listDebtors(db, search), [search]);
   const total = debtors.reduce((sum, debtor) => sum + debtor.debt, 0);
@@ -42,69 +54,92 @@ export function CashierDebts() {
   }, [debtors, picked]);
 
   return (
-    <View style={styles.root}>
-      <View style={styles.searchRow}>
-        <WebIcon.search size={18} color="#8E8E93" />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Введите текст для поиска"
-          placeholderTextColor={pos.muted}
-          accessibilityLabel="Поиск должника"
-          style={styles.search}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Закрыть список должников"
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
         />
-      </View>
 
-      <View style={styles.summary}>
-        <Text style={styles.summaryText}>Найдено {debtors.length}</Text>
-        {debtors.length > 1 ? (
-          <Text style={styles.summaryText}>Общий долг: {formatMoneyWeb(total)} руб</Text>
-        ) : null}
-      </View>
+        <View style={styles.listPanel}>
+          <View style={styles.listHead}>
+            <Text style={styles.listTitle}>Список должников</Text>
 
-      {debtors.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>
-            {search ? 'Никого не нашли' : 'Долгов нет — все рассчитались'}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.list}>
-          {debtors.map((debtor) => (
-            <Pressable
-              key={debtor.id}
-              accessibilityRole="button"
-              onPress={() => setPicked(debtor)}
-              style={(state) => [
-                styles.row,
-                (state as { hovered?: boolean }).hovered && styles.rowHover,
-              ]}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {debtor.name.trim().slice(0, 1).toUpperCase()}
+            <View style={styles.searchRow}>
+              <WebIcon.search size={20} color={pos.muted} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Введите текст для поиска"
+                placeholderTextColor={pos.muted}
+                accessibilityLabel="Поиск должника"
+                style={styles.search}
+              />
+            </View>
+          </View>
+
+          {/* Серая полоса со счётом и общей суммой: кассир смотрит сюда
+              раньше, чем в список, — «сколько всего за людьми». */}
+          <View style={styles.summary}>
+            <Text style={styles.summaryFound}>Найдено {debtors.length}</Text>
+            <Text style={styles.summaryTotal}>Общий долг: {formatMoney(total)} руб</Text>
+          </View>
+
+          <Scrollable style={styles.list}>
+            {debtors.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {search ? 'Никого не нашли' : 'Долгов нет — все рассчитались'}
+              </Text>
+            ) : null}
+
+            {debtors.map((debtor) => (
+              <Pressable
+                key={debtor.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Долг: ${debtor.name}`}
+                onPress={() => setPicked(debtor)}
+                style={(state) => [
+                  styles.row,
+                  (state as { hovered?: boolean }).hovered && styles.rowHover,
+                ]}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initials(debtor.name)}</Text>
+                </View>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {debtor.name}
                 </Text>
+                <Text style={styles.rowValue}>{formatMoney(debtor.debt)} руб</Text>
+              </Pressable>
+            ))}
+          </Scrollable>
+
+          <View style={styles.listFoot}>
+            <Pressable accessibilityRole="button" onPress={onClose} style={styles.closeRow}>
+              <Text style={styles.closeLabel}>ЗАКРЫТЬ</Text>
+              <View style={styles.key}>
+                <Text style={styles.keyLabel}>ESC</Text>
               </View>
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle}>{debtor.name}</Text>
-                <Text style={styles.rowNote}>
-                  {[
-                    formatPhone(debtor.phone),
-                    `с ${new Date(debtor.since).toLocaleDateString('ru-RU')}`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </View>
-              <Text style={styles.rowValue}>{formatMoneyWeb(debtor.debt)} руб</Text>
             </Pressable>
-          ))}
-        </ScrollView>
-      )}
+          </View>
+        </View>
+      </View>
 
       <DebtWindow debtor={picked} onClose={() => setPicked(null)} />
-    </View>
+    </Modal>
   );
+}
+
+/** «Евгений Т.» → «ЕТ»: две первые буквы имени и фамилии. */
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.slice(0, 1).toUpperCase())
+    .join('');
 }
 
 /** Долг одного покупателя: чеки, сумма и погашение. */
@@ -185,10 +220,10 @@ function DebtWindow({ debtor, onClose }: { debtor: Debtor | null; onClose: () =>
                   <Text style={styles.rowTitle}>Продажа #{sale.id}</Text>
                   <Text style={styles.rowNote}>
                     {new Date(sale.created_at).toLocaleString('ru-RU')} · чек на{' '}
-                    {formatMoneyWeb(sale.total)} руб
+                    {formatMoney(sale.total)} руб
                   </Text>
                 </View>
-                <Text style={styles.rowValue}>{formatMoneyWeb(sale.left)} руб</Text>
+                <Text style={styles.rowValue}>{formatMoney(sale.left)} руб</Text>
               </View>
             ))}
           </ScrollView>
@@ -227,12 +262,12 @@ function DebtWindow({ debtor, onClose }: { debtor: Debtor | null; onClose: () =>
 
           <View style={styles.after}>
             <Text style={styles.afterLabel}>Общий долг составит:</Text>
-            <Text style={styles.afterValue}>{formatMoneyWeb(debtAfter(total, applied))} руб</Text>
+            <Text style={styles.afterValue}>{formatMoney(debtAfter(total, applied))} руб</Text>
           </View>
 
           <Pressable accessibilityRole="button" onPress={close} style={styles.confirm}>
             <Text style={styles.confirmLabel}>
-              ЗАКРЫТЬ ДОЛГ НА СУММУ {formatMoneyWeb(applied)} РУБ
+              ЗАКРЫТЬ ДОЛГ НА СУММУ {formatMoney(applied)} РУБ
             </Text>
             <View style={styles.confirmKey}>
               <Text style={styles.confirmKeyLabel}>ENTER</Text>
@@ -245,54 +280,88 @@ function DebtWindow({ debtor, onClose }: { debtor: Debtor | null; onClose: () =>
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: pos.bg },
+  // Окно списка должников: заголовок, поиск, серая полоса с итогом, строки.
+  listPanel: {
+    width: 520,
+    maxWidth: '94%',
+    height: '72%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    overflow: 'hidden',
+    zIndex: 1,
+  },
+  listHead: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 },
+  listTitle: { fontFamily: pos.font, fontSize: 24, color: pos.text, marginBottom: 16 },
+
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 20,
-    height: 56,
-    backgroundColor: pos.tile,
-    borderBottomWidth: 1,
-    borderBottomColor: pos.border,
+    paddingHorizontal: 16,
+    height: 50,
+    borderWidth: 1,
+    borderColor: pos.border,
+    borderRadius: 4,
   },
-  search: { outlineWidth: 0, flex: 1, fontFamily: pos.font, fontSize: 16, color: pos.text },
+  search: { outlineWidth: 0, flex: 1, fontFamily: pos.font, fontSize: 17, color: pos.text },
+
   summary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    height: 48,
+    backgroundColor: '#F5F7F9',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: pos.border,
   },
-  summaryText: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
+  summaryFound: { fontFamily: pos.font, fontSize: 15, fontWeight: '700', color: pos.text },
+  summaryTotal: { fontFamily: pos.font, fontSize: 15, color: pos.text },
 
-  list: { flex: 1 },
+  list: { flex: 1, minHeight: 0 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: pos.tile,
-    borderBottomWidth: 1,
-    borderBottomColor: pos.border,
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
   },
   rowHover: { backgroundColor: pos.bg },
+  // Квадрат с двумя буквами — как у него: фотографий у покупателей нет,
+  // а по одной букве в списке из десяти человек не различить.
   avatar: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 4,
-    backgroundColor: pos.bar,
+    backgroundColor: '#4B9FE1',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
+  avatarText: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
   rowMain: { flex: 1, gap: 3 },
-  rowTitle: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  rowTitle: { flex: 1, fontFamily: pos.font, fontSize: 17, color: pos.text },
   rowNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
-  rowValue: { fontFamily: pos.font, fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
+  rowValue: { fontFamily: pos.font, fontSize: 17, color: pos.text, fontVariant: ['tabular-nums'] },
+
+  listFoot: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 24,
+    height: 60,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: pos.border,
+  },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { fontFamily: pos.font, fontSize: 16, color: pos.muted, textAlign: 'center' },
+  emptyText: {
+    fontFamily: pos.font,
+    fontSize: 16,
+    color: pos.muted,
+    textAlign: 'center',
+    marginTop: 40,
+  },
 
   modalRoot: {
     flex: 1,

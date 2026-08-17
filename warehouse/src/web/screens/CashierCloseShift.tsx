@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 
 import { useCashierKeys } from './useCashierKeys';
 import { closeShift, shiftReport } from '../../db/shifts';
-import { formatMoneyWeb, parseMoney } from '../../domain/money';
+import { formatMoney, parseMoney } from '../../domain/money';
 import type { Id } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
@@ -77,10 +77,10 @@ export function CashierCloseShift({
       `Z-отчёт по смене №${z.shift.id}`,
       [
         `Чеков: ${z.receipts}`,
-        `Выручка: ${formatMoneyWeb(z.revenue)} руб`,
-        `Ожидалось в кассе: ${formatMoneyWeb(z.expectedCash)} руб`,
-        `Пересчитано: ${formatMoneyWeb(counted)} руб`,
-        `Расхождение: ${formatMoneyWeb(z.difference ?? 0)} руб`,
+        `Выручка: ${formatMoney(z.revenue)} руб`,
+        `Ожидалось в кассе: ${formatMoney(z.expectedCash)} руб`,
+        `Пересчитано: ${formatMoney(counted)} руб`,
+        `Расхождение: ${formatMoney(z.difference ?? 0)} руб`,
       ].join('\n'),
     );
   }
@@ -127,7 +127,7 @@ export function CashierCloseShift({
             </Text>
             <Text style={styles.hint}>
               Смена №{report.shift.id}, чеков {report.receipts} на{' '}
-              {formatMoneyWeb(report.revenue)} руб
+              {formatMoney(report.revenue)} руб
             </Text>
           </View>
 
@@ -144,7 +144,7 @@ export function CashierCloseShift({
               style={styles.input}
             />
             <Text style={styles.hint}>
-              Ожидается по чекам: {formatMoneyWeb(report.expectedCash)} руб
+              Ожидается по чекам: {formatMoney(report.expectedCash)} руб
             </Text>
           </View>
 

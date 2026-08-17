@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useCashierKeys } from './useCashierKeys';
 import { Dropdown } from '../Dropdown';
 import { lastClosingCash, listRegisters, openShift } from '../../db/shifts';
-import { formatMoneyWeb, parseMoney } from '../../domain/money';
+import { formatMoney, parseMoney } from '../../domain/money';
 import type { Id } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
@@ -152,7 +152,7 @@ export function CashierOpenShift({
             />
             <Text style={styles.hint}>
               Осталось с прошлой смены:{' '}
-              {formatMoneyWeb(chosen ? lastClosingCash(db, chosen.id) : 0)} руб
+              {formatMoney(chosen ? lastClosingCash(db, chosen.id) : 0)} руб
             </Text>
           </View>
 

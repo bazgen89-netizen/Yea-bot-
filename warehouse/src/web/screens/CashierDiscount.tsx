@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useCashierKeys } from './useCashierKeys';
 import { getSettings } from '../../db/settings';
 import { discountFromPercent, percentFromDiscount } from '../../domain/cart';
-import { formatMoneyWeb, parseMoney, type Kopecks } from '../../domain/money';
+import { formatMoney, parseMoney, type Kopecks } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
 import { pos } from '../../ui/webTheme';
 
@@ -113,7 +113,7 @@ export function CashierDiscount({
         <View style={styles.panel}>
           <View style={styles.head}>
             <Text style={styles.title}>Размер скидки</Text>
-            <Text style={styles.amount}>{formatMoneyWeb(money)} руб</Text>
+            <Text style={styles.amount}>{formatMoney(money)} руб</Text>
           </View>
 
           <View style={styles.modes}>

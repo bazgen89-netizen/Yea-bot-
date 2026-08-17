@@ -1,7 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCashierKeys } from './useCashierKeys';
-import { formatMoneyWeb, type Kopecks } from '../../domain/money';
+import { formatMoney, type Kopecks } from '../../domain/money';
 import { pos } from '../../ui/webTheme';
 
 /**
@@ -57,7 +57,7 @@ export function CashierTerminal({
             </Pressable>
           </View>
 
-          <Text style={styles.amount}>{formatMoneyWeb(amount)} руб</Text>
+          <Text style={styles.amount}>{formatMoney(amount)} руб</Text>
 
           <Terminal />
 

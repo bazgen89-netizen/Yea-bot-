@@ -12,7 +12,7 @@ import {
   shiftSales,
   type ShiftReport,
 } from '../../db/shifts';
-import { formatMoneyWeb } from '../../domain/money';
+import { formatMoney } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { Id } from '../../domain/types';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -78,7 +78,7 @@ export function CashierShifts({ onCloseShift }: { onCloseShift?: () => void }) {
                       {length ?? `Открыта в ${time(item.shift.opened_at)}`}
                     </Text>
                   </View>
-                  <Text style={styles.shiftSum}>+{formatMoneyWeb(item.revenue)}</Text>
+                  <Text style={styles.shiftSum}>+{formatMoney(item.revenue)}</Text>
                 </Pressable>
               );
             })}
@@ -205,7 +205,7 @@ function ShiftCard({
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Выручка с учетом возвратов</Text>
           <Text style={styles.totalValue}>
-            {formatMoneyWeb(report.revenue - report.returnsSum)} руб
+            {formatMoney(report.revenue - report.returnsSum)} руб
           </Text>
         </View>
       </View>
@@ -250,7 +250,7 @@ function ShiftCard({
             </View>
             <Text style={[styles.saleSum, doc.type === 'expense' && styles.minus]}>
               {doc.type === 'expense' ? '−' : '+'}
-              {formatMoneyWeb(doc.amount)} руб
+              {formatMoney(doc.amount)} руб
             </Text>
           </View>
         ))
@@ -276,7 +276,7 @@ function SaleCard({ sale }: { sale: ReturnType<typeof shiftSales>[number] }) {
           <WebIcon.printer size={15} color={pos.muted} />
           <Text style={styles.salePrintLabel}>ПЕЧАТЬ</Text>
         </Pressable>
-        <Text style={styles.saleSum}>{formatMoneyWeb(sale.total)} руб</Text>
+        <Text style={styles.saleSum}>{formatMoney(sale.total)} руб</Text>
       </View>
 
       <Text style={styles.saleNote}>
@@ -292,7 +292,7 @@ function SaleCard({ sale }: { sale: ReturnType<typeof shiftSales>[number] }) {
           {sale.refunded
             ? 'Возвращён'
             : sale.debt > 0
-              ? `Долг ${formatMoneyWeb(sale.debt)} руб`
+              ? `Долг ${formatMoney(sale.debt)} руб`
               : 'Оплачен'}
         </Text>
       </View>
@@ -319,7 +319,7 @@ function SaleCard({ sale }: { sale: ReturnType<typeof shiftSales>[number] }) {
                 {formatQty(line.qty)} {line.unit}
               </Text>
               <Text style={styles.lineSum}>
-                {formatMoneyWeb(Math.round((line.price * line.qty) / 1000))} руб
+                {formatMoney(Math.round((line.price * line.qty) / 1000))} руб
               </Text>
             </View>
           ))
@@ -346,7 +346,7 @@ function Counters({
       {rows.map(([label, value]) => (
         <View key={label} style={styles.countersRow}>
           <Text style={styles.countersLabel}>{label}</Text>
-          <Text style={styles.countersValue}>{formatMoneyWeb(value)} руб</Text>
+          <Text style={styles.countersValue}>{formatMoney(value)} руб</Text>
         </View>
       ))}
     </View>
@@ -357,7 +357,7 @@ function Line({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.countersRow}>
       <Text style={styles.countersLabel}>{label}</Text>
-      <Text style={styles.countersValue}>{formatMoneyWeb(value)} руб</Text>
+      <Text style={styles.countersValue}>{formatMoney(value)} руб</Text>
     </View>
   );
 }

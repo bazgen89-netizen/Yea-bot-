@@ -884,6 +884,11 @@ export function Cashier() {
             <Text style={styles.bottomMenuLabel}>Меню</Text>
           </Pressable>
 
+          {/* Черта за «Меню» — как у него: кнопка отделена от подписи кассы,
+              а не стоит с ней в одну строку. По ней и видно, где кончается
+              нажимаемое. */}
+          <View style={styles.bottomDivider} />
+
           <Text style={styles.bottomShop} numberOfLines={1}>
             {shop} / {shift ? `Смена #${shift.id}` : 'Смена закрыта'}
           </Text>
@@ -1411,6 +1416,7 @@ const styles = StyleSheet.create({
   bottomLeft: { minWidth: 0, flexDirection: 'row', alignItems: 'center' },
   bottomGap: { width: SPLITTER_WIDTH, alignSelf: 'stretch', backgroundColor: pos.border },
   bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
+  bottomDivider: { width: 1, alignSelf: 'stretch', backgroundColor: pos.border },
   bottomMenuLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
   bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.muted, textAlign: 'center' },
   bottomClock: { fontFamily: pos.font, fontSize: 15, color: pos.muted, paddingRight: 24 },

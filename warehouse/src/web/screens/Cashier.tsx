@@ -19,6 +19,7 @@ import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierNewClient } from './CashierNewClient';
 import { CashierPayment } from './CashierPayment';
+import { CashierReceipts } from './CashierReceipts';
 import { CashierSuccess } from './CashierSuccess';
 import { CashierReco } from './CashierReco';
 import { CashierSheet } from './CashierSheet';
@@ -295,11 +296,21 @@ export function Cashier() {
     //
     // В возврате остаток не проверяется вовсе: товар приносят обратно, и на
     // складе его как раз и нет — потому и продали.
-    if (mode === 'sale' && product.kind !== 'service' && product.stock <= 0) {
+    //
+    // Разрешена продажа в минус — не проверяется тоже: настройка ровно про
+    // это, и останавливать кассира на подходе к чеку, чтобы пропустить его
+    // на оплате, значило бы включить её наполовину.
+    if (
+      mode === 'sale' &&
+      product.kind !== 'service' &&
+      product.stock <= 0 &&
+      !getSettings(db).negativeSale
+    ) {
       say(
         'Товара нет на остатке',
         `«${product.name}» — остаток ${formatQty(product.stock)} ${product.unit}. ` +
-          'Оприходуйте товар или проведите инвентаризацию.',
+          'Оприходуйте товар, проведите инвентаризацию или разрешите продажу в минус: ' +
+          'Компания → Настройки → Основные.',
       );
       return;
     }
@@ -308,7 +319,8 @@ export function Cashier() {
     if (
       mode === 'sale' &&
       product.kind !== 'service' &&
-      (inCart?.qty ?? 0) + 1000 > product.stock
+      (inCart?.qty ?? 0) + 1000 > product.stock &&
+      !getSettings(db).negativeSale
     ) {
       say(
         'Больше нет',
@@ -951,7 +963,11 @@ export function Cashier() {
         }}
       />
 
-      {view !== 'sale' ? (
+      {/* Журнал чеков — окно поверх продажи, а не раздел с синей шапкой:
+          из него возвращаются в тот же чек, который набирали. */}
+      <CashierReceipts visible={view === 'receipts'} onClose={() => setView('sale')} />
+
+      {view !== 'sale' && view !== 'receipts' ? (
         <View style={styles.panel}>
           <View style={styles.panelHead}>
             <Pressable

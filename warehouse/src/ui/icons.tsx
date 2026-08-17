@@ -254,6 +254,18 @@ export const WebIcon = {
   printer: (p: Props) => (
     <MaterialCommunityIcons name="printer-outline" size={p.size ?? 20} color={p.color} />
   ),
+  /** Магазин в карточке чека. */
+  store: (p: Props) => (
+    <MaterialCommunityIcons name="storefront-outline" size={p.size ?? 20} color={p.color} />
+  ),
+  /** «Оплачен» — галочка в кружке. */
+  checkCircle: (p: Props) => (
+    <Ionicons name="checkmark-circle-outline" size={p.size ?? 20} color={p.color} />
+  ),
+  /** «Список товаров» — четыре квадратика, как у него в журнале чеков. */
+  tiles: (p: Props) => (
+    <MaterialCommunityIcons name="view-grid" size={p.size ?? 20} color={p.color} />
+  ),
   handshake: (p: Props) => (
     <MaterialCommunityIcons name="handshake-outline" size={p.size ?? 22} color={p.color} />
   ),

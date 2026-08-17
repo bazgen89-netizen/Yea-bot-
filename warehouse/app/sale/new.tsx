@@ -4,6 +4,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View,  } 
 
 import { findByBarcode, listProducts } from '../../src/db/products';
 import { OutOfStockError, createSale } from '../../src/db/sales';
+import { getSettings } from '../../src/db/settings';
 import { discountFromPercent } from '../../src/domain/cart';
 import { formatMoney, formatMoneyWithSign, parseMoney } from '../../src/domain/money';
 import { formatQty, formatQtyWithUnit, parseQty } from '../../src/domain/qty';
@@ -49,6 +50,9 @@ export default function SellScreen() {
         lines: cart.lines,
         discount: cart.discount,
         payment,
+        // «Разрешить продажу в минус» — настройка компании, одна и для кассы
+        // на компьютере, и для телефона.
+        allowNegative: getSettings(db).negativeSale,
       });
       cart.clear();
       refresh();

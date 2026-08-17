@@ -28,6 +28,7 @@ import { listLocations } from '../../db/locations';
 import { listCategoryTiles, listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { recommendedFor } from '../../db/recommendations';
+import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
 import { formatMoneyWeb } from '../../domain/money';
@@ -397,6 +398,10 @@ export function Cashier() {
         debt: mode === 'sale' ? debt : 0,
         lines: cart.lines,
         locationId: locations[0]?.id ?? null,
+        // «Разрешить продажу в минус» из настроек компании. Настройка
+        // читается в тот миг, когда чек проводится, а не когда открыли кассу:
+        // её могли включить только что, из-за этого самого чека.
+        allowNegative: getSettings(db).negativeSale,
       });
     } catch (error) {
       setPaying(false);
@@ -406,12 +411,16 @@ export function Cashier() {
       if (error instanceof OutOfStockError) {
         say(
           'Не хватает остатка',
-          error.details
-            .map(
+          [
+            ...error.details.map(
               (issue) =>
                 `${issue.name}: в чеке ${formatQty(issue.requested)}, на складе ${formatQty(issue.available)}`,
-            )
-            .join('\n'),
+            ),
+            // Куда идти, если товар на прилавке есть, а в программе его нет:
+            // без этой строки кассир упирается в отказ и не знает, что делать.
+            '',
+            'Если товар на руках, а прихода на него ещё нет — включите «Разрешить продажу в минус»: Компания → Настройки → Основные.',
+          ].join('\n'),
         );
         return;
       }

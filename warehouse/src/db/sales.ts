@@ -57,6 +57,15 @@ export interface SaleInput {
    * розничному — долг некому записать, — и нельзя дать больше, чем в чеке.
    */
   debt?: Kopecks;
+  /**
+   * Провести чек, даже если товара на складе меньше, чем в нём.
+   *
+   * Решает не касса, а настройка компании «Разрешить продажу в минус»: сюда
+   * приходит уже готовый ответ. Остаток при этом уходит в минус — он считается
+   * по движениям, и отрицательное значение честно говорит, что товар отдали,
+   * а прихода на него нет.
+   */
+  allowNegative?: boolean;
 }
 
 /**
@@ -78,9 +87,11 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
       stock: currentStock(db, line.product_id),
     }));
 
-    const issues = findStockIssues(verified);
-    if (issues.length > 0) {
-      throw new OutOfStockError(issues);
+    if (!input.allowNegative) {
+      const issues = findStockIssues(verified);
+      if (issues.length > 0) {
+        throw new OutOfStockError(issues);
+      }
     }
 
     const totals = cartTotals(verified, input.discount ?? 0);

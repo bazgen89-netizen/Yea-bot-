@@ -103,6 +103,21 @@ export interface CompanySettings {
   bonusStart: number;
   bonusBirthday: number;
 
+  /**
+   * Продажа товаров: разрешить продавать в минус.
+   *
+   * Обычно чек не проводится, если товара на складе меньше, чем в нём: это
+   * защита от опечатки в количестве. Но остаток врёт чаще, чем кажется —
+   * приход не успели провести, пересортица, товар лежит на прилавке, а в
+   * программе его уже нет. Отказ в такую минуту означает очередь у кассы
+   * и покупателя без покупки.
+   *
+   * Поэтому это настройка, а не правило: включили — касса проводит чек,
+   * остаток уходит в минус и сам собой чинится, когда проведут приход.
+   * Так же это устроено и у них: `ALLOW_NEGATIVE_SALES`.
+   */
+  negativeSale: boolean;
+
   /** Лояльность: скидки. */
   presetDiscounts: number[];
   discountRules: DiscountRule[];
@@ -183,6 +198,8 @@ const DEFAULTS: CompanySettings = {
   bonusLimitBp: 0,
   bonusStart: 0,
   bonusBirthday: 0,
+
+  negativeSale: false,
 
   presetDiscounts: [],
   discountRules: [],

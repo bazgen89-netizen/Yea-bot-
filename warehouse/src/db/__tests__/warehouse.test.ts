@@ -217,6 +217,22 @@ describe('продажи', () => {
     expect(getStock(db, id)).toBe(1000);
   });
 
+  it('с разрешённой продажей в минус чек проводится, а остаток уходит ниже нуля', () => {
+    const id = stocked(1000);
+    const saleId = createSale(db, {
+      lines: [cartLine(id, { qty: 3000 })],
+      allowNegative: true,
+    });
+
+    expect(getSale(db, saleId)).not.toBeNull();
+    // Минус — это не ошибка, а честный ответ: товар отдали, прихода на него нет.
+    expect(getStock(db, id)).toBe(-2000);
+  });
+
+  it('разрешение на минус не отменяет остальных проверок чека', () => {
+    expect(() => createSale(db, { lines: [], allowNegative: true })).toThrow();
+  });
+
   it('остаток перепроверяется в момент оплаты, а не по данным корзины', () => {
     const id = stocked(1000);
     // Корзина «уверена», что на складе 9999, но в базе — 1000.

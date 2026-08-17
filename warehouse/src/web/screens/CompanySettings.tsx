@@ -71,6 +71,7 @@ export function CompanySettings() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {tab === 'main' ? (
+          <>
           <Block title="Настройки компании">
             <WebField
               label="Наименование организации"
@@ -113,6 +114,22 @@ export function CompanySettings() {
             />
             <WebField label="Cайт" value={draft.site} onChange={(site) => set({ site })} />
           </Block>
+
+          {/* Отдельным блоком, а не строкой среди названий и телефонов:
+              это правило работы кассы, и искать его будут не там, где ИНН. */}
+          <Block title="Продажа товаров">
+            <WebToggle
+              label="Разрешить продажу в минус"
+              on={draft.negativeSale}
+              onChange={(negativeSale) => set({ negativeSale })}
+            />
+            <Text style={styles.note}>
+              Обычно чек не проводится, если товара на складе меньше, чем в чеке. Включите,
+              если товар лежит на прилавке, а приход на него ещё не провели: касса пробьёт
+              чек, а остаток уйдёт в минус и сам станет верным, когда приход проведут.
+            </Text>
+          </Block>
+          </>
         ) : null}
 
         {tab === 'legal' ? (

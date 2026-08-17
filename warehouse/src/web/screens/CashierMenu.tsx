@@ -2,6 +2,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
 import { currentStaff } from '../../db/staff';
 import { ROLE_LABEL } from '../../domain/permissions';
@@ -84,11 +85,14 @@ export function CashierMenu({
   const router = useRouter();
 
   const shift = useQuery((database) => openShiftAnywhere(database));
-  // Кто за прилавком. Пока сотрудника не выбрали, касса подписана точкой —
-  // так же, как у него: там в шапке меню стоит «Чайный бар» и «Кассир».
+  // Кто за прилавком.
   const staff = useQuery((database) => currentStaff(database));
-  const name = staff?.name ?? who;
-  const role = staff ? ROLE_LABEL[staff.role] : 'Кассир';
+  // Пока сотрудника не выбрали, за кассой стоит владелец — тот, чья это
+  // программа. У него в меню так и подписано: имя учётной записи и
+  // «Владелец», а не название точки и «Кассир».
+  const company = useQuery((database) => getSettings(database).name);
+  const name = staff?.name ?? company ?? who;
+  const role = staff ? ROLE_LABEL[staff.role] : 'Владелец';
 
   const tint = pos.text;
 
@@ -99,7 +103,7 @@ export function CashierMenu({
       // У него это «Выйти» — выход из кассирского приложения. Входа у нас
       // нет, и единственное, куда отсюда выходят, — кабинет.
       label: 'Выйти',
-      icon: <WebIcon.logout size={26} color={tint} />,
+      icon: <WebIcon.logout size={24} color={tint} />,
       href: '/',
       key: '6',
     },
@@ -112,13 +116,13 @@ export function CashierMenu({
           // у него он так и устроен — `toggleDocType`, и подпись меняется
           // на обратную, пока возврат набирается.
           label: mode === 'sale' ? 'Создать возврат' : 'Вернуться к продаже',
-          icon: <WebIcon.loop size={26} color={tint} />,
+          icon: <WebIcon.loop size={24} color={tint} />,
           action: onToggleMode,
           key: '4',
         },
         {
           label: 'Закрыть смену',
-          icon: <WebIcon.closeCircle size={26} color="#D32F2F" />,
+          icon: <WebIcon.closeCircle size={24} color="#D32F2F" />,
           action: onCloseShift,
           key: '5',
           tone: 'danger',
@@ -127,7 +131,7 @@ export function CashierMenu({
     : [
         {
           label: 'Открыть смену',
-          icon: <WebIcon.lockOpen size={26} color={tint} />,
+          icon: <WebIcon.lockOpen size={24} color={tint} />,
           action: onOpenShift,
         },
       ];
@@ -140,7 +144,7 @@ export function CashierMenu({
       ? [
           {
             label: 'Возврат долга',
-            icon: <WebIcon.handshake size={26} color={tint} />,
+            icon: <WebIcon.handshake size={24} color={tint} />,
             view: 'debts' as const,
             key: '3',
           },
@@ -150,13 +154,13 @@ export function CashierMenu({
       ? [
           {
             label: 'Журнал чеков',
-            icon: <WebIcon.receiptLong size={26} color={tint} />,
+            icon: <WebIcon.receiptLong size={24} color={tint} />,
             view: 'receipts' as const,
           },
         ]
       : []),
-    { label: 'Смены', icon: <WebIcon.calendar size={26} color={tint} />, view: 'shifts', key: '2' },
-    { label: 'Настройки', icon: <WebIcon.gear size={26} color={tint} />, view: 'settings', key: '1' },
+    { label: 'Смены', icon: <WebIcon.calendar size={24} color={tint} />, view: 'shifts', key: '2' },
+    { label: 'Настройки', icon: <WebIcon.gear size={24} color={tint} />, view: 'settings', key: '1' },
   ];
 
   const groups = [exit, shiftItems, rest];
@@ -356,16 +360,18 @@ const styles = StyleSheet.create({
   whoRole: { fontFamily: pos.font, fontSize: 17, lineHeight: 24, color: pos.muted },
   // Мерки — их же, из Material: строка не ниже 48 при отступах 8 и 16,
   // столбец значка 56, сам значок 24, подпись 16.
+  // Высота строки — доля от ширины панели, снятая с его снимка: 0,184.
+  // При наших 296 это 55, а не 62, которые стояли раньше на глаз.
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 62,
+    paddingVertical: 10,
+    minHeight: 55,
   },
   itemHover: { backgroundColor: pos.bg },
   itemIcon: { width: 46, alignItems: 'flex-start' },
-  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 18, lineHeight: 25, color: pos.text },
+  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 18, lineHeight: 24, color: pos.text },
   danger: { color: '#D32F2F' },
   itemKey: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   // Прозрачная, а не убранная: иначе подписи прыгали бы вбок под Shift.

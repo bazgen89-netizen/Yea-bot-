@@ -321,10 +321,12 @@ const styles = StyleSheet.create({
   // 240 — минимальная ширина его списка. Панель у него узкая: пунктов мало,
   // и растягивать её не на что.
   panel: {
-    // 240 — их наименьшая ширина, но на снимке меню заметно шире и выше:
-    // по нему попадают пальцем, а не мышью, и мелкий список для этого не
-    // годится. Поэтому строка выше, подпись крупнее, панель шире.
-    minWidth: 340,
+    // 240 — их наименьшая ширина, но на снимке меню выше и чуть шире: по нему
+    // попадают пальцем, а не мышью, и мелкий список для этого не годится.
+    // Поэтому строка высокая, подпись крупная, а ширина — ровно под самую
+    // длинную подпись («Информация о программе») и не больше: широкая панель
+    // закрывает витрину, и по снимку она заметно уже прежних 340.
+    minWidth: 296,
     maxHeight: '92%',
     paddingVertical: 8,
     backgroundColor: '#FFFFFF',
@@ -336,8 +338,8 @@ const styles = StyleSheet.create({
   who: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 20,
+    gap: 14,
+    paddingHorizontal: 16,
     paddingVertical: 18,
   },
   avatar: {
@@ -357,13 +359,13 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 62,
   },
   itemHover: { backgroundColor: pos.bg },
-  itemIcon: { width: 56, alignItems: 'flex-start' },
-  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 19, lineHeight: 26, color: pos.text },
+  itemIcon: { width: 46, alignItems: 'flex-start' },
+  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 18, lineHeight: 25, color: pos.text },
   danger: { color: '#D32F2F' },
   itemKey: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   // Прозрачная, а не убранная: иначе подписи прыгали бы вбок под Shift.

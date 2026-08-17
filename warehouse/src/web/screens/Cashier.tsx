@@ -19,6 +19,7 @@ import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierNewClient } from './CashierNewClient';
 import { CashierPayment } from './CashierPayment';
+import { CashierSuccess } from './CashierSuccess';
 import { CashierReco } from './CashierReco';
 import { CashierSheet } from './CashierSheet';
 import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
@@ -140,6 +141,18 @@ export function Cashier() {
   const [selected, setSelected] = useState<Id | null>(null);
   const [menu, setMenu] = useState(false);
   const [paying, setPaying] = useState(false);
+  /**
+   * Проведённый чек — для окна «Продажа прошла успешно».
+   *
+   * Держим весь расчёт, а не одну сдачу: окно показывает, из чего она
+   * получилась, а чек к этому времени уже очищен.
+   */
+  const [done, setDone] = useState<{
+    total: number;
+    taken: { cash: number; card: number; credit: number };
+    change: number;
+    mode: 'sale' | 'return';
+  } | null>(null);
   // Открытый раздел кассы. 'sale' — сама продажа, всё остальное рисуется
   // поверх неё, не уводя с экрана кассы.
   const [view, setView] = useState<CashierView>('sale');
@@ -360,7 +373,17 @@ export function Cashier() {
     setPaying(true);
   };
 
-  const pay = (payment: PaymentMethod, changeDue: number, note: string, debt = 0): void => {
+  const pay = (
+    payment: PaymentMethod,
+    changeDue: number,
+    note: string,
+    debt = 0,
+    taken: { cash: number; card: number; credit: number } = {
+      cash: 0,
+      card: 0,
+      credit: 0,
+    },
+  ): void => {
     try {
       // Возврат проводится своей операцией: товар возвращается на склад, а
       // деньги уходят из кассы — списывать остаток здесь было бы наоборот.
@@ -400,7 +423,8 @@ export function Cashier() {
     // Сдачу посчитало окно оплаты: только там известно, сколько денег легло
     // на прилавок и каким способом.
     const rest = mode === 'sale' ? changeDue : 0;
-    const done = mode === 'sale' ? 'Чек пробит' : 'Возврат проведён';
+    // Итог берём до очистки чека: через строку его уже не будет.
+    setDone({ total: cart.totals.total, taken, change: rest, mode });
 
     cart.clear();
     setSelected(null);
@@ -412,11 +436,6 @@ export function Cashier() {
     cart.setDiscount(0);
     setPaying(false);
     refresh();
-
-    if (rest > 0) say(done, `Сдача ${formatMoneyWeb(rest)} руб.`);
-    else if (mode === 'return') {
-      say(done, `Из кассы выдано ${formatMoneyWeb(cart.totals.total)} руб.`);
-    }
   };
 
   return (
@@ -824,6 +843,15 @@ export function Cashier() {
         onClose={() => setPaying(false)}
         customer={customer}
         onPay={pay}
+      />
+
+      <CashierSuccess
+        visible={done !== null}
+        total={done?.total ?? 0}
+        taken={done?.taken ?? { cash: 0, card: 0, credit: 0 }}
+        changeDue={done?.change ?? 0}
+        mode={done?.mode ?? 'sale'}
+        onClose={() => setDone(null)}
       />
 
       <CashierDiscount

@@ -96,22 +96,22 @@ function BottomBar({ small, onToggle }: { small: boolean; onToggle: () => void }
       {small ? null : (
         <>
           <BottomButton label="Ускорить работу" onPress={() => router.push('/lab')}>
-            <WebIcon.rocket color={web.sidebarIcon} />
+            <WebIcon.rocket color={web.sidebarChild} />
           </BottomButton>
           <BottomButton label="Приложение для Android" onPress={() => router.push('/billing')}>
-            <WebIcon.android color={web.sidebarIcon} />
+            <WebIcon.android color={web.sidebarChild} />
           </BottomButton>
           <BottomButton label="Приложение для iPhone" onPress={() => router.push('/billing')}>
-            <WebIcon.apple color={web.sidebarIcon} />
+            <WebIcon.apple color={web.sidebarChild} />
           </BottomButton>
         </>
       )}
 
       <BottomButton label={small ? 'Развернуть меню' : 'Свернуть меню'} onPress={onToggle}>
         {small ? (
-          <WebIcon.chevronRight color={web.sidebarIcon} />
+          <WebIcon.chevronRight color={web.sidebarChild} />
         ) : (
-          <WebIcon.chevronLeft color={web.sidebarIcon} />
+          <WebIcon.chevronLeft color={web.sidebarChild} />
         )}
       </BottomButton>
     </View>
@@ -227,7 +227,7 @@ function Row({
       ]}
     >
       <View style={styles.rowIcon}>
-        {WebIcon[entry.icon]({ color: active ? web.sidebarText : tint })}
+        {WebIcon[entry.icon]({ color: active ? web.sidebarText : tint, size: 16 })}
         {badge ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge}</Text>
@@ -244,11 +244,13 @@ function Row({
         </Text>
       )}
 
+      {/* Треугольник, а не «галочка»: у него в разметке `icon caret down`,
+          размером .8em и цветом rgba(0,0,0,.5). */}
       {expandable && !small ? (
         expanded ? (
-          <WebIcon.chevronUp color={web.sidebarIcon} />
+          <WebIcon.caretUp color={web.sidebarChild} size={12} />
         ) : (
-          <WebIcon.chevronDown color={web.sidebarIcon} />
+          <WebIcon.caretDown color={web.sidebarChild} size={12} />
         )
       ) : null}
     </Pressable>
@@ -314,35 +316,48 @@ const styles = StyleSheet.create({
     borderRightColor: web.sidebarBorder,
   },
   sidebarSmall: { width: SIDEBAR_SMALL_WIDTH },
+  // `.create { padding: 5px 0 10px; height: 53px; opacity: .8 }`, а сама
+  // кнопка внутри — во всю ширину за вычетом полей по 5.
   create: {
     backgroundColor: web.createButton,
-    margin: 16,
-    marginBottom: 12,
-    height: 52,
+    opacity: 0.8,
+    marginHorizontal: 5,
+    marginTop: 5,
+    marginBottom: 10,
+    height: 38,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  createSmall: { marginHorizontal: 10 },
-  createLabel: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 14 },
+  createSmall: { marginHorizontal: 5 },
+  createLabel: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 14, fontWeight: '400' },
   // `.item-block > .item`: отступ 12, поля 0 5px 1px, скругление 4.
+  //
+  // Высота не задана — её даёт содержимое: 12 сверху, 12 снизу и строка
+  // 13 × 1.4285 ≈ 19. Сорок восемь, что стояли здесь раньше, лишние: с ними
+  // тринадцать разделов и три нижних пункта переставали помещаться в окно,
+  // и меню начинало прокручиваться там, где у него прокручивать нечего.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    gap: 13,
     paddingHorizontal: 12,
     marginHorizontal: 5,
     marginBottom: 1,
     borderRadius: 4,
-    height: 48,
+    height: 43,
   },
-  rowSmall: { paddingLeft: 0, paddingRight: 0, justifyContent: 'center' },
+  // `.smallMenu … .item { padding: 0; height: 40px; margin: 0 5px }`.
+  rowSmall: { paddingLeft: 0, paddingRight: 0, justifyContent: 'center', height: 40 },
   // Активный и наведённый — его же значения: 8 % и 3 % чёрного, а не серый
   // из палитры. На белом фоне разница видна, и «примерно такой же серый»
   // читается как другой оттенок.
   rowActive: { backgroundColor: 'rgba(0,0,0,0.08)' },
   rowHover: { backgroundColor: 'rgba(0,0,0,0.03)' },
-  rowIcon: { width: 22, alignItems: 'center' },
+  // Значок — размером со строку: у Semantic UI `i.icon` внутри меню это
+  // 1em, то есть те же 13 пунктов, при ширине 1.18em. Наши значки рисованные,
+  // и 21 точка рядом с подписью в 13 смотрелась как другой набор.
+  rowIcon: { width: 16, alignItems: 'center' },
   // `.item-block { font-size: 13px }` — свой размер, а не 14 из Semantic UI,
   // и начертание 500. Четырнадцать я взял из общего правила, не заметив,
   // что его собственная таблица стилей это правило перебивает.
@@ -360,29 +375,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 10, fontWeight: '700' },
-  child: { justifyContent: 'center', paddingLeft: 66, paddingRight: 18, height: 38, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // Вложенный пункт — .857em от того же корня: 12 пикселей.
-  childLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 12, color: web.sidebarChild },
+  // `.item-block .menu .item { padding: 8px 0 8px 23px }` — вложенный пункт
+  // сдвинут на 23 от края меню, а не подведён под подпись родителя.
+  child: {
+    paddingLeft: 23,
+    paddingRight: 12,
+    height: 35,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // Размер вложенный пункт наследует у раздела — те же 13.
+  childLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.sidebarChild },
+  // `.ui.divider` — поля 1rem сверху и снизу.
   divider: {
     height: 1,
     backgroundColor: 'rgba(34,36,38,0.15)',
-    marginVertical: 8,
+    marginVertical: 14,
     marginHorizontal: 5,
   },
+  // `.bottom-menu { height: 40 }`, каждая ссылка — `flex: 1` во всю высоту.
   bottomBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'stretch',
     borderTopWidth: 1,
     borderTopColor: web.sidebarBorder,
-    paddingHorizontal: 20,
-    height: 46,
+    height: 40,
   },
-  bottomBarSmall: { justifyContent: 'center', paddingHorizontal: 0 },
+  bottomBarSmall: { justifyContent: 'center' },
   bottomButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

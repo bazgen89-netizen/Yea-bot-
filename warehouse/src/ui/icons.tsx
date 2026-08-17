@@ -130,14 +130,24 @@ export const MenuIcon = {
  * и свой смысл у пунктов, которых в телефоне нет вовсе.
  */
 export const WebIcon = {
-  home: (p: Props) => <MaterialCommunityIcons name="view-grid" size={p.size ?? 21} color={p.color} />,
+  // Названия значков — не на глаз со снимка, а из его же разметки меню:
+  // `grid layout`, `cube`, `inbox`, `refresh`, `dollar`, `area chart`,
+  // `user`, `users`, `world`, `attach`, `flask`, `payment`,
+  // `trash alternate outline`. Это набор Semantic UI поверх Font Awesome,
+  // и здесь для каждого подобран глиф той же формы.
+  //
+  // `grid layout` — девять квадратиков, а не четыре: `view-grid`, что стоял
+  // тут раньше, рисует сетку 2×2 и читается как другой значок.
+  home: (p: Props) => <MaterialCommunityIcons name="apps" size={p.size ?? 21} color={p.color} />,
+  /** `cube` — залитый, а не контурный. */
   products: (p: Props) => (
-    <MaterialCommunityIcons name="cube-outline" size={p.size ?? 21} color={p.color} />
+    <MaterialCommunityIcons name="cube" size={p.size ?? 21} color={p.color} />
   ),
   registers: (p: Props) => (
     <MaterialCommunityIcons name="inbox" size={p.size ?? 21} color={p.color} />
   ),
-  goods: (p: Props) => <Ionicons name="refresh" size={p.size ?? 22} color={p.color} />,
+  /** `refresh` у Font Awesome — две стрелки по кругу, а не одна. */
+  goods: (p: Props) => <MaterialCommunityIcons name="sync" size={p.size ?? 21} color={p.color} />,
   money: (p: Props) => (
     <MaterialCommunityIcons name="currency-usd" size={p.size ?? 21} color={p.color} />
   ),
@@ -180,6 +190,13 @@ export const WebIcon = {
   // В исходном кабинете это «alarm outline», а не колокольчик уведомлений.
   bell: (p: Props) => <Ionicons name="alarm-outline" size={p.size ?? 22} color={p.color} />,
 
+  /** Треугольник раздела в боковом меню — `icon caret down` у оригинала. */
+  caretDown: (p: Props) => (
+    <MaterialCommunityIcons name="menu-down" size={p.size ?? 12} color={p.color} />
+  ),
+  caretUp: (p: Props) => (
+    <MaterialCommunityIcons name="menu-up" size={p.size ?? 12} color={p.color} />
+  ),
   chevronDown: (p: Props) => <Ionicons name="chevron-down" size={p.size ?? 16} color={p.color} />,
   chevronUp: (p: Props) => <Ionicons name="chevron-up" size={p.size ?? 16} color={p.color} />,
   chevronLeft: (p: Props) => <Ionicons name="chevron-back" size={p.size ?? 18} color={p.color} />,

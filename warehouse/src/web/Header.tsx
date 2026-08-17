@@ -15,6 +15,25 @@ import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
  * стили в inline-CSS, и `linear-gradient` туда не попадает — а тянуть ради
  * одной полоски отдельную библиотеку не стоит.
  */
+/**
+ * Заливка шапки: `linear-gradient(310deg, #01579b, #0288d1)`.
+ *
+ * Плавного перехода в React Native нет, поэтому он набран полосами. Важно
+ * направление: 310 градусов уводят переход к верхнему левому углу, значит
+ * **светлое — слева**, у логотипа, а тёмное уходит вправо. Раньше полосы
+ * стояли наоборот, и шапка была темнее там, где у него светлее.
+ */
+const BANDS = [
+  '#0285CE',
+  '#027FC7',
+  '#0279C0',
+  '#0273B9',
+  '#016CB3',
+  '#0166AC',
+  '#0160A5',
+  '#015A9E',
+];
+
 const LANGUAGE_OPTIONS: Option<LanguageCode>[] = LANGUAGES.map((language) => ({
   value: language.code,
   label: language.label,
@@ -26,9 +45,19 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
 
   return (
     <View style={styles.header}>
-      <View style={[styles.band, styles.bandLeft]} />
-      <View style={[styles.band, styles.bandMiddle]} />
-      <View style={[styles.band, styles.bandRight]} />
+      {BANDS.map((color, index) => (
+        <View
+          key={color}
+          style={[
+            styles.band,
+            {
+              left: `${(index / BANDS.length) * 100}%`,
+              width: `${100 / BANDS.length + 0.2}%`,
+              backgroundColor: color,
+            },
+          ]}
+        />
+      ))}
 
       <Text style={styles.logo}>Wayshop</Text>
       <Text style={styles.title} numberOfLines={1}>
@@ -122,15 +151,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   band: { position: 'absolute', top: 0, bottom: 0 },
-  bandLeft: { left: 0, width: '34%', backgroundColor: web.headerFrom },
-  bandMiddle: { left: '34%', width: '33%', backgroundColor: '#01699E' },
-  bandRight: { left: '67%', right: 0, backgroundColor: web.headerTo },
-  logo: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
-  title: { flex: 1, color: web.headerText, fontFamily: WEB_FONT, fontSize: 21, marginLeft: 24 },
+  // Логотип занимает у него 122 точки при высоте шапки 46; название раздела —
+  // 20 пунктов начертанием 300 (`.item.title`).
+  logo: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+  title: {
+    flex: 1,
+    color: web.headerText,
+    fontFamily: WEB_FONT,
+    fontSize: 20,
+    fontWeight: '300',
+    marginLeft: 24,
+  },
   right: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   cashier: {
     backgroundColor: web.headerButton,
-    height: 42,
+    height: 32,
     paddingHorizontal: 22,
     borderRadius: 3,
     alignItems: 'center',
@@ -153,10 +188,11 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#FFFFFF', fontFamily: WEB_FONT, fontSize: 10, fontWeight: '700' },
   account: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // Снимок его шапки: аватар 34 × 34, круглый.
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',

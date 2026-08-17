@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { CashierTerminal } from './CashierTerminal';
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
 import { cashOptions, change } from '../../domain/payment';
@@ -72,7 +73,14 @@ export function CashierPayment({
    * вычитала из суммы чека сама — и после отсрочки объявляла сдачу с денег,
    * которых никто не приносил.
    */
-  onPay: (payment: PaymentMethod, changeDue: Kopecks, note: string, debt: Kopecks) => void;
+  onPay: (
+    payment: PaymentMethod,
+    changeDue: Kopecks,
+    note: string,
+    debt: Kopecks,
+    /** Сколько чем приняли — для окна «Продажа прошла успешно». */
+    taken: { cash: Kopecks; card: Kopecks; credit: Kopecks },
+  ) => void;
   /**
    * Продажа или возврат. У возврата деньги идут в обратную сторону: сдачи не
    * бывает, вносить нечего, и вопрос один — чем выдать.
@@ -86,6 +94,13 @@ export function CashierPayment({
   const [taken, setTaken] = useState<Taken>(EMPTY);
   const [note, setNote] = useState('');
   const [printReceipt, setPrintReceipt] = useState(false);
+  /**
+   * Ждём терминал.
+   *
+   * Безналичная оплата не заканчивается нажатием кнопки в программе: карту
+   * ещё прикладывают, и до ответа терминала чек проводить нельзя.
+   */
+  const [terminal, setTerminal] = useState(false);
 
   const accepted = taken.cash + taken.card + taken.credit;
   const left = Math.max(0, total - accepted);
@@ -96,6 +111,7 @@ export function CashierPayment({
     setMethod('cash');
     setTaken(EMPTY);
     setNote('');
+    setTerminal(false);
     setAmount(String(total / 100));
   }, [visible, total]);
 
@@ -111,9 +127,15 @@ export function CashierPayment({
   const rest = method === 'cash' && !returning ? change(entered, left) : 0;
 
   /** Принять этот платёж. Хватило на весь чек — проводим. */
-  function accept() {
+  function accept(fromTerminal = false) {
     if (method === 'credit' && !customer) return;
     if (applied <= 0 && left > 0) return;
+
+    // Картой — сначала терминал: пока он не ответил, денег нет.
+    if (method === 'card' && !returning && !fromTerminal) {
+      setTerminal(true);
+      return;
+    }
 
     const next: Taken = { ...taken, [method]: taken[method] + applied };
     const total_ = next.cash + next.card + next.credit;
@@ -123,14 +145,15 @@ export function CashierPayment({
       // денег. Отсрочка способом оплаты быть не может: по ней не приняли
       // ничего, она уходит отдельно, долгом покупателя.
       const winner: PaymentMethod = next.card > next.cash ? 'card' : 'cash';
-      onPay(winner, rest, note, next.credit);
+      onPay(winner, rest, note, next.credit, next);
       return;
     }
 
     setTaken(next);
   }
 
-  useCashierKeys(visible, (event) => {
+  // Пока ждём терминал, клавиши слушает он: Enter там — «успешно».
+  useCashierKeys(visible && !terminal, (event) => {
     if (event.key === 'Escape') onClose();
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -154,6 +177,16 @@ export function CashierPayment({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <CashierTerminal
+        visible={terminal}
+        amount={applied}
+        onClose={() => setTerminal(false)}
+        onSuccess={() => {
+          setTerminal(false);
+          accept(true);
+        }}
+      />
+
       <View style={styles.root}>
         <Pressable
           accessibilityRole="button"
@@ -312,7 +345,7 @@ export function CashierPayment({
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ disabled: creditBlocked }}
-              onPress={accept}
+              onPress={() => accept()}
               style={[styles.confirm, creditBlocked && styles.confirmOff]}
             >
               <Text style={styles.confirmLabel}>

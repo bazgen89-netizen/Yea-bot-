@@ -21,17 +21,27 @@ export const web = {
   headerButton: '#2C8FD6',
 
   sidebarBg: '#FFFFFF',
-  sidebarText: '#3C4043',
-  sidebarIcon: '#5F6368',
+  /**
+   * Подпись пункта. У Semantic UI, на котором собран оригинал, пункт меню
+   * не красится отдельно — берётся общий цвет текста `rgba(0,0,0,.87)`.
+   * Значок красится тем же: в его меню значки и подписи одного тона, а не
+   * значки посветлее, как было у нас.
+   */
+  sidebarText: 'rgba(0,0,0,0.87)',
+  sidebarIcon: 'rgba(0,0,0,0.87)',
   /** Подсветка открытого раздела. */
   sidebarActive: '#EFEFEF',
   sidebarBorder: '#E0E0E0',
-  /** Вложенные пункты — Смены, Кассы, Настройки. */
-  sidebarChild: '#5F6368',
+  /** Вложенные пункты и нижний ряд: `rgba(0,0,0,.5)`. */
+  sidebarChild: 'rgba(0,0,0,0.5)',
   sidebarDisabled: '#BDBDBD',
 
-  /** Синяя кнопка «Создать документ». */
-  createButton: '#5FA8DE',
+  /**
+   * Синяя кнопка «Создать документ» — `ui blue button` Semantic UI, но весь
+   * блок идёт с `opacity: .8`, поэтому на белом она выглядит светлее самого
+   * синего.
+   */
+  createButton: '#2185D0',
 
   bg: '#FFFFFF',
   pageBg: '#F5F6F8',
@@ -119,10 +129,19 @@ export const WEB_FONT = 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", 
 /** Ширина, с которой показываем кабинет вместо телефонной вёрстки. */
 export const DESKTOP_WIDTH = 1000;
 
-export const SIDEBAR_WIDTH = 292;
-/** Свёрнутое меню — одни значки, как `body_smallMenu` в оригинале. */
-export const SIDEBAR_SMALL_WIDTH = 64;
-export const HEADER_HEIGHT = 64;
+/**
+ * Ширина бокового меню — его же: `#subMenu > div { width: 210px }`.
+ *
+ * Раньше здесь стояло 292, и из-за этого не сходилось всё остальное: при
+ * широком меню подписи и строки приходилось растягивать, разделы переставали
+ * помещаться по высоте и список начинал прокручиваться там, где у него
+ * помещается целиком.
+ */
+export const SIDEBAR_WIDTH = 210;
+/** Свёрнутое меню — одни значки, как `body_smallMenu` в оригинале: 70. */
+export const SIDEBAR_SMALL_WIDTH = 70;
+/** Шапка: `body > header .ui.menu.inverted { min-height: 46px }`. */
+export const HEADER_HEIGHT = 46;
 
 /**
  * Размеры шрифта.

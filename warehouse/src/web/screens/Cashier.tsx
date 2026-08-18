@@ -1148,9 +1148,15 @@ const Tile = memo(function Tile({
         >
           {product.name}
         </Text>
-        {card.code ? <Text style={styles.tileСode}>{product.code ?? ''}</Text> : null}
-        {card.sku ? <Text style={styles.tileСode}>{product.sku ?? ''}</Text> : null}
-        {card.barcode ? <Text style={styles.tileСode}>{product.barcode ?? ''}</Text> : null}
+        {card.code ? (
+          <Text style={list ? styles.lineSmall : styles.tileСode}>{product.code ?? ''}</Text>
+        ) : null}
+        {card.sku ? (
+          <Text style={list ? styles.lineSmall : styles.tileСode}>{product.sku ?? ''}</Text>
+        ) : null}
+        {card.barcode ? (
+          <Text style={list ? styles.lineSmall : styles.tileСode}>{product.barcode ?? ''}</Text>
+        ) : null}
       </View>
 
       {card.stock && list ? (
@@ -1220,6 +1226,8 @@ const styles = StyleSheet.create({
   },
   lineMain: { flex: 1, minWidth: 0 },
   lineName: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  // В строке подписи идут слева под названием, а не по центру, как в плитке.
+  lineSmall: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 2 },
   lineStock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginRight: 12 },
   linePrice: { minWidth: 120, alignItems: 'flex-end' },
 

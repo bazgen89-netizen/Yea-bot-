@@ -34,6 +34,31 @@ export function startsInCashier(): boolean {
  * браузер считает вызов всплывающим окном. Тогда вызывающий переходит в
  * кассу в этом же окне: лучше не так, как у него, чем никак.
  */
+/**
+ * Почему окно не открылось — чтобы касса могла об этом сказать.
+ *
+ * Говорит именно касса, а не кабинет: после неудачи мы всё равно уходим на
+ * кассу, и шапка кабинета вместе со своей строкой исчезает с экрана. А
+ * системное окно `alert` внутри рамки показа запрещено так же, как и
+ * всплывающие окна, — сообщение пропало бы вовсе.
+ */
+let blocked: string | null = null;
+
+/**
+ * Прочитать объяснение. Чтение его не стирает.
+ *
+ * Стирать при чтении нельзя: React в строгом режиме монтирует экран дважды,
+ * и первый же проход съедал бы строку — второй показывал бы пустоту.
+ * Убирает её тот, кто прочитал, — нажатием.
+ */
+export function windowBlockedNote(): string | null {
+  return blocked;
+}
+
+export function clearWindowBlockedNote(): void {
+  blocked = null;
+}
+
 export function openCashierWindow(): boolean {
   const target = globalThis.location?.href;
   if (!target || typeof globalThis.open !== 'function') return false;
@@ -52,7 +77,15 @@ export function openCashierWindow(): boolean {
     `popup=yes,width=${width},height=${height},left=0,top=0`,
   );
 
-  if (!opened) return false;
+  if (!opened) {
+    blocked = insideFrame()
+      ? 'Касса открылась в этом же окне: страница показана внутри рамки, а рамка ' +
+        'запрещает открывать окна. Откройте файл Wayshop прямо в браузере — тогда ' +
+        'касса будет открываться отдельным окном.'
+      : 'Касса открылась в этом же окне: браузер не дал открыть отдельное. ' +
+        'Разрешите для этой страницы всплывающие окна.';
+    return false;
+  }
 
   opened.focus?.();
   return true;

@@ -5,8 +5,7 @@ import { Text } from './Translated';
 
 import { Dropdown, type Option } from './Dropdown';
 import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';
-import { insideFrame, openCashierWindow } from './openCashier';
-import { say } from '../ui/alert';
+import { openCashierWindow } from './openCashier';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
@@ -75,17 +74,9 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
             // Отдельное окно — как у него. Если браузер его не дал, уходим
             // в кассу в этом же окне: работать всё равно надо, — но говорим,
             // почему окна нет, иначе это выглядит поломкой.
-            if (openCashierWindow()) return;
-
-            router.push('/cashier');
-            say(
-              'Касса открылась в этом окне',
-              insideFrame()
-                ? 'Страница показана внутри рамки, а она запрещает открывать окна. ' +
-                    'Откройте файл Wayshop прямо в браузере — тогда касса откроется своим окном.'
-                : 'Браузер не дал открыть отдельное окно. Разрешите всплывающие окна ' +
-                    'для этой страницы — и касса будет открываться отдельно.',
-            );
+            // Если окно не дали — уходим в кассу здесь же; почему так вышло,
+            // скажет сама касса: этой шапки на экране уже не будет.
+            if (!openCashierWindow()) router.push('/cashier');
           }}
           style={({ pressed }) => [styles.cashier, pressed && { opacity: 0.85 }]}
         >
@@ -160,6 +151,7 @@ function HeaderButton({
 }
 
 const styles = StyleSheet.create({
+
   header: {
     height: HEADER_HEIGHT,
     flexDirection: 'row',

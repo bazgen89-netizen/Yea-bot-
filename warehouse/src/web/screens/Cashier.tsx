@@ -40,6 +40,7 @@ import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { usePosSettings } from '../../state/PosSettingsProvider';
 import { colorFromName } from '../../db/categories';
+import { clearWindowBlockedNote, windowBlockedNote } from '../openCashier';
 import { countHeld, holdReceipt } from '../../db/held';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
@@ -203,6 +204,14 @@ export function Cashier() {
   const [category, setCategory] = useState<{ id: Id; name: string } | null>(null);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
+
+  /**
+   * Объяснение, почему касса открылась не своим окном.
+   *
+   * Читается один раз при входе: если браузер запретил окно, кассир увидит
+   * строку сверху и поймёт, что это не поломка.
+   */
+  const [windowNote, setWindowNote] = useState<string | null>(() => windowBlockedNote());
 
   /** Меню трёх точек на кнопке продажи и окно очереди. */
   const [sellMenu, setSellMenu] = useState(false);
@@ -540,6 +549,22 @@ export function Cashier() {
 
   return (
     <View style={styles.screen}>
+      {/* Почему касса не в своём окне — строкой сверху, а не системным окном:
+          в рамке показа `alert` запрещён так же, как и всплывающие окна. */}
+      {windowNote ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Скрыть сообщение"
+          onPress={() => {
+            clearWindowBlockedNote();
+            setWindowNote(null);
+          }}
+          style={styles.windowNote}
+        >
+          <Text style={styles.windowNoteText}>{windowNote}</Text>
+        </Pressable>
+      ) : null}
+
       <View
         style={styles.body}
         onLayout={(event) => setBodyWidth(event.nativeEvent.layout.width)}
@@ -1616,6 +1641,9 @@ const styles = StyleSheet.create({
   bottomMenuLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.muted, textAlign: 'center' },
   bottomClock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, paddingRight: 24 },
+  windowNote: { backgroundColor: pos.barDark, paddingHorizontal: 20, paddingVertical: 10 },
+  windowNoteText: { fontFamily: pos.font, fontSize: 13, color: '#FFFFFF', lineHeight: 18 },
+
   sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar, flexDirection: 'row' },
   // Пустой чек: полоса бледнеет, как у него, и не нажимается.
   sellBarOff: { opacity: 0.55 },

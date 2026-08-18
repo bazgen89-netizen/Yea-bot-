@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 
-import { insideFrame, openCashierWindow } from '../openCashier';
-import { say } from '../../ui/alert';
+import { openCashierWindow } from '../openCashier';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
@@ -64,17 +63,7 @@ export function RegistersTable() {
           label="Интерфейс кассира"
           tone="blueOutline"
           onPress={() => {
-            if (openCashierWindow()) return;
-
-            router.push('/cashier');
-            say(
-              'Касса открылась в этом окне',
-              insideFrame()
-                ? 'Страница показана внутри рамки, а она запрещает открывать окна. ' +
-                    'Откройте файл Wayshop прямо в браузере — тогда касса откроется своим окном.'
-                : 'Браузер не дал открыть отдельное окно. Разрешите всплывающие окна ' +
-                    'для этой страницы — и касса будет открываться отдельно.',
-            );
+            if (!openCashierWindow()) router.push('/cashier');
           }}
         />
         <ToolButton label="Смены" tone="plain" onPress={() => router.push('/shifts')} />

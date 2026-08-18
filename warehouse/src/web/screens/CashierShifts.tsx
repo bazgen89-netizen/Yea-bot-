@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Scrollable } from '../Scrollable';
 
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: pos.bg,
   },
-  dayLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  dayLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   shiftRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -431,9 +432,9 @@ const styles = StyleSheet.create({
   },
   shiftRowOn: { backgroundColor: '#EAF3FC' },
   shiftMain: { flex: 1, gap: 3 },
-  shiftName: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  shiftName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   shiftNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
-  shiftSum: { fontFamily: pos.font, fontSize: 15, color: '#2E7D32' },
+  shiftSum: { fontFamily: pos.font, fontSize: 14, color: '#2E7D32' },
 
   card: { flex: 1 },
   // Содержимое не растягивается на весь экран: у них карточка смены — колонка
@@ -441,10 +442,10 @@ const styles = StyleSheet.create({
   // широкий монитор невозможно, и они этого не просят.
   cardBody: { padding: 26, gap: 18, width: 820, maxWidth: '100%' },
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  cardTitle: { fontFamily: pos.font, fontSize: 30, color: pos.text },
-  cardSub: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 4 },
+  cardTitle: { fontFamily: pos.font, fontSize: 24, color: pos.text },
+  cardSub: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 4 },
   print: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8 },
-  printLabel: { fontFamily: pos.font, fontSize: 14, color: pos.accent, letterSpacing: 0.6 },
+  printLabel: { fontFamily: pos.font, fontSize: 13, color: pos.accent, letterSpacing: 0.6 },
 
   closeShift: {
     alignSelf: 'flex-start',
@@ -453,11 +454,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#FDECEC',
   },
-  closeShiftLabel: { fontFamily: pos.font, fontSize: 15, color: pos.red, letterSpacing: 0.6 },
+  closeShiftLabel: { fontFamily: pos.font, fontSize: 14, color: pos.red, letterSpacing: 0.6 },
 
   box: { padding: 20, backgroundColor: pos.tile, borderRadius: 6, gap: 8 },
-  boxLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
-  boxTitle: { fontFamily: pos.font, fontSize: 22, color: pos.text, marginBottom: 6 },
+  boxLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
+  boxTitle: { fontFamily: pos.font, fontSize: 19, color: pos.text, marginBottom: 6 },
 
   opsRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
   op: {
@@ -467,11 +468,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: pos.accent,
   },
-  opLabel: { fontFamily: pos.font, fontSize: 14, color: pos.accent, letterSpacing: 0.6 },
+  opLabel: { fontFamily: pos.font, fontSize: 13, color: pos.accent, letterSpacing: 0.6 },
 
   where: { flexDirection: 'row', gap: 40, padding: 20, backgroundColor: pos.tile, borderRadius: 6 },
   whereItem: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  whereName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  whereName: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   whereKind: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
   pair: { flexDirection: 'row', gap: 16 },
@@ -484,8 +485,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  countersTitle: { fontFamily: pos.font, fontSize: 22, color: pos.text },
-  countersCount: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  countersTitle: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  countersCount: { fontFamily: pos.font, fontSize: 19, color: pos.text },
   countersRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -493,8 +494,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 5,
   },
-  countersLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
-  countersValue: { fontFamily: pos.font, fontSize: 15, color: pos.text, fontVariant: ['tabular-nums'] },
+  countersLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
+  countersValue: { fontFamily: pos.font, fontSize: 14, color: pos.text, fontVariant: ['tabular-nums'] },
 
   totalRow: {
     flexDirection: 'row',
@@ -505,18 +506,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: pos.border,
   },
-  totalLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
-  totalValue: { fontFamily: pos.font, fontSize: 17, fontWeight: '700', color: pos.text },
+  totalLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  totalValue: { fontFamily: pos.font, fontSize: 15, fontWeight: '700', color: pos.text },
 
   tabs: { flexDirection: 'row', alignSelf: 'center', borderRadius: 4, overflow: 'hidden' },
   tab: { paddingHorizontal: 22, paddingVertical: 12, backgroundColor: pos.tile },
   tabOn: { backgroundColor: pos.bar },
-  tabLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar, letterSpacing: 0.6 },
+  tabLabel: { fontFamily: pos.font, fontSize: 13, color: pos.bar, letterSpacing: 0.6 },
   tabLabelOn: { color: '#FFFFFF' },
 
   saleCard: { padding: 18, backgroundColor: pos.tile, borderRadius: 6, gap: 4 },
   saleHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  saleTitle: { fontFamily: pos.font, fontSize: 20, color: pos.text },
+  saleTitle: { fontFamily: pos.font, fontSize: 18, color: pos.text },
   salePrint: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
     backgroundColor: pos.bg,
   },
   salePrintLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted, letterSpacing: 0.6 },
-  saleSum: { flex: 1, fontFamily: pos.font, fontSize: 20, color: pos.text, textAlign: 'right' },
+  saleSum: { flex: 1, fontFamily: pos.font, fontSize: 18, color: pos.text, textAlign: 'right' },
   minus: { color: pos.red },
   saleNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   saleState: {
@@ -539,14 +540,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: pos.border,
   },
-  saleStateLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
-  salePositions: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.muted, textAlign: 'right' },
-  saleChevron: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  saleStateLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
+  salePositions: { flex: 1, fontFamily: pos.font, fontSize: 13, color: pos.muted, textAlign: 'right' },
+  saleChevron: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
 
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 5 },
-  lineName: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.text },
-  lineQty: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
-  lineSum: { width: 110, fontFamily: pos.font, fontSize: 14, color: pos.text, textAlign: 'right' },
+  lineName: { flex: 1, fontFamily: pos.font, fontSize: 13, color: pos.text },
+  lineQty: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
+  lineSum: { width: 110, fontFamily: pos.font, fontSize: 13, color: pos.text, textAlign: 'right' },
 
   moneyRow: {
     flexDirection: 'row',
@@ -558,7 +559,7 @@ const styles = StyleSheet.create({
   },
   rowMain: { flex: 1, gap: 3 },
 
-  none: { fontFamily: pos.font, fontSize: 15, color: pos.muted, padding: 20, textAlign: 'center' },
+  none: { fontFamily: pos.font, fontSize: 14, color: pos.muted, padding: 20, textAlign: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
+  emptyText: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 });

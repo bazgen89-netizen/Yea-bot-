@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import {
@@ -254,9 +255,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  title: { fontFamily: pos.font, fontSize: 24, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 20, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  closeLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted, letterSpacing: 0.6 },
+  closeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted, letterSpacing: 0.6 },
   key: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -268,7 +269,7 @@ const styles = StyleSheet.create({
 
   // Серая полоса-подзаголовок, как у него.
   section: { backgroundColor: pos.bg, paddingHorizontal: 26, paddingVertical: 14 },
-  sectionLabel: { fontFamily: pos.font, fontSize: 17, color: pos.muted },
+  sectionLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   body: { flexGrow: 0 },
   row: { paddingHorizontal: 26, paddingTop: 18, paddingBottom: 20 },
@@ -282,7 +283,7 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontFamily: pos.font,
-    fontSize: 26,
+    fontSize: 22,
     color: pos.text,
     outlineWidth: 0,
   },
@@ -318,18 +319,18 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontFamily: pos.font,
-    fontSize: 24,
+    fontSize: 20,
     color: pos.text,
     outlineWidth: 0,
   },
-  fieldUnit: { fontFamily: pos.font, fontSize: 15, color: pos.muted, letterSpacing: 0.6 },
+  fieldUnit: { fontFamily: pos.font, fontSize: 14, color: pos.muted, letterSpacing: 0.6 },
 
   delete: { marginTop: 14, marginLeft: 32 },
-  deleteLabel: { fontFamily: pos.font, fontSize: 14, color: pos.red },
+  deleteLabel: { fontFamily: pos.font, fontSize: 13, color: pos.red },
 
   empty: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.muted,
     padding: 30,
     textAlign: 'center',
@@ -344,7 +345,7 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: pos.accent,
   },
-  createLabel: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.8 },
+  createLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
   createKey: {
     paddingHorizontal: 8,
     paddingVertical: 3,

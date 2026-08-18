@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { formatDay, formatTime } from '../../db/journal';

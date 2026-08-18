@@ -1,4 +1,5 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { pos } from '../../ui/webTheme';
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: pos.font,
-    fontSize: 14,
+    fontSize: 13,
     color: pos.muted,
     textAlign: 'center',
     paddingHorizontal: 20,
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeGlyph: { fontFamily: pos.font, fontSize: 13, lineHeight: 16 },
-  rowLabel: { flex: 1, fontFamily: pos.font, fontSize: 16 },
+  rowLabel: { flex: 1, fontFamily: pos.font, fontSize: 15 },
   key: {
     paddingHorizontal: 7,
     paddingVertical: 2,

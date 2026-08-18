@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
 import { ColumnPicker } from '../ColumnPicker';

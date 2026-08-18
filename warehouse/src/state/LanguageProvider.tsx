@@ -1,7 +1,16 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { DEFAULT_LANGUAGE, isLanguage, type LanguageCode } from '../i18n/languages';
 import { translate, translatePath } from '../i18n/translate';
+import { setAlertLanguage } from '../ui/alert';
 import { useDatabase } from './DatabaseProvider';
 
 /**
@@ -44,6 +53,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     },
     [db],
   );
+
+  // Окна сообщений живут вне разметки — язык им передаётся отдельно.
+  useEffect(() => setAlertLanguage(language), [language]);
 
   const value = useMemo<LanguageValue>(
     () => ({

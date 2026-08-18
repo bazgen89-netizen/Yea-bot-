@@ -1,14 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
-import {
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text } from './Translated';
 
 import { pos } from '../ui/webTheme';
 

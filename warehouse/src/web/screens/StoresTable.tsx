@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { Card, CardGrid, CardLine, CreateCard } from '../Cards';
 import { Drawer, DrawerButton } from '../Drawer';

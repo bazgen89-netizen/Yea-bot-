@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { CashierSettings } from './CashierSettings';
 import { CashierShifts } from './CashierShifts';
@@ -243,11 +244,11 @@ const styles = StyleSheet.create({
     borderBottomColor: pos.border,
   },
   stats: { padding: 20, gap: 4, backgroundColor: pos.tile, borderBottomWidth: 8, borderBottomColor: pos.bg },
-  statsTitle: { fontFamily: pos.font, fontSize: 17, color: pos.text, marginBottom: 8 },
+  statsTitle: { fontFamily: pos.font, fontSize: 15, color: pos.text, marginBottom: 8 },
   rowMain: { flex: 1, gap: 3 },
-  rowTitle: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  rowTitle: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   rowNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
-  rowValue: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  rowValue: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   total: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -256,12 +257,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: pos.border,
   },
-  totalLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
-  totalValue: { fontFamily: pos.font, fontSize: 17, fontWeight: '700', color: pos.text },
+  totalLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  totalValue: { fontFamily: pos.font, fontSize: 15, fontWeight: '700', color: pos.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyText: {
     fontFamily: pos.font,
-    fontSize: 16,
+    fontSize: 15,
     color: pos.muted,
     textAlign: 'center',
     maxWidth: 460,

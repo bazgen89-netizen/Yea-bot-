@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './Translated';
 
 import { PRESETS, PRESET_LABEL, type CatalogFilters } from '../state/catalogFilters';
 import { web, WEB_FONT } from '../ui/webTheme';

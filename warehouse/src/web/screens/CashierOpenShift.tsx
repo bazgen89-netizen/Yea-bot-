@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { Dropdown } from '../Dropdown';
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 26,
   },
-  title: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 19, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
 
   section: {
     fontFamily: pos.font,
-    fontSize: 17,
+    fontSize: 15,
     color: pos.text,
     paddingHorizontal: 26,
     marginTop: 26,
@@ -222,12 +223,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
     fontFamily: pos.font,
-    fontSize: 20,
+    fontSize: 18,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
   hint: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
-  empty: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  empty: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
   confirm: {
     marginTop: 26,
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: pos.accent,
   },
   confirmOff: { opacity: 0.5 },
-  confirmLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
+  confirmLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.8 },
   confirmKey: {
     paddingHorizontal: 7,
     paddingVertical: 2,

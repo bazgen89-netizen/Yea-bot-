@@ -1,6 +1,7 @@
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
@@ -354,10 +355,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLetter: { color: '#FFFFFF', fontSize: 21, fontFamily: pos.font },
+  avatarLetter: { color: '#FFFFFF', fontSize: 18, fontFamily: pos.font },
   whoText: { flex: 1 },
-  whoName: { fontFamily: pos.font, fontSize: 20, lineHeight: 27, color: pos.text },
-  whoRole: { fontFamily: pos.font, fontSize: 17, lineHeight: 24, color: pos.muted },
+  whoName: { fontFamily: pos.font, fontSize: 18, lineHeight: 27, color: pos.text },
+  whoRole: { fontFamily: pos.font, fontSize: 15, lineHeight: 24, color: pos.muted },
   // Мерки — их же, из Material: строка не ниже 48 при отступах 8 и 16,
   // столбец значка 56, сам значок 24, подпись 16.
   // Высота строки — доля от ширины панели, снятая с его снимка: 0,184.
@@ -371,9 +372,9 @@ const styles = StyleSheet.create({
   },
   itemHover: { backgroundColor: pos.bg },
   itemIcon: { width: 46, alignItems: 'flex-start' },
-  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 18, lineHeight: 24, color: pos.text },
+  itemLabel: { flex: 1, fontFamily: pos.font, fontSize: 16, lineHeight: 24, color: pos.text },
   danger: { color: '#D32F2F' },
-  itemKey: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  itemKey: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   // Прозрачная, а не убранная: иначе подписи прыгали бы вбок под Shift.
   itemKeyHidden: { opacity: 0 },
   divider: { height: 1, backgroundColor: pos.border },

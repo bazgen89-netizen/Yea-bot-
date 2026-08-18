@@ -1,5 +1,8 @@
 import { Alert, Platform } from 'react-native';
 
+import { DEFAULT_LANGUAGE, type LanguageCode } from '../i18n/languages';
+import { translate } from '../i18n/translate';
+
 /**
  * Сообщения пользователю.
  *
@@ -12,13 +15,31 @@ import { Alert, Platform } from 'react-native';
  * `Alert` напрямую.
  */
 
+/**
+ * Выбранный язык — отдельной переменной.
+ *
+ * Сообщения показывают не из разметки, а из обработчиков нажатий, где хука
+ * `useLanguage` нет. Провайдер языка кладёт сюда выбор, а окна берут его
+ * отсюда — иначе диалоги оставались бы русскими при английском интерфейсе.
+ */
+let current: LanguageCode = DEFAULT_LANGUAGE;
+
+export function setAlertLanguage(language: LanguageCode): void {
+  current = language;
+}
+
+const t = (text: string) => translate(text, current);
+
 /** Сообщение, на которое нечего ответить, кроме «понятно». */
 export function say(title: string, message?: string): void {
+  const head = t(title);
+  const body = message ? t(message) : undefined;
+
   if (Platform.OS === 'web') {
-    globalThis.alert?.(message ? `${title}\n\n${message}` : title);
+    globalThis.alert?.(body ? `${head}\n\n${body}` : head);
     return;
   }
-  Alert.alert(title, message);
+  Alert.alert(head, body);
 }
 
 /**
@@ -33,12 +54,12 @@ export function confirm(
   onConfirm: () => void,
 ): void {
   if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onConfirm();
+    if (globalThis.confirm?.(`${t(title)}\n\n${t(message)}`)) onConfirm();
     return;
   }
 
-  Alert.alert(title, message, [
-    { text: 'Отмена', style: 'cancel' },
-    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+  Alert.alert(t(title), t(message), [
+    { text: t('Отмена'), style: 'cancel' },
+    { text: t(confirmLabel), style: 'destructive', onPress: onConfirm },
   ]);
 }

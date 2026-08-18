@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './Translated';
 
 import { WebIcon } from '../ui/icons';
 import { web, WEB_FONT } from '../ui/webTheme';

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { createCounterparty, listCounterparties } from '../../db/counterparties';
@@ -315,9 +316,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  title: { fontFamily: pos.font, fontSize: 24, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 20, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  closeLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted, letterSpacing: 0.6 },
+  closeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted, letterSpacing: 0.6 },
   key: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -356,16 +357,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     outlineWidth: 0,
     fontFamily: pos.font,
-    fontSize: 18,
+    fontSize: 16,
     color: pos.text,
   },
-  at: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  at: { fontFamily: pos.font, fontSize: 19, color: pos.text },
 
   phonesHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionLabel: { fontFamily: pos.font, fontSize: 17, color: pos.muted },
+  sectionLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   addPhone: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6 },
-  addPhonePlus: { fontFamily: pos.font, fontSize: 20, color: pos.bar },
-  addPhoneLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar, letterSpacing: 0.4 },
+  addPhonePlus: { fontFamily: pos.font, fontSize: 18, color: pos.bar },
+  addPhoneLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar, letterSpacing: 0.4 },
 
   choice: { flexDirection: 'row', gap: 16 },
   choiceTile: {
@@ -390,10 +391,10 @@ const styles = StyleSheet.create({
   },
   radioOn: { borderColor: pos.bar },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: pos.bar },
-  choiceLabel: { fontFamily: pos.font, fontSize: 18, color: pos.text },
+  choiceLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
 
   box: { padding: 18, borderWidth: 1, borderColor: pos.border, borderRadius: 6, gap: 14 },
-  boxLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  boxLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
 
   presets: { flexDirection: 'row', borderWidth: 1, borderColor: pos.accent, borderRadius: 4 },
   preset: {
@@ -405,7 +406,7 @@ const styles = StyleSheet.create({
     borderRightColor: pos.accent,
   },
   presetOn: { backgroundColor: pos.accent },
-  presetLabel: { fontFamily: pos.font, fontSize: 17, color: pos.accent },
+  presetLabel: { fontFamily: pos.font, fontSize: 15, color: pos.accent },
   presetLabelOn: { color: '#FFFFFF' },
 
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
@@ -419,8 +420,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkOn: { backgroundColor: pos.bar, borderColor: pos.bar },
-  checkMark: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF' },
-  checkLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  checkMark: { fontFamily: pos.font, fontSize: 14, color: '#FFFFFF' },
+  checkLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
 
   // Голубая плашка с правилами бонусов — её же.
   info: {
@@ -431,7 +432,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   infoText: { flex: 1, gap: 4 },
-  infoLine: { fontFamily: pos.font, fontSize: 16, color: pos.bar, lineHeight: 22 },
+  infoLine: { fontFamily: pos.font, fontSize: 15, color: pos.bar, lineHeight: 22 },
 
   create: {
     height: 66,
@@ -441,7 +442,7 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: pos.accent,
   },
-  createLabel: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.8 },
+  createLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
   createKey: {
     paddingHorizontal: 8,
     paddingVertical: 3,

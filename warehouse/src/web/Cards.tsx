@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './Translated';
 
 import { WebIcon } from '../ui/icons';
 import { FORM_BORDER, web, WEB_FONT } from '../ui/webTheme';

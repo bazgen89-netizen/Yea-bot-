@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { getSettings } from '../../db/settings';
@@ -206,8 +207,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 22,
   },
-  title: { fontFamily: pos.font, fontSize: 20, color: pos.text },
-  amount: { fontFamily: pos.font, fontSize: 16, color: pos.muted, fontVariant: ['tabular-nums'] },
+  title: { fontFamily: pos.font, fontSize: 18, color: pos.text },
+  amount: { fontFamily: pos.font, fontSize: 15, color: pos.muted, fontVariant: ['tabular-nums'] },
 
   modes: { flexDirection: 'row', marginTop: 16, marginHorizontal: 22 },
   mode: {
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
     marginLeft: -1,
   },
   modeOn: { backgroundColor: pos.accent, borderColor: pos.accent },
-  modeLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  modeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   modeLabelOn: { color: '#FFFFFF', fontWeight: '700' },
 
   inputRow: {
@@ -235,11 +236,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 46,
     fontFamily: pos.font,
-    fontSize: 22,
+    fontSize: 19,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
-  unit: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
+  unit: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   presets: { flexDirection: 'row', marginHorizontal: 22, marginTop: 14 },
   preset: {
@@ -251,7 +252,7 @@ const styles = StyleSheet.create({
     borderColor: pos.border,
     marginLeft: -1,
   },
-  presetLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  presetLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   hint: {
     fontFamily: pos.font,
     fontSize: 13,
@@ -267,5 +268,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: pos.bar,
   },
-  doneLabel: { fontFamily: pos.font, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.8 },
+  doneLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.8 },
 });

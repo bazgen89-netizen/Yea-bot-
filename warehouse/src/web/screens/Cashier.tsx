@@ -1,14 +1,6 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { Scrollable } from '../Scrollable';
 import { useCashierKeys } from './useCashierKeys';
@@ -30,7 +22,6 @@ import { listLocations } from '../../db/locations';
 import { listCategoryTiles, listProducts } from '../../db/products';
 import { createReturn, createSale, OutOfStockError } from '../../db/sales';
 import { recommendedFor } from '../../db/recommendations';
-import { getPosSettings } from '../../db/posSettings';
 import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
 import { discountFromPercent, lineDiscountOf, percentFromDiscount } from '../../domain/cart';
@@ -45,6 +36,7 @@ import type {
 } from '../../domain/types';
 import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { usePosSettings } from '../../state/PosSettingsProvider';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { applyPosTheme, pos } from '../../ui/webTheme';
@@ -275,12 +267,38 @@ export function Cashier() {
 
   // Настройки кассы: порядок товаров и нулевые остатки на витрине, звук
   // при добавлении, «печатать чек» в окне оплаты.
-  const settings = useQuery((database) => getPosSettings(database));
+  const { settings } = usePosSettings();
 
   // Оформление ставится при входе в кассу и всякий раз, когда его поменяли.
   useEffect(() => {
     applyPosTheme(settings.theme);
   }, [settings.theme]);
+
+  /**
+   * Отметки «что показывать на карточке» — одним значением, а не новым
+   * объектом на каждую отрисовку.
+   *
+   * Плитка обёрнута в `memo`, но объект, собранный прямо в разметке, каждый
+   * раз новый, и сравнение всегда расходилось: любое нажатие в настройках —
+   * хоть звука, хоть оформления — перерисовывало все шесть сотен плиток.
+   * Отсюда и заминка, на которую жаловались.
+   */
+  const card = useMemo(
+    () => ({
+      stock: settings.cardStock,
+      image: settings.cardImage,
+      code: settings.cardCode,
+      sku: settings.cardSku,
+      barcode: settings.cardBarcode,
+    }),
+    [
+      settings.cardStock,
+      settings.cardImage,
+      settings.cardCode,
+      settings.cardSku,
+      settings.cardBarcode,
+    ],
+  );
 
   const products = useQuery(
     (database) =>
@@ -608,13 +626,7 @@ export function Cashier() {
                   product={product}
                   columns={columns}
                   selected={selected === product.id}
-                  card={{
-                    stock: settings.cardStock,
-                    image: settings.cardImage,
-                    code: settings.cardCode,
-                    sku: settings.cardSku,
-                    barcode: settings.cardBarcode,
-                  }}
+                  card={card}
                   list={settings.view === 'list'}
                   onPick={pick}
                 />
@@ -1203,8 +1215,8 @@ const styles = StyleSheet.create({
     backgroundColor: pos.bar,
   },
   panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  panelBackLabel: { fontFamily: pos.font, fontSize: 30, color: '#FFFFFF', lineHeight: 32 },
-  panelTitle: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
+  panelBackLabel: { fontFamily: pos.font, fontSize: 24, color: '#FFFFFF', lineHeight: 32 },
+  panelTitle: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF' },
   // Витрина строками: то же содержимое, но в ряд и во всю ширину.
   line: {
     width: '100%',
@@ -1228,7 +1240,7 @@ const styles = StyleSheet.create({
   lineName: { fontFamily: pos.font, fontSize: 16, color: pos.text },
   // В строке подписи идут слева под названием, а не по центру, как в плитке.
   lineSmall: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 2 },
-  lineStock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginRight: 12 },
+  lineStock: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginRight: 12 },
   linePrice: { minWidth: 120, alignItems: 'flex-end' },
 
   screen: { flex: 1, backgroundColor: pos.bg },
@@ -1253,7 +1265,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { outlineWidth: 0,
     flex: 1,
-    fontFamily: pos.font, fontSize: 19,
+    fontFamily: pos.font, fontSize: 17,
     color: pos.text,
     paddingHorizontal: 20,
     outlineStyle: 'none',
@@ -1267,7 +1279,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyHintText: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  keyHintText: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
   // Ни зазоров, ни отступов у самой сетки: ширина плиток задана долей, и
   // всё, что прибавлено сверху, ломает сумму в сто процентов. Просвет между
@@ -1294,7 +1306,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tilePhoto: { width: '100%', height: '100%' },
-  tileName: { fontFamily: pos.font, fontSize: 15, color: pos.text, textAlign: 'center', lineHeight: 19 },
+  tileName: { fontFamily: pos.font, fontSize: 16, color: pos.text, textAlign: 'center', lineHeight: 18 },
   tileСode: { fontFamily: pos.font, fontSize: 13, color: pos.muted, textAlign: 'center', marginTop: 2 },
   tilePriceRow: {
     borderTopWidth: 1,
@@ -1302,7 +1314,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
   },
-  tilePrice: { fontFamily: pos.font, fontSize: 17, fontWeight: '600', color: pos.text, textAlign: 'center' },
+  tilePrice: { fontFamily: pos.font, fontSize: 15, fontWeight: '600', color: pos.text, textAlign: 'center' },
 
   right: { backgroundColor: pos.tile, minWidth: 0 },
 
@@ -1320,7 +1332,7 @@ const styles = StyleSheet.create({
     borderBottomColor: pos.border,
   },
   customerText: { flex: 1 },
-  customerName: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  customerName: { fontFamily: pos.font, fontSize: 17, color: pos.text },
   customerNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   addCustomer: {
     width: 62,
@@ -1336,7 +1348,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  recommendLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  recommendLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   recommendGear: { padding: 6 },
 
   // Плитка категории: цветная полоса сверху, название, «N поз.» внизу.
@@ -1344,7 +1356,7 @@ const styles = StyleSheet.create({
   // рассыпаться, когда в неё смотрят категориями.
   catTile: { height: 214 },
   catStripe: { height: 10, marginHorizontal: -10, marginTop: -8, marginBottom: 12 },
-  catName: { fontFamily: pos.font, fontSize: 17, color: pos.text, lineHeight: 22 },
+  catName: { fontFamily: pos.font, fontSize: 17, color: pos.text, lineHeight: 21 },
   catCount: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 'auto', paddingTop: 14 },
 
   crumb: {
@@ -1357,8 +1369,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  crumbBack: { fontFamily: pos.font, fontSize: 22, color: pos.bar },
-  crumbLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  crumbBack: { fontFamily: pos.font, fontSize: 19, color: pos.bar },
+  crumbLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
 
   browseShade: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2 },
   browsePanel: {
@@ -1387,11 +1399,11 @@ const styles = StyleSheet.create({
   },
   browseTileOn: { backgroundColor: pos.accent },
   browseIcon: { height: 34, justifyContent: 'center' },
-  browseLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  browseLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   browseLabelOn: { color: '#FFFFFF' },
   browseNote: {
     fontFamily: pos.font,
-    fontSize: 14,
+    fontSize: 13,
     color: pos.muted,
     width: '100%',
     padding: 16,
@@ -1418,10 +1430,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   recoName: { fontFamily: pos.font, fontSize: 13, color: pos.text, lineHeight: 17 },
-  recoPrice: { fontFamily: pos.font, fontSize: 14, color: pos.text, marginTop: 6 },
+  recoPrice: { fontFamily: pos.font, fontSize: 13, color: pos.text, marginTop: 6 },
 
   emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
-  emptyReceiptText: { fontFamily: pos.font, fontSize: 34, color: '#C7C7CC' },
+  emptyReceiptText: { fontFamily: pos.font, fontSize: 28, color: '#C7C7CC' },
   // Синяя, а не зелёная: у него это обычная главная кнопка, того же цвета,
   // что и полоса продажи. Зелёный в кассе не значит ничего.
   openShift: {
@@ -1431,7 +1443,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: pos.bar,
   },
-  openShiftLabel: { fontFamily: pos.font, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.6 },
+  openShiftLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.6 },
 
   receipt: { flex: 1 },
   receiptRow: {
@@ -1444,8 +1456,8 @@ const styles = StyleSheet.create({
     borderBottomColor: pos.border,
   },
   receiptBody: { flex: 1, gap: 2 },
-  receiptName: { fontFamily: pos.font, fontSize: 16, color: pos.text },
-  receiptQty: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  receiptName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  receiptQty: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   receiptMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   discountBadge: {
     paddingHorizontal: 6,
@@ -1470,16 +1482,16 @@ const styles = StyleSheet.create({
     borderTopColor: pos.border,
   },
   totalsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  totalsLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  totalsLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   totalsValue: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
-  totalsDiscount: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
-  receiptSum: { fontFamily: pos.font, fontSize: 16, color: pos.text, fontVariant: ['tabular-nums'] },
-  receiptRemove: { fontFamily: pos.font, fontSize: 17, color: pos.muted },
+  totalsDiscount: { fontFamily: pos.font, fontSize: 14, color: pos.bar },
+  receiptSum: { fontFamily: pos.font, fontSize: 15, color: pos.text, fontVariant: ['tabular-nums'] },
+  receiptRemove: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   bottom: {
     flexDirection: 'row',
@@ -1496,9 +1508,9 @@ const styles = StyleSheet.create({
   bottomGap: { width: SPLITTER_WIDTH, alignSelf: 'stretch', backgroundColor: pos.border },
   bottomMenu: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
   bottomDivider: { width: 1, alignSelf: 'stretch', backgroundColor: pos.border },
-  bottomMenuLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
-  bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.muted, textAlign: 'center' },
-  bottomClock: { fontFamily: pos.font, fontSize: 15, color: pos.muted, paddingRight: 24 },
+  bottomMenuLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.muted, textAlign: 'center' },
+  bottomClock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, paddingRight: 24 },
   sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar },
   sellInner: {
     flex: 1,
@@ -1507,7 +1519,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 18,
   },
-  sellDots: { fontFamily: pos.font, fontSize: 20, color: '#FFFFFF' },
-  sellLabel: { flex: 1, fontFamily: pos.font, fontSize: 19, color: '#FFFFFF', letterSpacing: 0.6 },
-  sellTotal: { fontFamily: pos.font, fontSize: 21, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  sellDots: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
+  sellLabel: { flex: 1, fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.6 },
+  sellTotal: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
 });

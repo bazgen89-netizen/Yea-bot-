@@ -133,7 +133,18 @@ export const pos = {
   muted: 'var(--pos-muted)',
   /** `action.hover` — подсветка строки под курсором. */
   hover: 'var(--pos-hover)',
-  font: 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  /**
+   * Шрифт кассы — узкий, как у них.
+   *
+   * Касса CloudShop — отдельное приложение, и в её таблице стилей стоит
+   * `font-family:Fira Sans Extra Condensed` при основном размере 14 px. Мы
+   * рисовали кассу обычным Roboto: буквы шире, строки длиннее, и весь экран
+   * выглядел крупнее оригинала при тех же числах.
+   *
+   * Запасные — тоже узкие: если файл шрифта почему-то не подхватился, пусть
+   * подставится хотя бы похожий, а не вдвое более широкий.
+   */
+  font: '"Fira Sans Extra Condensed", "Roboto Condensed", "Arial Narrow", Roboto, sans-serif',
 };
 
 /** Светлое оформление — те самые значения из его темы Material. */

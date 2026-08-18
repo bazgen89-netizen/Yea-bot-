@@ -1,4 +1,5 @@
 import { DICTIONARY } from '../dictionary';
+import { POS_DICTIONARY } from '../posDictionary';
 import { LANGUAGES, isLanguage, labelFor } from '../languages';
 import { coverage, translate, translatePath } from '../translate';
 
@@ -30,6 +31,18 @@ describe('перевод', () => {
     expect(translate('Такой строки нет', 'en')).toBe('Такой строки нет');
   });
 
+  it('не спотыкается о регистр и знак в конце', () => {
+    // Одна и та же подпись встречается кнопкой заглавными и заголовком с
+    // двоеточием — словарь на это заводить по три статьи не приходится.
+    expect(translate('ВОЗВРАТ', 'en')).toBe('REFUND');
+    expect(translate('Возврат:', 'en')).toBe('Refund:');
+  });
+
+  it('не съедает пробелы по краям', () => {
+    // Цена набрана двумя кусками: «1 300,00» и « руб».
+    expect(translate(' руб', 'en')).toBe(' RUB');
+  });
+
   it('составной заголовок переводит по частям', () => {
     expect(translatePath('Товары и услуги / справочник', 'en')).toBe(
       'Goods and services / catalogue',
@@ -53,9 +66,21 @@ describe('полнота словаря', () => {
     expect(holes).toEqual([]);
   });
 
-  it('считает покрытие', () => {
-    const total = Object.keys(DICTIONARY).length;
+  it('в словаре кассы всегда есть английский', () => {
+    const holes = Object.entries(POS_DICTIONARY)
+      .filter(([, row]) => !row.en)
+      .map(([key]) => key);
+
+    expect(holes).toEqual([]);
+  });
+
+  it('считает покрытие по обоим словарям', () => {
+    const total = Object.keys({ ...POS_DICTIONARY, ...DICTIONARY }).length;
+
     expect(coverage('ru')).toEqual({ done: total, total });
+    // Английский полон, остальные языки — насколько хватило сверки с
+    // CloudShop: наши собственные фразы там переведены не все.
     expect(coverage('en')).toEqual({ done: total, total });
+    expect(coverage('hy').done).toBeGreaterThan(total * 0.8);
   });
 });

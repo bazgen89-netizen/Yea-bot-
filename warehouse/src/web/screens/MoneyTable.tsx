@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';

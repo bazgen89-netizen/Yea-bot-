@@ -1,4 +1,5 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoney, type Kopecks } from '../../domain/money';
@@ -132,11 +133,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markSign: { fontFamily: pos.font, fontSize: 36, lineHeight: 42, color: '#FFFFFF' },
+  markSign: { fontFamily: pos.font, fontSize: 30, lineHeight: 42, color: '#FFFFFF' },
 
   title: {
     fontFamily: pos.font,
-    fontSize: 22,
+    fontSize: 19,
     color: pos.text,
     textAlign: 'center',
     marginTop: 16,
@@ -149,10 +150,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 7,
   },
-  lineLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
+  lineLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   lineValue: {
     fontFamily: pos.font,
-    fontSize: 16,
+    fontSize: 15,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -167,10 +168,10 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 26,
   },
-  changeLabel: { fontFamily: pos.font, fontSize: 18, color: pos.muted, letterSpacing: 0.6 },
+  changeLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted, letterSpacing: 0.6 },
   changeValue: {
     fontFamily: pos.font,
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '700',
     color: pos.text,
     fontVariant: ['tabular-nums'],
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: pos.bar,
   },
-  closeLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
+  closeLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.8 },
   key: {
     paddingHorizontal: 7,
     paddingVertical: 2,

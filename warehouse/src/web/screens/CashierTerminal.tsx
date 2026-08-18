@@ -1,4 +1,5 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoney, type Kopecks } from '../../domain/money';
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  title: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 17, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   // Сумма — самое крупное в окне: её читают с двух сторон прилавка.
   amount: {
     fontFamily: pos.font,
-    fontSize: 46,
+    fontSize: 36,
     fontWeight: '700',
     color: pos.text,
     textAlign: 'center',
@@ -176,7 +177,7 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: pos.accent,
   },
-  doneLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
+  doneLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.8 },
   doneKey: {
     paddingHorizontal: 7,
     paddingVertical: 2,

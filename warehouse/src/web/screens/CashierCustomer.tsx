@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { Scrollable } from '../Scrollable';
 
@@ -279,12 +280,12 @@ const styles = StyleSheet.create({
   searchInput: { outlineWidth: 0,
     flex: 1,
     fontFamily: pos.font,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: pos.text,
   },
   close: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 10 },
-  closeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted, letterSpacing: 0.6 },
+  closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
     paddingHorizontal: 7,
     paddingVertical: 2,
@@ -303,8 +304,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  createPlus: { fontFamily: pos.font, fontSize: 18, color: pos.bar },
-  createLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar },
+  createPlus: { fontFamily: pos.font, fontSize: 16, color: pos.bar },
+  createLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar },
 
   // Список занимает всю оставшуюся высоту окна и прокручивается: клиентов
   // тысячи, и раньше он просто обрывался по нижнему краю — докрутить до
@@ -321,12 +322,12 @@ const styles = StyleSheet.create({
   },
   rowActive: { backgroundColor: '#E8F4FD' },
   rowText: { flex: 1 },
-  rowTitle: { fontFamily: pos.font, fontSize: 18, fontWeight: '500', color: pos.text },
-  rowSubtitle: { fontFamily: pos.font, fontSize: 15, color: pos.muted, marginTop: 2 },
+  rowTitle: { fontFamily: pos.font, fontSize: 16, fontWeight: '500', color: pos.text },
+  rowSubtitle: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 2 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  discount: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  discount: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   bonusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  bonus: { fontFamily: pos.font, fontSize: 17, color: pos.text },
+  bonus: { fontFamily: pos.font, fontSize: 15, color: pos.text },
 
-  empty: { fontFamily: pos.font, fontSize: 15, color: pos.muted, padding: 24, textAlign: 'center' },
+  empty: { fontFamily: pos.font, fontSize: 14, color: pos.muted, padding: 24, textAlign: 'center' },
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { closeShift, shiftReport } from '../../db/shifts';
@@ -182,7 +183,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 26,
   },
-  title: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 19, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
@@ -194,17 +195,17 @@ const styles = StyleSheet.create({
   },
   keyLabel: { fontFamily: pos.font, fontSize: 11, color: pos.muted },
 
-  section: { fontFamily: pos.font, fontSize: 17, color: pos.text, paddingHorizontal: 26, marginTop: 26 },
+  section: { fontFamily: pos.font, fontSize: 15, color: pos.text, paddingHorizontal: 26, marginTop: 26 },
 
   field: { paddingHorizontal: 26, marginTop: 18, gap: 6 },
   fieldLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
-  value: { fontFamily: pos.font, fontSize: 18, color: pos.text },
+  value: { fontFamily: pos.font, fontSize: 16, color: pos.text },
   input: { outlineWidth: 0,
     height: 42,
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
     fontFamily: pos.font,
-    fontSize: 20,
+    fontSize: 18,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -221,7 +222,7 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: '#D32F2F',
   },
-  confirmLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.8 },
+  confirmLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.8 },
   confirmKey: {
     paddingHorizontal: 7,
     paddingVertical: 2,

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { formatDay } from '../../db/journal';

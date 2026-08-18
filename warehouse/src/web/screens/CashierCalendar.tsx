@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { isoDay, monthGrid, MONTHS, shiftMonth, WEEKDAYS, yearWindow } from '../../domain/calendar';
 import { Scrollable } from '../Scrollable';
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
   title: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   caret: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   caretOpen: { backgroundColor: '#EDEFF1' },
-  titleLabel: { fontFamily: pos.font, fontSize: 18, fontWeight: '500', color: pos.text },
+  titleLabel: { fontFamily: pos.font, fontSize: 16, fontWeight: '500', color: pos.text },
   arrows: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrow: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
   },
   dayToday: { borderColor: pos.muted },
   daySelected: { backgroundColor: pos.bar, borderColor: pos.bar },
-  dayLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  dayLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   dayLabelSelected: { color: '#FFFFFF' },
 
   // Годы — тремя столбцами и с прокруткой, как у него: их много, и
@@ -248,9 +249,9 @@ const styles = StyleSheet.create({
   // Тёмно-синяя таблетка выбранного года — его же цвет, не тот синий,
   // которым залито выбранное число.
   yearPillActive: { backgroundColor: '#22467F' },
-  yearLabel: { fontFamily: pos.font, fontSize: 19, color: pos.text },
+  yearLabel: { fontFamily: pos.font, fontSize: 17, color: pos.text },
   yearLabelActive: { color: '#FFFFFF' },
 
   clear: { alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 8, marginTop: 4 },
-  clearLabel: { fontFamily: pos.font, fontSize: 14, color: pos.accent, letterSpacing: 0.6 },
+  clearLabel: { fontFamily: pos.font, fontSize: 13, color: pos.accent, letterSpacing: 0.6 },
 });

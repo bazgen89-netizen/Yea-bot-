@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Card, CardGrid, CardLine, CardsNotice, CreateCard } from '../Cards';
 import { archiveStaff, listStaff, restoreStaff, type Staff } from '../../db/staff';

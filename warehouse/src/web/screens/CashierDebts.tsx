@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { useCashierKeys } from './useCashierKeys';
 import { formatPhone } from '../../db/counterparties';
@@ -291,7 +292,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   listHead: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 },
-  listTitle: { fontFamily: pos.font, fontSize: 24, color: pos.text, marginBottom: 16 },
+  listTitle: { fontFamily: pos.font, fontSize: 20, color: pos.text, marginBottom: 16 },
 
   searchRow: {
     flexDirection: 'row',
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     borderColor: pos.border,
     borderRadius: 4,
   },
-  search: { outlineWidth: 0, flex: 1, fontFamily: pos.font, fontSize: 17, color: pos.text },
+  search: { outlineWidth: 0, flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
 
   summary: {
     flexDirection: 'row',
@@ -316,8 +317,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: pos.border,
   },
-  summaryFound: { fontFamily: pos.font, fontSize: 15, fontWeight: '700', color: pos.text },
-  summaryTotal: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  summaryFound: { fontFamily: pos.font, fontSize: 14, fontWeight: '700', color: pos.text },
+  summaryTotal: { fontFamily: pos.font, fontSize: 14, color: pos.text },
 
   list: { flex: 1, minHeight: 0 },
   row: {
@@ -338,11 +339,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
+  avatarText: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF' },
   rowMain: { flex: 1, gap: 3 },
-  rowTitle: { flex: 1, fontFamily: pos.font, fontSize: 17, color: pos.text },
+  rowTitle: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
   rowNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
-  rowValue: { fontFamily: pos.font, fontSize: 17, color: pos.text, fontVariant: ['tabular-nums'] },
+  rowValue: { fontFamily: pos.font, fontSize: 15, color: pos.text, fontVariant: ['tabular-nums'] },
 
   listFoot: {
     flexDirection: 'row',
@@ -357,7 +358,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyText: {
     fontFamily: pos.font,
-    fontSize: 16,
+    fontSize: 15,
     color: pos.muted,
     textAlign: 'center',
     marginTop: 40,
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 26,
   },
-  title: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 19, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
     fontFamily: pos.font,
-    fontSize: 20,
+    fontSize: 18,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -431,14 +432,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   methodOn: { borderColor: pos.bar, backgroundColor: '#E8F3FD' },
-  methodLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  methodLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   methodLabelOn: { color: pos.bar },
 
   after: { alignItems: 'center', paddingVertical: 18, gap: 4 },
   afterLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   afterValue: {
     fontFamily: pos.font,
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: '700',
     color: pos.text,
     fontVariant: ['tabular-nums'],
@@ -452,7 +453,7 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: pos.accent,
   },
-  confirmLabel: { fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.6 },
+  confirmLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.6 },
   confirmKey: {
     paddingHorizontal: 7,
     paddingVertical: 2,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { CashierCalendar } from './CashierCalendar';
 import { useCashierKeys } from './useCashierKeys';
@@ -12,12 +13,12 @@ import {
   receiptLines,
   type Receipt,
 } from '../../db/receipts';
-import { getPosSettings } from '../../db/posSettings';
 import { refundSale } from '../../db/sales';
 import { formatMoney } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { Id } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { usePosSettings } from '../../state/PosSettingsProvider';
 import { say } from '../../ui/alert';
 import { Scrollable } from '../Scrollable';
 import { WebIcon } from '../../ui/icons';
@@ -350,7 +351,7 @@ function Print({ receipt, onDone }: { receipt: Receipt; onDone: () => void }) {
   const lines = useQuery((db) => receiptLines(db, receipt.id));
   // Ширина ленты, поля и размер шрифта — из настроек кассы: у чекового
   // принтера они свои, и подставлять 58 мм всем было бы наугад.
-  const paper = useQuery((db) => getPosSettings(db));
+  const paper = usePosSettings().settings;
 
   useEffect(() => {
     const frame = globalThis.document?.createElement('iframe');
@@ -591,7 +592,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     height: 66,
   },
-  title: { fontFamily: pos.font, fontSize: 22, color: pos.text },
+  title: { fontFamily: pos.font, fontSize: 19, color: pos.text },
   closeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   closeLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.6 },
   key: {
@@ -627,7 +628,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: pos.border,
   },
-  columnHeadLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
+  columnHeadLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   // Кнопка даты — светло-синяя, как у него: она не подтверждает и не
   // отменяет, поэтому и не синяя целиком.
@@ -641,7 +642,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F1FB',
     marginBottom: 12,
   },
-  dateLabel: { fontFamily: pos.font, fontSize: 15, color: pos.bar, letterSpacing: 0.6 },
+  dateLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar, letterSpacing: 0.6 },
 
   // Подсказки поиска — список под полем.
   hintList: {
@@ -653,11 +654,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   hintRow: { paddingHorizontal: 12, paddingVertical: 10 },
-  hintLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  hintLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
 
   fieldLabel: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: pos.text,
     marginTop: 12,
@@ -676,30 +677,30 @@ const styles = StyleSheet.create({
   // Заполненное условие обведено оранжевым — так у него отмечено поле,
   // которое участвует в поиске.
   fieldFull: { borderColor: pos.accent, borderWidth: 2 },
-  hash: { fontFamily: pos.font, fontSize: 17, color: pos.muted },
+  hash: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
   input: {
     flex: 1,
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.text,
     outlineWidth: 0,
   },
-  chosen: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
-  pickerEmpty: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 6 },
+  chosen: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.text },
+  pickerEmpty: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 6 },
 
   list: { flex: 1, minHeight: 0 },
   listBody: { flex: 1, minHeight: 0, backgroundColor: pos.bg },
   listInner: { padding: 16 },
   empty: {
     fontFamily: pos.font,
-    fontSize: 16,
+    fontSize: 15,
     color: pos.muted,
     textAlign: 'center',
     marginTop: 40,
   },
 
   dayHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
-  dayHeadLabel: { fontFamily: pos.font, fontSize: 16, color: pos.muted },
+  dayHeadLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   card: {
     backgroundColor: '#FFFFFF',
@@ -717,7 +718,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 14,
   },
-  cardTitle: { fontFamily: pos.font, fontSize: 23, color: pos.text },
+  cardTitle: { fontFamily: pos.font, fontSize: 20, color: pos.text },
   cardSpace: { flex: 1 },
   cardButton: {
     flexDirection: 'row',
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
   cardButtonLabel: { fontFamily: pos.font, fontSize: 13, color: pos.text, letterSpacing: 0.6 },
   cardSum: {
     fontFamily: pos.font,
-    fontSize: 23,
+    fontSize: 20,
     fontWeight: '700',
     color: pos.text,
     fontVariant: ['tabular-nums'],
@@ -739,8 +740,8 @@ const styles = StyleSheet.create({
 
   cardInfo: { paddingHorizontal: 20, paddingBottom: 16, gap: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  infoText: { fontFamily: pos.font, fontSize: 15, color: pos.text },
-  infoDot: { fontFamily: pos.font, fontSize: 15, color: pos.muted, marginHorizontal: 4 },
+  infoText: { fontFamily: pos.font, fontSize: 14, color: pos.text },
+  infoDot: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginHorizontal: 4 },
 
   note: {
     flexDirection: 'row',
@@ -750,7 +751,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#FDF3E3',
   },
-  noteText: { fontFamily: pos.font, fontSize: 15, color: pos.accent },
+  noteText: { fontFamily: pos.font, fontSize: 14, color: pos.accent },
 
   cardFold: {
     flexDirection: 'row',
@@ -761,8 +762,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: pos.border,
   },
-  foldLabel: { fontFamily: pos.font, fontSize: 16, color: pos.text },
-  foldCount: { fontFamily: pos.font, fontSize: 15, color: pos.muted, marginRight: 12 },
+  foldLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  foldCount: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginRight: 12 },
 
   fold: {
     paddingHorizontal: 20,
@@ -771,11 +772,11 @@ const styles = StyleSheet.create({
     borderTopColor: pos.border,
   },
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
-  lineName: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
-  lineQty: { fontFamily: pos.font, fontSize: 14, color: pos.muted, fontVariant: ['tabular-nums'] },
+  lineName: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.text },
+  lineQty: { fontFamily: pos.font, fontSize: 13, color: pos.muted, fontVariant: ['tabular-nums'] },
   lineSum: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },

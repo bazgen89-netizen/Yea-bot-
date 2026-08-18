@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './Translated';
 
 import { WebIcon } from '../ui/icons';
 import { FORM_BORDER, web, WEB_FONT } from '../ui/webTheme';

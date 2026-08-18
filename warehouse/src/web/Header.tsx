@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './Translated';
 
 import { Dropdown, type Option } from './Dropdown';
 import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';

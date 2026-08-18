@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Chart } from '../Chart';
 import { Dropdown, type Option } from '../Dropdown';

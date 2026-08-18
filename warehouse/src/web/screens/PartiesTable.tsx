@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
 
 import { Dropdown } from '../Dropdown';
 import { partySets, SET_LABEL, type PartyColumn, type PartySet } from '../partyColumns';

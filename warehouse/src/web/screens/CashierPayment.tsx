@@ -1,19 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Easing,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
 import { CashierTerminal } from './CashierTerminal';
-import { getPosSettings } from '../../db/posSettings';
-import { useQuery } from '../../state/DatabaseProvider';
+import { usePosSettings } from '../../state/PosSettingsProvider';
 import { useCashierKeys } from './useCashierKeys';
 import { formatMoney, parseMoney } from '../../domain/money';
 import { cashOptions, change } from '../../domain/payment';
@@ -98,7 +88,7 @@ export function CashierPayment({
   // «Печатать чек» открывается тем, что стоит в настройках кассы: у одних
   // печать нужна всегда, у других никогда, и спрашивать об этом каждый чек —
   // лишнее нажатие.
-  const printDefault = useQuery((database) => getPosSettings(database).printByDefault);
+  const printDefault = usePosSettings().settings.printByDefault;
   const [printReceipt, setPrintReceipt] = useState(printDefault);
   /**
    * Ждём терминал.
@@ -420,7 +410,7 @@ const styles = StyleSheet.create({
   right: { flex: 1.1 },
   rightContent: { padding: 26, gap: 14 },
 
-  title: { fontFamily: pos.font, fontSize: 24, color: pos.text, marginBottom: 8 },
+  title: { fontFamily: pos.font, fontSize: 20, color: pos.text, marginBottom: 8 },
 
   line: {
     flexDirection: 'row',
@@ -430,10 +420,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  lineLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  lineLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   lineValue: {
     fontFamily: pos.font,
-    fontSize: 14,
+    fontSize: 13,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -448,7 +438,7 @@ const styles = StyleSheet.create({
     borderColor: pos.border,
     borderRadius: 4,
     fontFamily: pos.font,
-    fontSize: 14,
+    fontSize: 13,
     color: pos.text,
     textAlignVertical: 'top',
   },
@@ -458,13 +448,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 12,
   },
-  printLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  printLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   trackOn: { backgroundColor: pos.bar },
   track: { width: 44, height: 20, borderRadius: 10, backgroundColor: '#D4D4D5', padding: 2 },
   knob: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' },
 
   cancel: { marginTop: 16, alignItems: 'center', paddingVertical: 10 },
-  cancelLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
+  cancelLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
   customer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
@@ -475,9 +465,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: pos.bar,
   },
-  avatarText: { fontFamily: pos.font, fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
+  avatarText: { fontFamily: pos.font, fontSize: 13, color: '#FFFFFF', fontWeight: '700' },
   customerText: { flex: 1 },
-  customerName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  customerName: { fontFamily: pos.font, fontSize: 14, color: pos.text },
   customerPhone: { fontFamily: pos.font, fontSize: 13, color: pos.bar },
 
   methods: { flexDirection: 'row', gap: 10 },
@@ -492,7 +482,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   methodOn: { backgroundColor: pos.bar, borderColor: pos.bar },
-  methodSign: { fontFamily: pos.font, fontSize: 18, color: pos.bar },
+  methodSign: { fontFamily: pos.font, fontSize: 16, color: pos.bar },
   methodSignOn: { color: '#FFFFFF' },
   methodLabel: { fontFamily: pos.font, fontSize: 12, color: pos.muted },
   methodLabelOn: { color: '#FFFFFF' },
@@ -505,7 +495,7 @@ const styles = StyleSheet.create({
     borderColor: pos.accent,
     borderRadius: 4,
     fontFamily: pos.font,
-    fontSize: 22,
+    fontSize: 19,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -529,10 +519,10 @@ const styles = StyleSheet.create({
   },
 
   changeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  changeLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  changeLabel: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   changeValue: {
     fontFamily: pos.font,
-    fontSize: 18,
+    fontSize: 16,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
@@ -548,7 +538,7 @@ const styles = StyleSheet.create({
     backgroundColor: pos.bar,
   },
   confirmOff: { opacity: 0.5 },
-  confirmLabel: { fontFamily: pos.font, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.6 },
+  confirmLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.6 },
   key: {
     paddingHorizontal: 7,
     paddingVertical: 2,

@@ -1,6 +1,7 @@
 import { useRouter, usePathname, type Href } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './Translated';
 
 import { MENU, MENU_FOOTER, menuFor, type MenuChild, type MenuEntry } from './menu';
 import { usePermissions } from '../state/usePermissions';

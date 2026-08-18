@@ -1,16 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../Translated';
 
-import {
-  getPosSettings,
-  POS_DEFAULTS,
-  resetPosSettings,
-  savePosSettings,
-  type PosSettings,
-} from '../../db/posSettings';
+import { POS_DEFAULTS, type PosSettings } from '../../db/posSettings';
 import { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode } from '../../i18n/languages';
 import { useLanguage } from '../../state/LanguageProvider';
-import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { usePosSettings } from '../../state/PosSettingsProvider';
 import { Scrollable } from '../Scrollable';
 import { say } from '../../ui/alert';
 import { WebIcon } from '../../ui/icons';
@@ -48,19 +43,23 @@ const FLAGS: Record<string, string> = {
 };
 
 export function CashierSettings() {
-  const { db, refresh } = useDatabase();
-  const saved = useQuery((database) => getPosSettings(database));
+  const { settings: saved, set: save, reset } = usePosSettings();
   const { language, setLanguage } = useLanguage();
 
   const [section, setSection] = useState<Section>('main');
 
-  /** Меняем одно поле — и сразу пишем: настройка закончена нажатием. */
+  /**
+   * Меняем одно поле — и сразу пишем: настройка закончена нажатием.
+   *
+   * Никакого общего `refresh()`: он поднял бы ревизию базы и заставил
+   * перечитать всё приложение — от витрины до списка клиентов. Настройки
+   * живут своим состоянием, и нажатие видно мгновенно.
+   */
   const set = (patch: Partial<PosSettings>) => {
-    savePosSettings(db, { ...saved, ...patch });
+    save(patch);
     // Оформление — единственное, что нельзя просто сохранить: цвета живут
     // переменными CSS, и их надо переставить сразу, а не при следующем входе.
     if (patch.theme) applyPosTheme(patch.theme);
-    refresh();
   };
 
   return (
@@ -318,10 +317,9 @@ export function CashierSettings() {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              resetPosSettings(db);
+              reset();
               applyPosTheme(POS_DEFAULTS.theme);
               setLanguage(DEFAULT_LANGUAGE);
-              refresh();
               say('Готово', 'Настройки кассы вернулись к тому, какими были при установке.');
             }}
             style={styles.reset}
@@ -498,7 +496,7 @@ const styles = StyleSheet.create({
 
   // Слева — белая карточка с четырьмя разделами.
   menu: {
-    width: 300,
+    width: 260,
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: 'flex-start',
@@ -510,13 +508,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 20, minHeight: 64 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, minHeight: 52 },
   menuItemOn: { backgroundColor: '#EEF3FB' },
   menuIcon: { width: 26, alignItems: 'center' },
-  menuLabel: { flex: 1, fontFamily: pos.font, fontSize: 19, lineHeight: 25, color: pos.text },
+  menuLabel: { flex: 1, fontFamily: pos.font, fontSize: 15, lineHeight: 21, color: pos.text },
 
   body: { flex: 1, minHeight: 0 },
-  bodyInner: { gap: 16, paddingBottom: 24 },
+  bodyInner: { gap: 16, paddingBottom: 24, maxWidth: 650 },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
@@ -529,7 +527,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontFamily: pos.font,
-    fontSize: 26,
+    fontSize: 18,
     color: pos.text,
     marginTop: 18,
     marginBottom: 12,
@@ -538,7 +536,7 @@ const styles = StyleSheet.create({
   // Переключатели лежат на светло-серой подложке, а не на белом.
   group: { backgroundColor: pos.bg, borderRadius: 6, paddingVertical: 8 },
 
-  radioRow: { flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 20, height: 52 },
+  radioRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 44 },
   radio: {
     width: 22,
     height: 22,
@@ -551,11 +549,11 @@ const styles = StyleSheet.create({
   radioOn: { borderColor: pos.muted },
   radioOff: { borderColor: '#C7CDD4' },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: pos.muted },
-  radioLabel: { flex: 1, fontFamily: pos.font, fontSize: 17, color: pos.text },
+  radioLabel: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.text },
   radioLabelOff: { color: '#AEB6BE' },
-  flag: { fontSize: 17 },
+  flag: { fontSize: 14 },
 
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 16, height: 52 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 16, height: 44 },
   check: {
     width: 22,
     height: 22,
@@ -573,7 +571,7 @@ const styles = StyleSheet.create({
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 52,
+    height: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: pos.border,
@@ -583,13 +581,13 @@ const styles = StyleSheet.create({
     flex: 1,
     outlineWidth: 0,
     fontFamily: pos.font,
-    fontSize: 19,
+    fontSize: 15,
     color: pos.text,
     fontVariant: ['tabular-nums'],
   },
-  fieldUnit: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  fieldUnit: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
-  note: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 8, lineHeight: 20 },
+  note: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 8, lineHeight: 20 },
 
   tick: { width: 22, alignItems: 'center' },
 
@@ -597,7 +595,7 @@ const styles = StyleSheet.create({
   sampleBox: { backgroundColor: pos.bg, borderRadius: 6, paddingVertical: 24, marginTop: 24 },
   sampleTitle: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.muted,
     textAlign: 'center',
     marginBottom: 16,
@@ -623,8 +621,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  sampleBadgeLabel: { fontFamily: pos.font, fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  sampleStock: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  sampleBadgeLabel: { fontFamily: pos.font, fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+  sampleStock: { fontFamily: pos.font, fontSize: 14, color: pos.muted },
   sampleImage: {
     height: 140,
     margin: 10,
@@ -642,7 +640,7 @@ const styles = StyleSheet.create({
   },
   sampleName: {
     fontFamily: pos.font,
-    fontSize: 16,
+    fontSize: 15,
     color: pos.text,
     textAlign: 'center',
     paddingHorizontal: 10,
@@ -663,7 +661,7 @@ const styles = StyleSheet.create({
   },
   samplePriceLabel: {
     fontFamily: pos.font,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     color: pos.text,
     textAlign: 'center',
@@ -680,11 +678,11 @@ const styles = StyleSheet.create({
     borderColor: pos.red,
     borderRadius: 4,
   },
-  resetLabel: { fontFamily: pos.font, fontSize: 15, color: pos.red, letterSpacing: 0.4 },
+  resetLabel: { fontFamily: pos.font, fontSize: 13, color: pos.red, letterSpacing: 0.4 },
 
   version: {
     fontFamily: pos.font,
-    fontSize: 15,
+    fontSize: 14,
     color: pos.muted,
     textAlign: 'center',
     marginTop: 8,

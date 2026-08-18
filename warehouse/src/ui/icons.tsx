@@ -307,6 +307,11 @@ export const WebIcon = {
   drag: (p: Props) => (
     <MaterialCommunityIcons name="drag" size={p.size ?? 22} color={p.color} />
   ),
+
+  /** Часы со стрелкой назад — «Отложить чек», как у него `history`. */
+  history: (p: Props) => (
+    <MaterialCommunityIcons name="history" size={p.size ?? 22} color={p.color} />
+  ),
   info: (p: Props) => (
     <Ionicons name="information-circle-outline" size={p.size ?? 18} color={p.color} />
   ),

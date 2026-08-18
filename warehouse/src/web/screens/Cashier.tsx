@@ -12,6 +12,8 @@ import { CashierDiscount } from './CashierDiscount';
 import { CashierOpenShift } from './CashierOpenShift';
 import { CashierNewClient } from './CashierNewClient';
 import { CashierPayment } from './CashierPayment';
+import { CashierQueue } from './CashierQueue';
+import { CashierSellMenu } from './CashierSellMenu';
 import { CashierReceipts } from './CashierReceipts';
 import { CashierSuccess } from './CashierSuccess';
 import { CashierReco } from './CashierReco';
@@ -38,6 +40,7 @@ import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { usePosSettings } from '../../state/PosSettingsProvider';
 import { colorFromName } from '../../db/categories';
+import { countHeld, holdReceipt } from '../../db/held';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { applyPosTheme, pos } from '../../ui/webTheme';
@@ -200,6 +203,10 @@ export function Cashier() {
   const [category, setCategory] = useState<{ id: Id; name: string } | null>(null);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
+
+  /** Меню трёх точек на кнопке продажи и окно очереди. */
+  const [sellMenu, setSellMenu] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [pickingCustomer, setPickingCustomer] = useState(false);
   const [discounting, setDiscounting] = useState(false);
   /**
@@ -302,6 +309,9 @@ export function Cashier() {
       settings.showHiddenCategories,
     ],
   );
+  // Сколько чеков отложено — цифра на оранжевой кнопке над продажей.
+  const held = useQuery((database) => countHeld(database));
+
   const categories = useQuery((database) => listCategoryTiles(database));
   const locations = useQuery((database) => listLocations(database));
   const shift = useQuery((database) => openShiftAnywhere(database));
@@ -892,6 +902,29 @@ export function Cashier() {
               </View>
             </>
           )}
+
+          {/* Очередь и непроведённые — две кнопки в ряд, как у него.
+              Оранжевая, пока в очереди кто-то есть; серая, когда пусто. */}
+          <View style={styles.queueRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: held === 0 }}
+              disabled={held === 0}
+              onPress={() => setQueueOpen(true)}
+              style={[styles.queueButton, held > 0 && styles.queueButtonOn]}
+            >
+              <Text style={[styles.queueLabel, held > 0 && styles.queueLabelOn]}>
+                ОЧЕРЕДЬ ЧЕКОВ: {held}
+              </Text>
+            </Pressable>
+
+            {/* «Непроведённые» — чеки, которые не ушли в фискальный
+                регистратор. Регистратора у нас нет, и число здесь всегда
+                ноль; кнопка стоит на своём месте и молчит. */}
+            <View style={styles.queueButton}>
+              <Text style={styles.queueLabel}>НЕПРОВЕДЕННЫЕ: 0</Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -927,22 +960,92 @@ export function Cashier() {
             строка с магазином и часами на неё не заходят. */}
         <View style={styles.bottomGap} />
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={startPay}
-          style={({ pressed }) => [styles.sellBar, { flex: 1 - split }, pressed && { opacity: 0.9 }]}
+        {/* Полоса продажи. Пока чек пуст, она бледная и не нажимается — у
+            него так же: продавать нечего, и кнопка это показывает. */}
+        <View
+          style={[
+            styles.sellBar,
+            { flex: 1 - split },
+            cart.lines.length === 0 && styles.sellBarOff,
+          ]}
         >
-          {/* Отступы — на внутренней обёртке, а не на самой полосе.
-              У полосы `flex: 1` с нулевой основой, и её собственные
-              горизонтальные отступы прибавлялись к доле сверху: полоса
-              выходила на 40 точек шире и вылезала левее чека. */}
-          <View style={styles.sellInner}>
+          {/* Три точки — своя кнопка, а не часть полосы: у них своё меню, и
+              нажатие на них не должно открывать оплату. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Меню чека"
+            accessibilityState={{ disabled: cart.lines.length === 0 }}
+            disabled={cart.lines.length === 0}
+            onPress={() => setSellMenu(true)}
+            style={styles.sellDotsButton}
+          >
             <Text style={styles.sellDots}>⋮</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={mode === 'sale' ? 'Продажа' : 'Возврат'}
+            disabled={cart.lines.length === 0}
+            onPress={startPay}
+            style={({ pressed }) => [styles.sellPress, pressed && { opacity: 0.9 }]}
+          >
             <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
             <Text style={styles.sellTotal}>{formatMoney(cart.totals.total)} руб</Text>
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
       </View>
+
+      <CashierSellMenu
+        visible={sellMenu}
+        onClose={() => setSellMenu(false)}
+        who={shop}
+        rightInset={(1 - split) * bodyWidth}
+        onHold={() => {
+          holdReceipt(db, {
+            mode,
+            customerId: customer?.id ?? null,
+            customerName: customer?.name ?? null,
+            discount: cart.totals.discount,
+            lines: cart.lines,
+          });
+          refresh();
+          cart.clear();
+          setCustomer(null);
+          setSelected(null);
+          setDiscountPercent(null);
+        }}
+        onCancel={() => {
+          cart.clear();
+          setCustomer(null);
+          setSelected(null);
+          setDiscountPercent(null);
+        }}
+      />
+
+      <CashierQueue
+        visible={queueOpen}
+        onClose={() => setQueueOpen(false)}
+        onPick={(receipt) => {
+          // Чек возвращается на кассу таким, каким его отложили: строки,
+          // скидка и покупатель. Набранное до этого пропало бы молча —
+          // поэтому его сперва откладываем обратно в очередь.
+          if (cart.lines.length > 0) {
+            holdReceipt(db, {
+              mode,
+              customerId: customer?.id ?? null,
+              customerName: customer?.name ?? null,
+              discount: cart.totals.discount,
+              lines: cart.lines,
+            });
+          }
+
+          cart.replace(receipt.lines, receipt.discount);
+          setCustomer(null);
+          setSelected(null);
+          setDiscountPercent(null);
+          refresh();
+        }}
+      />
 
       <CashierPayment
         visible={paying}
@@ -1513,7 +1616,17 @@ const styles = StyleSheet.create({
   bottomMenuLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   bottomShop: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.muted, textAlign: 'center' },
   bottomClock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, paddingRight: 24 },
-  sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar },
+  sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar, flexDirection: 'row' },
+  // Пустой чек: полоса бледнеет, как у него, и не нажимается.
+  sellBarOff: { opacity: 0.55 },
+  sellDotsButton: { width: 52, alignItems: 'center', justifyContent: 'center' },
+  sellPress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 20,
+    gap: 18,
+  },
   sellInner: {
     flex: 1,
     flexDirection: 'row',
@@ -1521,6 +1634,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 18,
   },
+
+  // Две кнопки над полосой продажи: очередь и непроведённые.
+  queueRow: { flexDirection: 'row', gap: 8, padding: 12, paddingTop: 0 },
+  queueButton: {
+    flex: 1,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pos.raise,
+    borderRadius: 3,
+  },
+  queueButtonOn: { backgroundColor: pos.accent },
+  queueLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted, letterSpacing: 0.4 },
+  queueLabelOn: { color: '#FFFFFF' },
   sellDots: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF' },
   sellLabel: { flex: 1, fontFamily: pos.font, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.6 },
   sellTotal: { fontFamily: pos.font, fontSize: 18, color: '#FFFFFF', fontVariant: ['tabular-nums'] },

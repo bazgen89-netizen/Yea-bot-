@@ -13,6 +13,13 @@ interface CartContextValue {
   remove: (productId: Id) => void;
   setDiscount: (kopecks: number) => void;
   clear: () => void;
+  /**
+   * Положить в корзину готовый чек — тот, что достали из очереди.
+   *
+   * Не `clear` плюс `add` по одному: у отложенного чека свои количества и
+   * своя скидка, а `add` считал бы их заново от карточки товара.
+   */
+  replace: (lines: CartLine[], discount: number) => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -56,6 +63,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setDiscount(0);
   }, []);
 
+  const replace = useCallback((next: CartLine[], nextDiscount: number) => {
+    setLines(next);
+    setDiscount(nextDiscount);
+  }, []);
+
   const value = useMemo(
     () => ({
       lines,
@@ -66,8 +78,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       remove,
       setDiscount,
       clear,
+      replace,
     }),
-    [lines, discount, add, setQty, remove, clear],
+    [lines, discount, add, setQty, remove, clear, replace],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

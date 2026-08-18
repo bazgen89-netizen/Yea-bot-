@@ -52,6 +52,25 @@ export function openCashierWindow(): boolean {
     `popup=yes,width=${width},height=${height},left=0,top=0`,
   );
 
-  opened?.focus?.();
-  return Boolean(opened);
+  if (!opened) return false;
+
+  opened.focus?.();
+  return true;
+}
+
+/**
+ * Страница открыта внутри чужой рамки?
+ *
+ * Так бывает у показа по ссылке: страница живёт в `iframe` с песочницей, а
+ * песочница запрещает открывать окна. Знать это надо не ради красоты — иначе
+ * на нажатие «Интерфейс кассира» ничего не происходит, и объяснить, почему,
+ * нечем.
+ */
+export function insideFrame(): boolean {
+  try {
+    return globalThis.top !== globalThis.self;
+  } catch {
+    // Доступ к `top` из чужого источника запрещён — значит, рамка чужая.
+    return true;
+  }
 }

@@ -643,6 +643,26 @@ export const MIGRATIONS: string[] = [
      SET sort = (SELECT COUNT(*) FROM categories other
                   WHERE other.name < categories.name COLLATE NOCASE);
   `,
+
+  // 21 — отложенные чеки: «Отложить чек» и «Очередь чеков».
+  //
+  // Строки чека лежат JSON-полем, а не отдельной таблицей, и это осознанно.
+  // Отложенный чек — не документ: он ничего не двигает по складу, его нельзя
+  // найти в журнале и по нему не считают выручку. Разложив его по таблицам
+  // документа, мы обещали бы, что он документ, — и отчёты пришлось бы всюду
+  // учить его пропускать.
+  `
+  CREATE TABLE held_receipts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at    TEXT    NOT NULL,
+    -- Продажа или возврат: отложить можно и то, и другое.
+    mode          TEXT    NOT NULL DEFAULT 'sale',
+    customer_id   INTEGER REFERENCES counterparties(id) ON DELETE SET NULL,
+    customer_name TEXT,
+    discount      INTEGER NOT NULL DEFAULT 0,
+    lines         TEXT    NOT NULL
+  );
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

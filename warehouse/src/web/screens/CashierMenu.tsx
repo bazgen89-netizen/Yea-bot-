@@ -10,6 +10,7 @@ import { ROLE_LABEL } from '../../domain/permissions';
 import { useCashierKeys } from './useCashierKeys';
 import type { CashierView } from './CashierViews';
 import { useQuery } from '../../state/DatabaseProvider';
+import { startsInCashier } from '../openCashier';
 import { WebIcon } from '../../ui/icons';
 import { pos } from '../../ui/webTheme';
 
@@ -105,7 +106,12 @@ export function CashierMenu({
       // нет, и единственное, куда отсюда выходят, — кабинет.
       label: 'Выйти',
       icon: <WebIcon.logout size={24} color={tint} />,
-      href: '/',
+      // Касса, открытая своим окном, выходом это окно и закрывает: кабинет
+      // никуда не девался, он в соседнем. А если касса открыта в том же
+      // окне — просто уходим в кабинет.
+      ...(startsInCashier()
+        ? { action: () => globalThis.close?.() }
+        : { href: '/' as const }),
       key: '6',
     },
   ];
@@ -334,7 +340,7 @@ const styles = StyleSheet.create({
     minWidth: 296,
     maxHeight: '92%',
     paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderTopRightRadius: 4,
     // Затемнение позиционировано абсолютно и потому рисуется поверх обычного
     // потока — без этого оно накрывало бы саму панель и съедало её нажатия.

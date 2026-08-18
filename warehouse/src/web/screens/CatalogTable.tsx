@@ -3,18 +3,26 @@ import { useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
+import { ActionsMenu } from '../ActionsMenu';
+import { PricesDialog, CategoryDialog } from '../BulkDialogs';
 import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
 import { ColumnPicker } from '../ColumnPicker';
 import { FilterPanel } from '../FilterPanel';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { archiveProducts } from '../../db/bulk';
+import { stockCsv } from '../../db/export';
 import { listLocations, stockByLocation } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import { pluralize } from '../../domain/plural';
+import { today } from '../../domain/pricing';
+import { DOC_KIND_LABEL } from '../../domain/types';
 import type { ProductWithStock } from '../../domain/types';
 import { useCatalogFilters } from '../../state/catalogFilters';
-import { useQuery } from '../../state/DatabaseProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { confirm } from '../../ui/alert';
+import { saveFile } from '../../ui/download';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 import { ProductCard } from './ProductCard';
@@ -37,6 +45,11 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
   // набирать поиск.
   const [open, setOpen] = useState<string | null>(openId ?? null);
   const [page, setPage] = useState(1);
+  const { db, refresh } = useDatabase();
+
+  /** Какое окно из меню «Действия» открыто. */
+  const [bulk, setBulk] = useState<'prices' | 'category' | null>(null);
+
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
 
@@ -104,10 +117,94 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
             setPage(1);
           }}
         />
-        <ToolButton
+        <ActionsMenu
           label={`Действия ${products.length} поз.`}
-          trailing={<WebIcon.chevronDown color={web.text} />}
-          soon
+          groups={[
+            {
+              items: [
+                {
+                  label: 'Создать документ',
+                  submenu: (
+                    [
+                      'purchase',
+                      'sale',
+                      'stock_in',
+                      'writeoff',
+                      'transfer',
+                      'inventory',
+                    ] as const
+                  ).map((kind) => ({
+                    label: DOC_KIND_LABEL[kind],
+                    onPress: () => router.push(`/doc/new?kind=${kind}`),
+                  })),
+                },
+              ],
+            },
+            {
+              title: 'РАБОТА С ГРУППОЙ ТОВАРОВ',
+              items: [
+                { label: 'Цены и скидки', onPress: () => setBulk('prices') },
+                { label: 'Категории и группы', onPress: () => setBulk('category') },
+                // «Другое» у него — сроки годности, НДС, признаки. По одному
+                // они есть в карточке; списком — ещё нет.
+                { label: 'Другое', soon: true },
+              ],
+            },
+            {
+              items: [
+                { label: 'Ценники', soon: true },
+                { label: 'Редактор цен', soon: true },
+              ],
+            },
+            {
+              items: [
+                {
+                  label: 'Оценка склада',
+                  icon: <WebIcon.products size={18} color={web.text} />,
+                  onPress: () => router.push('/reports'),
+                },
+                // Файл для весов — выгрузка в формате конкретных весов;
+                // какого именно, знает только тот, у кого они стоят.
+                { label: 'Файл для весов', icon: <WebIcon.tag size={18} color={web.text} />, soon: true },
+                {
+                  label: 'Скачать в Excel',
+                  icon: <WebIcon.download size={18} color={web.text} />,
+                  submenu: [
+                    {
+                      label: 'Остатки и цены',
+                      onPress: () => {
+                        void saveFile(
+                          `Товары ${today()}.csv`,
+                          stockCsv(db),
+                          'text/csv;charset=utf-8',
+                        );
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              items: [
+                {
+                  label: 'Удалить',
+                  icon: <WebIcon.trash size={18} color="#DB2828" />,
+                  danger: true,
+                  onPress: () =>
+                    confirm(
+                      'Удалить товары',
+                      `${products.length} поз. уйдут в корзину. Продажи и движения склада ` +
+                        'по ним останутся — товар просто пропадёт из справочника и с витрины.',
+                      'Удалить',
+                      () => {
+                        archiveProducts(db, products.map((product) => product.id));
+                        refresh();
+                      },
+                    ),
+                },
+              ],
+            },
+          ]}
         />
         <ToolButton
           label={`Колонки: ${picked.length}`}
@@ -152,6 +249,17 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
           </ScrollView>
         </View>
       </ScrollView>
+
+      <PricesDialog
+        visible={bulk === 'prices'}
+        products={products}
+        onClose={() => setBulk(null)}
+      />
+      <CategoryDialog
+        visible={bulk === 'category'}
+        products={products}
+        onClose={() => setBulk(null)}
+      />
 
       <FilterPanel
         visible={filterOpen}

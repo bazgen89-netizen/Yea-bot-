@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 
 import type { SqlDriver } from '../db/driver';
 import { openDatabase } from '../db/expoDriver';
@@ -53,6 +53,23 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
+
+  /**
+   * Соседнее окно записало базу — перечитываем.
+   *
+   * Касса открывается своим окном, и без этого кабинет показывал бы остатки
+   * такими, какими они были до первого чека.
+   */
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    let stop: (() => void) | undefined;
+    void import('../db/webDriver').then((module) => {
+      stop = module.onDatabaseReloaded(refresh);
+    });
+
+    return () => stop?.();
+  }, [refresh]);
 
   const value = useMemo(
     () => ('db' in state ? { db: state.db, revision, refresh } : null),

@@ -5,6 +5,7 @@ import { Text } from './Translated';
 
 import { Dropdown, type Option } from './Dropdown';
 import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';
+import { openCashierWindow } from './openCashier';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
@@ -69,7 +70,11 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('Интерфейс кассира')}
-          onPress={() => router.push('/cashier')}
+          onPress={() => {
+            // Отдельное окно — как у него. Если браузер его не дал, уходим
+            // в кассу в этом же окне: работать всё равно надо.
+            if (!openCashierWindow()) router.push('/cashier');
+          }}
           style={({ pressed }) => [styles.cashier, pressed && { opacity: 0.85 }]}
         >
           <Text style={styles.cashierLabel}>{t('Интерфейс кассира')}</Text>

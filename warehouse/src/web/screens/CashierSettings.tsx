@@ -1,10 +1,21 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '../Translated';
 
+import {
+  CATEGORY_COLORS,
+  colorFromName,
+  listCategoryViews,
+  reorderCategories,
+  setCategoryBig,
+  setCategoryColor,
+  setCategoryHidden,
+  type CategoryView,
+} from '../../db/categories';
 import { POS_DEFAULTS, type PosSettings } from '../../db/posSettings';
 import { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode } from '../../i18n/languages';
 import { useLanguage } from '../../state/LanguageProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { usePosSettings } from '../../state/PosSettingsProvider';
 import { Scrollable } from '../Scrollable';
 import { say } from '../../ui/alert';
@@ -241,17 +252,7 @@ export function CashierSettings() {
             </>
           ) : null}
 
-          {section === 'categories' ? (
-            <>
-              <Text style={styles.title}>Категории</Text>
-              <Note>
-                Категории заводятся в кабинете: «Товары и услуги» → карточка товара →
-                «Категория», а касса берёт их оттуда — плитка «Категории» слева сверху.
-                Здесь у CloudShop, судя по подписям в его коде, можно прятать категории
-                с витрины. Пришлите снимок этого раздела — сделаю так же.
-              </Note>
-            </>
-          ) : null}
+          {section === 'categories' ? <Categories /> : null}
 
           {section === 'display' ? (
             <>
@@ -336,6 +337,209 @@ export function CashierSettings() {
 
 /** Своя версия, а не их 4.0.1: подписывать чужой номер было бы неправдой. */
 const VERSION = '1.0.0';
+
+/**
+ * «Категории» — как они выглядят на витрине.
+ *
+ * Раздел ничего не заводит и не удаляет: категории приходят из справочника, а
+ * здесь им назначают цвет, порядок, размер плитки и скрывают с витрины. То же
+ * и у него — и подписи те же, из его словаря: «Показывать товары из скрытых
+ * категорий», «Скрыть категорию», «Цвет», «Размер».
+ */
+function Categories() {
+  const { db, refresh } = useDatabase();
+  const { settings, set } = usePosSettings();
+  const rows = useQuery((database) => listCategoryViews(database));
+
+  // Какой строке открыта палитра. Одна на весь список: две открытые сразу —
+  // это уже не выбор цвета, а рябь.
+  const [palette, setPalette] = useState<number | null>(null);
+
+  /** Перетаскивание: какую строку держат и куда ведут. */
+  const [drag, setDrag] = useState<{ id: number; from: number; to: number } | null>(null);
+  const startY = useRef(0);
+
+  const order = drag
+    ? move(rows.map((row) => row.id as number), drag.from, drag.to)
+    : rows.map((row) => row.id as number);
+  const shown = order
+    .map((id) => rows.find((row) => (row.id as number) === id))
+    .filter((row): row is CategoryView => Boolean(row));
+
+  return (
+    <>
+      <Text style={styles.title}>Категории</Text>
+
+      <View style={styles.hiddenBand}>
+        <View style={styles.segment}>
+          <Pressable
+            accessibilityRole="radio"
+            accessibilityState={{ selected: settings.showHiddenCategories }}
+            onPress={() => set({ showHiddenCategories: true })}
+            style={[styles.segmentPart, settings.showHiddenCategories && styles.segmentOn]}
+          >
+            <Text
+              style={[
+                styles.segmentLabel,
+                settings.showHiddenCategories && styles.segmentLabelOn,
+              ]}
+            >
+              Да
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="radio"
+            accessibilityState={{ selected: !settings.showHiddenCategories }}
+            onPress={() => set({ showHiddenCategories: false })}
+            style={[styles.segmentPart, !settings.showHiddenCategories && styles.segmentOn]}
+          >
+            <Text
+              style={[
+                styles.segmentLabel,
+                !settings.showHiddenCategories && styles.segmentLabelOn,
+              ]}
+            >
+              Нет
+            </Text>
+          </Pressable>
+        </View>
+        <Text style={styles.hiddenLabel}>Показывать товары из скрытых категорий</Text>
+      </View>
+
+      {shown.map((row, index) => (
+        <View key={row.id}>
+          <View
+            style={[
+              styles.catRow,
+              { backgroundColor: row.color ?? colorFromName(row.name) },
+              row.hidden && styles.catRowOff,
+              drag?.id === row.id && styles.catRowDrag,
+            ]}
+          >
+            {/* Рукоятка: строку держат за неё и ведут вверх или вниз. */}
+            <View
+              accessible
+              accessibilityLabel={`Переставить категорию «${row.name}»`}
+              style={styles.catHandle}
+              onStartShouldSetResponder={() => true}
+              onResponderGrant={(event) => {
+                startY.current = event.nativeEvent.pageY;
+                setDrag({ id: row.id as number, from: index, to: index });
+              }}
+              onResponderMove={(event) => {
+                // Через сколько строк увели рукоятку от места, где её взяли.
+                const shift = Math.round((event.nativeEvent.pageY - startY.current) / ROW_STEP);
+                setDrag((current) =>
+                  current
+                    ? { ...current, to: clamp(current.from + shift, 0, rows.length - 1) }
+                    : current,
+                );
+              }}
+              onResponderRelease={() => {
+                if (drag) reorderCategories(db, order);
+                setDrag(null);
+                refresh();
+              }}
+            >
+              <WebIcon.drag size={20} color={pos.muted} />
+            </View>
+
+            <Text style={styles.catName}>
+              {row.name} - {row.sort}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={row.hidden ? 'Показать категорию' : 'Скрыть категорию'}
+              onPress={() => {
+                setCategoryHidden(db, row.id, !row.hidden);
+                refresh();
+              }}
+              style={styles.catButton}
+            >
+              {row.hidden ? (
+                <WebIcon.eyeOff size={22} color={pos.text} />
+              ) : (
+                <WebIcon.eye size={22} color={pos.text} />
+              )}
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Цвет"
+              onPress={() => setPalette((open) => (open === row.id ? null : (row.id as number)))}
+              style={styles.catButton}
+            >
+              <WebIcon.fill size={22} color={pos.text} />
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Размер"
+              onPress={() => {
+                setCategoryBig(db, row.id, !row.big);
+                refresh();
+              }}
+              style={styles.catButton}
+            >
+              {row.big ? (
+                <WebIcon.collapse size={22} color={pos.text} />
+              ) : (
+                <WebIcon.expand size={22} color={pos.text} />
+              )}
+            </Pressable>
+          </View>
+
+          {palette === row.id ? (
+            <View style={styles.paletteBox}>
+              <Text style={styles.paletteTitle}>Цвет</Text>
+              <View style={styles.paletteRow}>
+                {CATEGORY_COLORS.map((color) => (
+                  <Pressable
+                    key={color}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Цвет ${color}`}
+                    onPress={() => {
+                      setCategoryColor(db, row.id, color);
+                      setPalette(null);
+                      refresh();
+                    }}
+                    style={[styles.paletteItem, { backgroundColor: color }]}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ))}
+
+      {rows.length === 0 ? (
+        <Note>Категорий пока нет — их заводят в карточке товара, в кабинете.</Note>
+      ) : (
+        <Note>
+          Номер справа от названия — порядок на витрине: строку держат за рукоятку слева и
+          ведут вверх или вниз. Глаз убирает категорию с витрины, ведро красит плитку,
+          стрелки делают её вдвое шире.
+        </Note>
+      )}
+    </>
+  );
+}
+
+/** Высота строки с промежутком — по ней считается, через сколько строк ведут. */
+const ROW_STEP = 56;
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
+/** Переставить элемент списка с места на место. */
+function move<T>(list: T[], from: number, to: number): T[] {
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -500,26 +704,26 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 8,
     paddingVertical: 8,
-    shadowColor: '#000000',
+    shadowColor: pos.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, minHeight: 52 },
-  menuItemOn: { backgroundColor: '#EEF3FB' },
+  menuItemOn: { backgroundColor: pos.select },
   menuIcon: { width: 26, alignItems: 'center' },
   menuLabel: { flex: 1, fontFamily: pos.font, fontSize: 15, lineHeight: 21, color: pos.text },
 
   body: { flex: 1, minHeight: 0 },
   bodyInner: { gap: 16, paddingBottom: 24, maxWidth: 650 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 8,
     padding: 24,
-    shadowColor: '#000000',
+    shadowColor: pos.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -589,6 +793,66 @@ const styles = StyleSheet.create({
 
   note: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 8, lineHeight: 20 },
 
+  // Раздел «Категории».
+  //
+  // Полоса с переключателем «Да / Нет» — серая, подпись синяя: у него она
+  // выглядит ссылкой, хотя ею не является, и это тоже часть облика.
+  hiddenBand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: pos.bg,
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 16,
+  },
+  segment: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: pos.bar,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  segmentPart: { paddingHorizontal: 18, height: 34, alignItems: 'center', justifyContent: 'center' },
+  segmentOn: { backgroundColor: pos.select },
+  segmentLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text },
+  segmentLabelOn: { color: pos.bar },
+  hiddenLabel: { flex: 1, fontFamily: pos.font, fontSize: 14, color: pos.bar },
+
+  catRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    marginBottom: 8,
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  // Скрытая категория бледнеет — как строка, которой на витрине нет.
+  catRowOff: { opacity: 0.45 },
+  catRowDrag: { opacity: 0.85, transform: [{ scale: 0.995 }] },
+  catHandle: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  catName: { flex: 1, fontFamily: pos.font, fontSize: 15, color: '#1F2328' },
+  catButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+
+  paletteBox: {
+    backgroundColor: pos.tile,
+    borderWidth: 1,
+    borderColor: pos.border,
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 8,
+  },
+  paletteTitle: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginBottom: 8 },
+  paletteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  paletteItem: {
+    width: 34,
+    height: 34,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: pos.border,
+  },
+
   tick: { width: 22, alignItems: 'center' },
 
   // Пример товара — на такой же серой подложке, как остальные блоки.
@@ -603,7 +867,7 @@ const styles = StyleSheet.create({
   sample: {
     alignSelf: 'center',
     width: 200,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     paddingBottom: 10,
   },
   sampleHead: {
@@ -631,11 +895,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   glyph: { width: 62, height: 62, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  glyphSquare: { width: 28, height: 28, backgroundColor: '#B9BDC2' },
+  glyphSquare: { width: 28, height: 28, backgroundColor: pos.faint },
   glyphDiamond: {
     width: 28,
     height: 28,
-    backgroundColor: '#B9BDC2',
+    backgroundColor: pos.faint,
     transform: [{ rotate: '45deg' }, { scale: 0.78 }],
   },
   sampleName: {

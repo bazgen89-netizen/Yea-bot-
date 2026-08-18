@@ -176,14 +176,14 @@ export function CashierCalendar({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 8,
     marginTop: 4,
     marginBottom: 12,
-    shadowColor: '#000000',
+    shadowColor: pos.shadow,
     shadowOpacity: 0.18,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   title: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   caret: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  caretOpen: { backgroundColor: '#EDEFF1' },
+  caretOpen: { backgroundColor: pos.raise },
   titleLabel: { fontFamily: pos.font, fontSize: 16, fontWeight: '500', color: pos.text },
   arrows: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrow: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },

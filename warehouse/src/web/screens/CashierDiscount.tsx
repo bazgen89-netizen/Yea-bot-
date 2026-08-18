@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   panel: {
     width: 420,
     maxWidth: '94%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 6,
     paddingTop: 20,
     overflow: 'hidden',

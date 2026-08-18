@@ -148,7 +148,11 @@ function seedProducts(db: SqlDriver): void {
         const name = item.g.trim();
         categoryId = categories.get(name) ?? null;
         if (categoryId === null) {
-          db.run('INSERT INTO categories (name) VALUES (?)', [name]);
+          db.run(
+            `INSERT INTO categories (name, sort)
+             VALUES (?, (SELECT COALESCE(MAX(sort) + 1, 0) FROM categories))`,
+            [name],
+          );
           categoryId = db.lastInsertId();
           categories.set(name, categoryId);
         }

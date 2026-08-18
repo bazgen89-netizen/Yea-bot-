@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   panel: {
     width: '92%',
     height: '92%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 6,
     overflow: 'hidden',
     zIndex: 1,
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
     gap: 12,
     height: 52,
     borderRadius: 4,
-    backgroundColor: '#E8F1FB',
+    backgroundColor: pos.select,
     marginBottom: 12,
   },
   dateLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar, letterSpacing: 0.6 },
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
   dayHeadLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderWidth: 1,
     borderColor: pos.border,
     borderRadius: 6,
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     height: 34,
     paddingHorizontal: 12,
     borderRadius: 4,
-    backgroundColor: '#EDEFF1',
+    backgroundColor: pos.raise,
   },
   cardButtonLabel: { fontFamily: pos.font, fontSize: 13, color: pos.text, letterSpacing: 0.6 },
   cardSum: {

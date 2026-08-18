@@ -289,6 +289,24 @@ export const WebIcon = {
 
   /** Формы: снять категорию, убрать упаковку, пояснение под полем. */
   close: (p: Props) => <Ionicons name="close" size={p.size ?? 16} color={p.color} />,
+
+  // Раздел «Категории» в настройках кассы: у него это глифы Font Awesome
+  // `eye` / `eye-slash`, `fill-drip`, `expand-arrows` / `compress-arrows-alt`
+  // и `arrows-v` на рукоятке перетаскивания. Здесь — те же по форме.
+  eye: (p: Props) => <Ionicons name="eye-outline" size={p.size ?? 22} color={p.color} />,
+  eyeOff: (p: Props) => <Ionicons name="eye-off-outline" size={p.size ?? 22} color={p.color} />,
+  fill: (p: Props) => (
+    <MaterialCommunityIcons name="format-color-fill" size={p.size ?? 22} color={p.color} />
+  ),
+  expand: (p: Props) => (
+    <MaterialCommunityIcons name="arrow-expand-all" size={p.size ?? 22} color={p.color} />
+  ),
+  collapse: (p: Props) => (
+    <MaterialCommunityIcons name="arrow-collapse-all" size={p.size ?? 22} color={p.color} />
+  ),
+  drag: (p: Props) => (
+    <MaterialCommunityIcons name="drag" size={p.size ?? 22} color={p.color} />
+  ),
   info: (p: Props) => (
     <Ionicons name="information-circle-outline" size={p.size ?? 18} color={p.color} />
   ),

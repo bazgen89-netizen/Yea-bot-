@@ -1,4 +1,6 @@
 import { useRouter } from 'expo-router';
+
+import { openCashierWindow } from '../openCashier';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
@@ -60,7 +62,9 @@ export function RegistersTable() {
         <ToolButton
           label="Интерфейс кассира"
           tone="blueOutline"
-          onPress={() => router.push('/cashier')}
+          onPress={() => {
+            if (!openCashierWindow()) router.push('/cashier');
+          }}
         />
         <ToolButton label="Смены" tone="plain" onPress={() => router.push('/shifts')} />
         <View style={styles.totals}>

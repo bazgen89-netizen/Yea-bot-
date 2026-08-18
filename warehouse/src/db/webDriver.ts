@@ -35,7 +35,18 @@ interface SqlJsDatabase {
 
 export const DATABASE_NAME = 'warehouse.db';
 
-export function createWebDriver(db: SqlJsDatabase, onChange: () => void): SqlDriver {
+/**
+ * Ссылка на базу, которую можно подменить.
+ *
+ * Касса открывается отдельным окном, и в каждом окне своя копия базы в
+ * памяти. Когда одно окно сохранило файл, второе перечитывает его целиком —
+ * для этого экраны не должны держать ссылку на прежний объект sql.js.
+ */
+export interface DbBox {
+  current: SqlJsDatabase;
+}
+
+export function createWebDriver(box: DbBox, onChange: () => void): SqlDriver {
   /**
    * Глубина вложенности транзакций. SQLite не умеет вкладывать BEGIN в BEGIN,
    * а `db.tx()` у нас вызывается и снаружи, и внутри (например, загрузка
@@ -44,7 +55,7 @@ export function createWebDriver(db: SqlJsDatabase, onChange: () => void): SqlDri
   let depth = 0;
 
   const rows = <T>(sql: string, params: SqlParam[]): T[] => {
-    const statement = db.prepare(sql);
+    const statement = box.current.prepare(sql);
     try {
       statement.bind(params);
       const result: T[] = [];
@@ -57,7 +68,7 @@ export function createWebDriver(db: SqlJsDatabase, onChange: () => void): SqlDri
 
   return {
     run(sql, params = []) {
-      db.run(sql, params);
+      box.current.run(sql, params);
       if (depth === 0) onChange();
     },
     all<T>(sql: string, params: SqlParam[] = []): T[] {
@@ -73,26 +84,26 @@ export function createWebDriver(db: SqlJsDatabase, onChange: () => void): SqlDri
     tx<T>(fn: () => T): T {
       if (depth > 0) return fn();
 
-      db.run('BEGIN');
+      box.current.run('BEGIN');
       depth++;
       try {
         const result = fn();
         depth--;
-        db.run('COMMIT');
+        box.current.run('COMMIT');
         onChange();
         return result;
       } catch (error) {
         depth--;
-        db.run('ROLLBACK');
+        box.current.run('ROLLBACK');
         throw error;
       }
     },
     exec(sql) {
-      db.exec(sql);
+      box.current.exec(sql);
       if (depth === 0) onChange();
     },
     snapshot() {
-      return db.export();
+      return box.current.export();
     },
     async restore(bytes) {
       // Копия кладётся сразу в хранилище, минуя базу в памяти: подменить её
@@ -116,18 +127,72 @@ export async function openWebDatabase(): Promise<SqlDriver> {
   const SQL = await loadSqlJs();
   const saved = await readSaved();
 
-  const db: SqlJsDatabase = saved ? new SQL.Database(saved) : new SQL.Database();
+  const box: DbBox = { current: saved ? new SQL.Database(saved) : new SQL.Database() };
+
+  /**
+   * Разговор между окнами.
+   *
+   * Касса открывается своим окном, а кабинет остаётся в первом. База у них
+   * одна — файл в IndexedDB, — но в памяти у каждого окна своя копия. Значит,
+   * сохранив, надо сказать соседу: перечитай. Иначе кассир пробьёт чек, а в
+   * кабинете остаток останется прежним до перезагрузки.
+   */
+  const channel =
+    typeof globalThis.BroadcastChannel === 'function'
+      ? new globalThis.BroadcastChannel('wayshop-db')
+      : null;
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   const save = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      void writeSaved(db.export());
+      const stamp = `${WRITER}:${Date.now()}`;
+      lastStamp = stamp;
+      void writeSaved(box.current.export(), stamp).then(() => channel?.postMessage('saved'));
     }, 300);
   };
 
-  const driver = createWebDriver(db, save);
+  const driver = createWebDriver(box, save);
+
+  /** Перечитать файл целиком — соседнее окно его переписало. */
+  const reload = () => {
+    // Своя несохранённая правка живёт не дольше трёхсот миллисекунд — столько
+    // же, сколько ждёт отложенное сохранение. Поэтому перечитываем файл
+    // целиком: это проще и честнее, чем сводить две копии.
+    if (timer) return;
+
+    void readSaved().then((bytes) => {
+      if (!bytes) return;
+      box.current.close();
+      box.current = new SQL.Database(bytes);
+      for (const listener of reloaded) listener();
+    });
+  };
+
+  if (channel) {
+    channel.onmessage = (event: MessageEvent) => {
+      if (event.data === 'saved') reload();
+    };
+  }
+
+  /**
+   * Опрос метки — на случай, когда окна друг друга не слышат.
+   *
+   * Так и выходит, когда страницу открыли **файлом с диска**: у каждого окна
+   * свой «источник», и `BroadcastChannel` между ними молчит. Хранилище при
+   * этом общее — значит, узнать о чужой записи можно, поглядывая на короткую
+   * метку рядом с файлом базы. Читается она за миллисекунды, сам файл
+   * перечитывается только когда метка чужая.
+   */
+  setInterval(() => {
+    void readStamp().then((stamp) => {
+      if (!stamp || stamp === lastStamp) return;
+      lastStamp = stamp;
+      reload();
+    });
+  }, 2000);
+
   migrate(driver);
 
   // Пример данных при запуске не грузится: программой пользуется не один
@@ -142,6 +207,19 @@ export async function openWebDatabase(): Promise<SqlDriver> {
   save();
 
   return driver;
+}
+
+/**
+ * Кто хочет знать, что база перечитана из-за соседнего окна.
+ *
+ * Провайдер базы подписывается сюда и поднимает ревизию — экраны
+ * перечитывают запросы, как после обычной записи.
+ */
+const reloaded = new Set<() => void>();
+
+export function onDatabaseReloaded(listener: () => void): () => void {
+  reloaded.add(listener);
+  return () => reloaded.delete(listener);
 }
 
 // --- загрузка sql.js ------------------------------------------------------
@@ -218,12 +296,38 @@ async function readSaved(): Promise<Uint8Array | null> {
   }
 }
 
-async function writeSaved(bytes: Uint8Array): Promise<void> {
+/**
+ * Кто пишет и что записано последним.
+ *
+ * `WRITER` — случайное имя этого окна на время его жизни; метка `writer:время`
+ * ложится рядом с файлом при каждом сохранении. Своя метка — свои же данные,
+ * перечитывать нечего; чужая — соседнее окно что-то записало.
+ */
+const WRITER = Math.random().toString(36).slice(2);
+const STAMP_KEY = `${DATABASE_NAME}.stamp`;
+
+let lastStamp = '';
+
+async function readStamp(): Promise<string | null> {
+  try {
+    const store = await openStore();
+    return await new Promise<string | null>((resolve) => {
+      const request = store.transaction(STORE).objectStore(STORE).get(STAMP_KEY);
+      request.onsuccess = () => resolve((request.result as string) ?? null);
+      request.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function writeSaved(bytes: Uint8Array, stamp?: string): Promise<void> {
   try {
     const store = await openStore();
     await new Promise<void>((resolve, reject) => {
       const tx = store.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(bytes, DATABASE_NAME);
+      if (stamp) tx.objectStore(STORE).put(stamp, STAMP_KEY);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });

@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   panel: {
     width: 520,
     maxWidth: '94%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 6,
     overflow: 'hidden',
     zIndex: 1,
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   screen: { height: 26, borderRadius: 3, backgroundColor: '#BFE3F2' },
   keys: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
-  button: { width: 22, height: 12, borderRadius: 2, backgroundColor: '#E4E8EC' },
+  button: { width: 22, height: 12, borderRadius: 2, backgroundColor: pos.raise },
   buttonWarm: { backgroundColor: '#E8A33D' },
   buttonCool: { backgroundColor: '#6FA8DC' },
   card: {

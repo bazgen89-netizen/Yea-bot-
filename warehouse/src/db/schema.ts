@@ -626,6 +626,23 @@ export const MIGRATIONS: string[] = [
   INSERT INTO reco_lists (name, kind, enabled, size, sort, created_at)
   VALUES ('Покупают вместе', 'together', 1, 8, 0, datetime('now'));
   `,
+
+  // 20 — вид категории на витрине: цвет, порядок, размер плитки, скрытие.
+  //
+  // Всё это — настройки показа, а не свойства товара, но живут они у самой
+  // категории: цвет «Шу Пуэра» один на все кассы магазина, как у него.
+  `
+  ALTER TABLE categories ADD COLUMN color TEXT;
+  ALTER TABLE categories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE categories ADD COLUMN big INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE categories ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
+
+  -- Порядок при первом запуске — по алфавиту: иначе все номера были бы
+  -- нулями, и список выглядел бы сломанным ещё до первого перетаскивания.
+  UPDATE categories
+     SET sort = (SELECT COUNT(*) FROM categories other
+                  WHERE other.name < categories.name COLLATE NOCASE);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

@@ -70,6 +70,14 @@ export interface ProductFilter {
   /** Убрать с витрины то, чего нет на остатке. */
   hideZeroStocks?: boolean;
   /**
+   * Прятать ли товары скрытых категорий.
+   *
+   * Скрытая категория — это «не показывать в зале»: посуда под заказ,
+   * служебные позиции. В настройках кассы есть переключатель, который
+   * возвращает их на витрину, не снимая скрытия с самой категории.
+   */
+  hideHiddenCategories?: boolean;
+  /**
    * Какой день считать сегодняшним — для сроков годности и «не продаётся
    * три месяца». Передаётся снаружи, чтобы отчёт о просрочке можно было
    * проверить тестом, а не ждать нужного числа календаря.
@@ -147,6 +155,12 @@ export function listProducts(db: SqlDriver, filter: ProductFilter = {}): Product
   // «Товары с нулевым остатком: не показывать». Услуги остаются: у них
   // остатка нет вовсе, и прятать их вместе с кончившимся чаем неправильно.
   if (filter.hideZeroStocks) having.push("(stock > 0 OR p.kind = 'service')");
+
+  if (filter.hideHiddenCategories) {
+    where.push(
+      '(p.category_id IS NULL OR p.category_id NOT IN (SELECT id FROM categories WHERE hidden = 1))',
+    );
+  }
 
   const now = filter.today ?? today();
   for (const preset of filter.presets ?? []) {
@@ -332,7 +346,13 @@ export function ensureCategory(db: SqlDriver, name: string): Id {
   const existing = db.get<Category>('SELECT * FROM categories WHERE name = ?', [trimmed]);
   if (existing) return existing.id;
 
-  db.run('INSERT INTO categories (name) VALUES (?)', [trimmed]);
+  // Номер — следующий по порядку: иначе у всех новых он нулевой, и список в
+  // настройках кассы выглядит так, будто порядка нет вовсе.
+  db.run(
+    `INSERT INTO categories (name, sort)
+     VALUES (?, (SELECT COALESCE(MAX(sort) + 1, 0) FROM categories))`,
+    [trimmed],
+  );
   return db.lastInsertId();
 }
 
@@ -603,6 +623,10 @@ export interface CategoryTile {
   name: string;
   /** Сколько товаров в ней — то самое «N поз.» под названием. */
   count: number;
+  /** Цвет из настроек кассы; `null` — плитка белая. */
+  color: string | null;
+  /** Плитка вдвое шире — «размер» в настройках. */
+  big: boolean;
 }
 
 /**
@@ -612,13 +636,18 @@ export interface CategoryTile {
  * в пустую витрину.
  */
 export function listCategoryTiles(db: SqlDriver): CategoryTile[] {
-  return db.all<CategoryTile>(
+  const rows = db.all<Omit<CategoryTile, 'big'> & { big: number }>(
     `SELECT c.id,
             c.name,
+            c.color,
+            c.big,
             COUNT(p.id) AS count
      FROM categories c
      JOIN products p ON p.category_id = c.id AND p.archived = 0
+     WHERE c.hidden = 0
      GROUP BY c.id
-     ORDER BY c.name COLLATE NOCASE`,
+     ORDER BY c.sort, c.name COLLATE NOCASE`,
   );
+
+  return rows.map((row) => ({ ...row, big: row.big === 1 }));
 }

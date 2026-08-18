@@ -37,6 +37,7 @@ import type {
 import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { usePosSettings } from '../../state/PosSettingsProvider';
+import { colorFromName } from '../../db/categories';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
 import { applyPosTheme, pos } from '../../ui/webTheme';
@@ -89,24 +90,6 @@ function BrowseGlyph({
       <View style={[styles.glyphSquare, { backgroundColor: tint }]} />
     </View>
   );
-}
-
-/**
- * Цвет полосы категории.
- *
- * Считается из названия, а не хранится: цвет у категории должен быть один и
- * тот же всегда, а заводить для него колонку — значит спрашивать его у того,
- * кто заводит категорию.
- */
-const CATEGORY_COLORS = [
-  '#A5D6A7', '#EF9A9A', '#CE93D8', '#E6EE9C', '#9FA8DA',
-  '#90CAF9', '#80DEEA', '#FFCC80', '#B0BEC5', '#F48FB1',
-];
-
-function categoryColor(name: string): string {
-  let value = 0;
-  for (let i = 0; i < name.length; i++) value = (value * 31 + name.charCodeAt(i)) >>> 0;
-  return CATEGORY_COLORS[value % CATEGORY_COLORS.length];
 }
 
 /**
@@ -308,8 +291,16 @@ export function Cashier() {
         sortBy: settings.sortBy,
         sortAsc: settings.sortAsc,
         hideZeroStocks: !settings.showZeroStocks,
+        hideHiddenCategories: !settings.showHiddenCategories,
       }),
-    [search, category?.id, settings.sortBy, settings.sortAsc, settings.showZeroStocks],
+    [
+      search,
+      category?.id,
+      settings.sortBy,
+      settings.sortAsc,
+      settings.showZeroStocks,
+      settings.showHiddenCategories,
+    ],
   );
   const categories = useQuery((database) => listCategoryTiles(database));
   const locations = useQuery((database) => listLocations(database));
@@ -593,12 +584,23 @@ export function Cashier() {
                     setCategory({ id: item.id, name: item.name });
                     setBrowse('products');
                   }}
-                  style={[styles.tile, styles.catTile, { width: `${100 / columns}%` }]}
+                  style={[
+                    styles.tile,
+                    styles.catTile,
+                    // «Размер» из настроек: плитка на одну клетку или на две.
+                    { width: `${(100 / columns) * (item.big ? 2 : 1)}%` },
+                  ]}
                 >
-                  {/* Цветная полоса сверху — их примета. Цвет берётся от
-                      самого названия, чтобы у категории он был всегда один
-                      и тот же, а не менялся от порядка в списке. */}
-                  <View style={[styles.catStripe, { backgroundColor: categoryColor(item.name) }]} />
+                  {/* Цветная полоса сверху — их примета. Цвет назначают в
+                      «Настройках → Категории»; пока не назначили — берётся от
+                      самого названия, чтобы у категории он был всегда один и
+                      тот же, а не менялся от порядка в списке. */}
+                  <View
+                    style={[
+                      styles.catStripe,
+                      { backgroundColor: item.color ?? colorFromName(item.name) },
+                    ]}
+                  />
                   <Text style={styles.catName} numberOfLines={3}>
                     {item.name}
                   </Text>
@@ -786,9 +788,9 @@ export function Cashier() {
           {!shift ? (
             <View style={styles.emptyReceipt}>
               {unlocking ? (
-                <WebIcon.lockOpen size={106} color="#C7C7CC" />
+                <WebIcon.lockOpen size={106} color={pos.faint} />
               ) : (
-                <WebIcon.lockClosed size={106} color="#C7C7CC" />
+                <WebIcon.lockClosed size={106} color={pos.faint} />
               )}
               <Pressable
                 accessibilityRole="button"
@@ -1148,7 +1150,7 @@ const Tile = memo(function Tile({
           ) : (
             // Без фотографии — тот же значок, что у него: четыре фигуры,
             // а не сетка из девяти квадратиков.
-            <BrowseGlyph kind="products" active={false} color="#C7C7CC" />
+            <BrowseGlyph kind="products" active={false} color={pos.faint} />
           )}
         </View>
       ) : null}
@@ -1274,7 +1276,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderWidth: 1,
-    borderColor: '#D1D1D6',
+    borderColor: pos.faint,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1380,10 +1382,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderBottomRightRadius: 6,
     zIndex: 3,
-    shadowColor: '#000000',
+    shadowColor: pos.shadow,
     shadowOpacity: 0.18,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
@@ -1433,7 +1435,7 @@ const styles = StyleSheet.create({
   recoPrice: { fontFamily: pos.font, fontSize: 13, color: pos.text, marginTop: 6 },
 
   emptyReceipt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
-  emptyReceiptText: { fontFamily: pos.font, fontSize: 28, color: '#C7C7CC' },
+  emptyReceiptText: { fontFamily: pos.font, fontSize: 28, color: pos.faint },
   // Синяя, а не зелёная: у него это обычная главная кнопка, того же цвета,
   // что и полоса продажи. Зелёный в кассе не значит ничего.
   openShift: {

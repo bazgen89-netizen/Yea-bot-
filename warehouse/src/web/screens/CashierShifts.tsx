@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: pos.border,
   },
-  shiftRowOn: { backgroundColor: '#EAF3FC' },
+  shiftRowOn: { backgroundColor: pos.select },
   shiftMain: { flex: 1, gap: 3 },
   shiftName: { fontFamily: pos.font, fontSize: 15, color: pos.text },
   shiftNote: { fontFamily: pos.font, fontSize: 13, color: pos.muted },

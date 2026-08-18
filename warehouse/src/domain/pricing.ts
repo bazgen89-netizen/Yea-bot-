@@ -47,6 +47,31 @@ export function priceWithDiscount(price: Kopecks, discountBp: Bp): Kopecks {
  *
  * При нулевой закупке не определена: делить не на что.
  */
+/**
+ * Новая цена при изменении сразу для многих товаров.
+ *
+ * Три способа, как у него в «Ценах и скидках»: поставить одну цену всем,
+ * поднять или опустить на проценты, поднять или опустить на рубли. Проценты
+ * считаются от нынешней цены каждого товара, а не от общей: «плюс десять
+ * процентов» на чай за 300 и за 3000 — это разные рубли, и так и надо.
+ *
+ * Ниже нуля цена не опускается: отрицательная цена — не скидка, а ошибка.
+ */
+export function repricedTo(
+  price: Kopecks,
+  change: { mode: 'set' | 'percent' | 'amount'; value: number },
+): Kopecks {
+  if (change.mode === 'set') return Math.max(0, Math.round(change.value)) as Kopecks;
+
+  if (change.mode === 'percent') {
+    // Проценты в сотых долях процента, как и везде у нас: 10% — это 1000.
+    const next = Math.round((price * (10000 + change.value)) / 10000);
+    return Math.max(0, next) as Kopecks;
+  }
+
+  return Math.max(0, price + Math.round(change.value)) as Kopecks;
+}
+
 export function markupBp(purchase: Kopecks, sale: Kopecks): Bp | null {
   if (purchase === 0) return null;
   return Math.round(((sale - purchase) / purchase) * 10000);

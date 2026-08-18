@@ -140,11 +140,11 @@ const styles = StyleSheet.create({
   },
   sheet: { width: '40%', minWidth: 600, maxWidth: '100%', padding: 16, zIndex: 1 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 4,
     paddingVertical: 8,
     // Лист приподнят над кассой — у него это elevation 4.
-    shadowColor: '#000000',
+    shadowColor: pos.shadow,
     shadowOpacity: 0.22,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 3 },

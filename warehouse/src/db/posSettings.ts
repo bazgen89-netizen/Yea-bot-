@@ -38,6 +38,15 @@ export interface PosSettings {
   /** Показывать ли на витрине товары, которых нет на остатке. */
   showZeroStocks: boolean;
 
+  /**
+   * Показывать ли товары из скрытых категорий.
+   *
+   * Скрытие снимает категорию с витрины целиком; этот переключатель
+   * возвращает её товары в общий список, не показывая саму плитку. Так у
+   * него — «Показывать товары из скрытых категорий» в разделе «Категории».
+   */
+  showHiddenCategories: boolean;
+
   /** Чем сортировать витрину. */
   sortBy: 'name' | 'price' | 'changed';
   sortAsc: boolean;
@@ -74,6 +83,7 @@ export const POS_DEFAULTS: PosSettings = {
   tapeMargin: 4,
 
   showZeroStocks: true,
+  showHiddenCategories: false,
 
   sortBy: 'name',
   sortAsc: true,

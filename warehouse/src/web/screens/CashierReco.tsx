@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     width: 620,
     maxWidth: '94%',
     maxHeight: '86%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
     borderRadius: 6,
     overflow: 'hidden',
     zIndex: 1,
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     top: -8,
     left: 12,
     paddingHorizontal: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: pos.tile,
   },
   fieldLabel: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
   fieldInput: {

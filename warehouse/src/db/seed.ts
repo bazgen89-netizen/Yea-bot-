@@ -3,6 +3,7 @@ import { ensureLocation, listLocations } from './locations';
 import CLIENTS from './seed/clients.json';
 import PHOTOS from './seed/photos.json';
 import CATALOG from './seed/products.json';
+import SALES from './seed/sales.json';
 
 /**
  * Пример данных — каталог одной чайной: 590 позиций с остатками по магазинам
@@ -36,6 +37,23 @@ interface SeedProduct {
   g?: string | null;
   /** Остатки: название магазина → количество в тысячных. */
   q: Record<string, number>;
+
+  // Ниже — то, что приезжает из CloudShop вместе с карточкой. Поля
+  // необязательные: старая выгрузка их не знает, и падать из-за этого
+  // программа не должна.
+
+  /** Штрихкод — по нему товар находит сканер. */
+  bc?: string | null;
+  /** Код весов, PLU. */
+  plu?: string | null;
+  /** Описание из карточки. */
+  desc?: string | null;
+  /** Вес, граммы. */
+  wg?: number | null;
+  /** Размеры, миллиметры. */
+  hm?: number | null;
+  wm?: number | null;
+  dm?: number | null;
 }
 
 interface SeedClient {
@@ -54,6 +72,41 @@ interface SeedClient {
   a: string | null;
   /** Кто завёл карточку. */
   by: string | null;
+
+  /** Идентификатор в CloudShop — по нему к клиенту привязываются его чеки. */
+  id?: string | null;
+  /** Остальные телефоны, если их несколько. */
+  ph?: string[] | null;
+  /** Личная скидка, сотые доли процента. */
+  dc?: number | null;
+  /** Бонусный счёт и уже потраченные бонусы, копейки. */
+  bo?: number | null;
+  bs?: number | null;
+  /** Вид лояльности: скидка или бонусы. */
+  lt?: string | null;
+}
+
+/** Чек из истории покупок CloudShop. */
+interface SeedSale {
+  /** Когда пробит. */
+  at: string | null;
+  /** Клиент — идентификатором CloudShop. */
+  c: string | null;
+  /** Итог и скидка, копейки. */
+  t: number;
+  disc: number;
+  pay: string;
+  /** Магазин. */
+  st: string | null;
+  /** Номер документа. */
+  no: string | null;
+  ln: {
+    code: string | null;
+    n: string | null;
+    q: number;
+    p: number;
+    d: number;
+  }[];
 }
 
 /**
@@ -71,7 +124,17 @@ export function seedCatalog(db: SqlDriver): void {
   seedProducts(db);
   seedClients(db);
   seedRegisters(db);
+  seedHistory(db);
 }
+
+/**
+ * Кто есть кто: идентификатор клиента в CloudShop → наш.
+ *
+ * Заполняется при загрузке клиентов и нужен ровно для одного — разложить
+ * историю покупок по карточкам. Имена для этого не годятся: тёзок в базе на
+ * три тысячи человек хватает.
+ */
+const cloudCustomers = new Map<string, number>();
 
 /** Пустая ли база: по ней экран данных решает, предлагать ли пример. */
 export function isEmpty(db: SqlDriver): boolean {
@@ -138,7 +201,7 @@ function seedProducts(db: SqlDriver): void {
     };
 
     for (const item of products) {
-      const search = [item.n, item.s, item.c]
+      const search = [item.n, item.s, item.c, item.bc]
         .filter((v): v is string => Boolean(v?.trim()))
         .map((v) => v.trim().toLowerCase())
         .join(' ');
@@ -166,9 +229,28 @@ function seedProducts(db: SqlDriver): void {
       db.run(
         `INSERT INTO products
            (name, sku, code, barcode, category_id, unit, cost_price, sale_price, min_qty,
-            discount_bp, photo_uri, created_at, search_text)
-         VALUES (?, ?, ?, NULL, ?, ?, 0, ?, 0, ?, ?, ?, ?)`,
-        [item.n, item.s, item.c, categoryId, item.u, item.p, item.d, photo, now, search],
+            discount_bp, photo_uri, created_at, search_text,
+            plu_code, description, weight_g, height_mm, width_mm, depth_mm)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.n,
+          item.s,
+          item.c,
+          item.bc ?? null,
+          categoryId,
+          item.u,
+          item.p,
+          item.d,
+          photo,
+          now,
+          search,
+          item.plu ?? null,
+          item.desc ?? null,
+          item.wg ?? null,
+          item.hm ?? null,
+          item.wm ?? null,
+          item.dm ?? null,
+        ],
       );
       const productId = db.lastInsertId();
 
@@ -226,21 +308,30 @@ function seedClients(db: SqlDriver): void {
       db.run(
         `INSERT INTO counterparties
            (kind, name, phone, email, note, discount_bp, created_at, search_text,
-            birthday, gender, address, created_by)
-         VALUES ('customer', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+            birthday, gender, address, created_by,
+            loyalty_type, bonus_balance, bonus_spent, phones)
+         VALUES ('customer', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           client.n,
           client.p,
           client.e,
           client.d,
+          client.dc ?? 0,
           now,
           search,
           client.b,
           client.g,
           client.a,
           client.by,
+          client.lt ?? null,
+          client.bo ?? 0,
+          client.bs ?? 0,
+          JSON.stringify(client.ph ?? (client.p ? [client.p] : [])),
         ],
       );
+
+      // Кто есть кто в CloudShop — нужно, чтобы разложить историю покупок.
+      if (client.id) cloudCustomers.set(client.id, db.lastInsertId());
     }
 
     db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
@@ -250,3 +341,83 @@ function seedClients(db: SqlDriver): void {
 /** Сколько позиций и карточек в поставляемых данных — для сообщений и тестов. */
 export const SEED_PRODUCTS = (CATALOG as SeedProduct[]).length;
 export const SEED_CLIENTS = (CLIENTS as SeedClient[]).length;
+
+/**
+ * История покупок из CloudShop.
+ *
+ * Чеки заводятся **без движений склада**, и это главное в этой функции.
+ * Остатки, которые пришли вместе с каталогом, уже учитывают все эти продажи:
+ * если списать товар ещё раз, склад уйдёт в минус ровно на всё, что магазин
+ * когда-либо продал.
+ *
+ * То есть история здесь — это память о том, кто что покупал: она нужна
+ * карточке клиента, отчётам по продажам и подсказкам «покупают вместе».
+ * Складом распоряжается каталог, а не она.
+ */
+function seedHistory(db: SqlDriver): void {
+  const DONE_KEY = 'history_seeded';
+  const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
+  if (done) return;
+
+  const sales = SALES as SeedSale[];
+  if (sales.length === 0) return;
+
+  const now = new Date().toISOString();
+
+  // Товары ищутся по коду: он есть у каждой позиции и не меняется.
+  const byCode = new Map<string, { id: number; cost: number }>();
+  for (const row of db.all<{ id: number; code: string | null; cost_price: number }>(
+    'SELECT id, code, cost_price FROM products WHERE code IS NOT NULL',
+  )) {
+    if (row.code) byCode.set(row.code, { id: row.id, cost: row.cost_price });
+  }
+
+  const stores = new Map(
+    listLocations(db).map((location) => [location.name, location.id as number]),
+  );
+
+  db.tx(() => {
+    for (const sale of sales) {
+      const lines = sale.ln
+        .map((line) => ({ line, product: line.code ? byCode.get(line.code) : undefined }))
+        .filter((row): row is { line: SeedSale['ln'][number]; product: { id: number; cost: number } } =>
+          Boolean(row.product),
+        );
+
+      // Чек, в котором не нашлось ни одного товара, не заводим: пустая
+      // строка в истории ничего не рассказывает, а в отчётах мешает.
+      if (lines.length === 0) continue;
+
+      const cost = lines.reduce(
+        (sum, row) => sum + Math.round((row.product.cost * row.line.q) / 1000),
+        0,
+      );
+
+      db.run(
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          sale.disc,
+          sale.t,
+          cost,
+          sale.pay === 'card' || sale.pay === 'transfer' ? sale.pay : 'cash',
+          sale.at ?? now,
+          sale.c ? (cloudCustomers.get(sale.c) ?? null) : null,
+          sale.no ? `CloudShop №${sale.no}` : null,
+          sale.st ? (stores.get(sale.st) ?? null) : null,
+        ],
+      );
+      const saleId = db.lastInsertId();
+
+      for (const { line, product } of lines) {
+        db.run(
+          `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
+           VALUES (?, ?, ?, ?, ?)`,
+          [saleId, product.id, line.q, line.p, product.cost],
+        );
+      }
+    }
+
+    db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
+  });
+}

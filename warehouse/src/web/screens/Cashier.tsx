@@ -991,6 +991,10 @@ export function Cashier() {
           style={[
             styles.sellBar,
             { flex: 1 - split },
+            // Возврат — оранжевый: у него это другой цвет полосы, а не только
+            // другая подпись. Кассир видит краем глаза, что набирает не
+            // продажу, и не проводит возврат вместо покупки.
+            mode === 'return' && styles.sellBarReturn,
             cart.lines.length === 0 && styles.sellBarOff,
           ]}
         >
@@ -1014,7 +1018,9 @@ export function Cashier() {
             onPress={startPay}
             style={({ pressed }) => [styles.sellPress, pressed && { opacity: 0.9 }]}
           >
-            <Text style={styles.sellLabel}>{mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ'}</Text>
+            <Text style={styles.sellLabel}>
+              {mode === 'sale' ? 'ПРОДАЖА' : 'ВОЗВРАТ ПРОДАЖИ'}
+            </Text>
             <Text style={styles.sellTotal}>{formatMoney(cart.totals.total)} руб</Text>
           </Pressable>
         </View>
@@ -1342,7 +1348,9 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 56,
     paddingHorizontal: 12,
-    backgroundColor: pos.bar,
+    // Днём синяя, ночью серо-синяя: в тёмной теме шапка берёт тон
+    // поверхности, а не основной цвет.
+    backgroundColor: pos.appbar,
   },
   panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   panelBackLabel: { fontFamily: pos.font, fontSize: 24, color: '#FFFFFF', lineHeight: 32 },
@@ -1647,6 +1655,7 @@ const styles = StyleSheet.create({
   sellBar: { minWidth: 0, height: 58, backgroundColor: pos.bar, flexDirection: 'row' },
   // Пустой чек: полоса бледнеет, как у него, и не нажимается.
   sellBarOff: { opacity: 0.55 },
+  sellBarReturn: { backgroundColor: pos.accent },
   sellDotsButton: { width: 52, alignItems: 'center', justifyContent: 'center' },
   sellPress: {
     flex: 1,

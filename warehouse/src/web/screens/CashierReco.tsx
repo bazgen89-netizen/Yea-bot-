@@ -183,25 +183,14 @@ function ListRow({
           onPress={() => onChange({ enabled: !on })}
           style={styles.switchTap}
         >
-          <Animated.View
-            style={[
-              styles.track,
-              {
-                backgroundColor: slide.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['rgba(0,0,0,0.10)', '#FBE3CD'],
-                }),
-              },
-            ]}
-          >
+          {/* Цвета — обычными стилями: `Animated` разгоняет настоящие цвета,
+              а цвета кассы заданы переменными CSS. Ездит кружок. */}
+          <Animated.View style={[styles.track, on ? styles.trackOn : null]}>
             <Animated.View
               style={[
                 styles.knob,
+                on ? styles.knobOn : null,
                 {
-                  backgroundColor: slide.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['#FFFFFF', pos.accent],
-                  }),
                   transform: [
                     { translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, 26] }) },
                   ],
@@ -299,6 +288,8 @@ const styles = StyleSheet.create({
   },
 
   switchTap: { padding: 6 },
+  trackOn: { backgroundColor: '#FBE3CD' },
+  knobOn: { backgroundColor: pos.accent },
   track: { width: 62, height: 32, borderRadius: 16, padding: 3, justifyContent: 'center' },
   knob: { width: 26, height: 26, borderRadius: 13 },
 

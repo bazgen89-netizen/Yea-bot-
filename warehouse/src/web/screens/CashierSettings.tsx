@@ -3,16 +3,18 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   getPosSettings,
+  POS_DEFAULTS,
   resetPosSettings,
   savePosSettings,
   type PosSettings,
 } from '../../db/posSettings';
-import { LANGUAGES, type LanguageCode } from '../../i18n/languages';
+import { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode } from '../../i18n/languages';
 import { useLanguage } from '../../state/LanguageProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { Scrollable } from '../Scrollable';
+import { say } from '../../ui/alert';
 import { WebIcon } from '../../ui/icons';
-import { pos } from '../../ui/webTheme';
+import { applyPosTheme, pos } from '../../ui/webTheme';
 
 /**
  * «Настройки» кассы — четыре раздела слева, сами настройки справа.
@@ -55,6 +57,9 @@ export function CashierSettings() {
   /** Меняем одно поле — и сразу пишем: настройка закончена нажатием. */
   const set = (patch: Partial<PosSettings>) => {
     savePosSettings(db, { ...saved, ...patch });
+    // Оформление — единственное, что нельзя просто сохранить: цвета живут
+    // переменными CSS, и их надо переставить сразу, а не при следующем входе.
+    if (patch.theme) applyPosTheme(patch.theme);
     refresh();
   };
 
@@ -87,14 +92,23 @@ export function CashierSettings() {
                 была отсебятина.
               */}
               <Block title="Оформление">
-                {/* Тёмная тема ещё не собрана, поэтому выбор здесь один.
-                    Переключатель, который ничего не меняет, хуже, чем
-                    честная подпись. */}
-                <Radio label="Автоматически" on={false} disabled onPress={() => {}} />
-                <Radio label="Светлое" on onPress={() => set({ theme: 'light' })} />
-                <Radio label="Тёмное" on={false} disabled onPress={() => {}} />
+                <Radio
+                  label="Автоматически"
+                  on={saved.theme === 'auto'}
+                  onPress={() => set({ theme: 'auto' })}
+                />
+                <Radio
+                  label="Светлое"
+                  on={saved.theme === 'light'}
+                  onPress={() => set({ theme: 'light' })}
+                />
+                <Radio
+                  label="Тёмное"
+                  on={saved.theme === 'dark'}
+                  onPress={() => set({ theme: 'dark' })}
+                />
               </Block>
-              <Note>Тёмное оформление пока не собрано — касса работает в светлом.</Note>
+              <Note>«Автоматически» — как в системе: ночью касса потемнеет сама.</Note>
 
               <Block title="Звук">
                 <Radio
@@ -242,11 +256,59 @@ export function CashierSettings() {
 
           {section === 'display' ? (
             <>
-              <Text style={styles.title}>Отображение товаров</Text>
+              <Block title="Группировка модификаций">
+                <Radio label="Да" on={saved.groupVariants} disabled onPress={() => {}} />
+                <Radio label="Нет" on={!saved.groupVariants} disabled onPress={() => {}} />
+              </Block>
               <Note>
-                Пришлите снимок этого раздела — сделаю по нему. Порядок товаров и нулевые
-                остатки пока стоят в «Основных», как на ваших снимках.
+                Модификаций — «тот же чай, но 100 и 300 грамм» — в справочнике пока нет:
+                из CloudShop они приходят отдельными позициями, собирать нечего.
               </Note>
+
+              <Block title="Отображение товаров">
+                <Radio
+                  label="Сетка"
+                  on={saved.view === 'grid'}
+                  onPress={() => set({ view: 'grid' })}
+                />
+                <Radio
+                  label="Список"
+                  on={saved.view === 'list'}
+                  onPress={() => set({ view: 'list' })}
+                />
+              </Block>
+
+              {/* Галочки, а не переключатели: это не выбор одного из двух,
+                  а набор — что показывать на карточке. */}
+              <Block title="Карточка товара">
+                <Tick
+                  label="остаток на складе"
+                  on={saved.cardStock}
+                  onPress={() => set({ cardStock: !saved.cardStock })}
+                />
+                <Tick
+                  label="изображение"
+                  on={saved.cardImage}
+                  onPress={() => set({ cardImage: !saved.cardImage })}
+                />
+                <Tick
+                  label="код товара"
+                  on={saved.cardCode}
+                  onPress={() => set({ cardCode: !saved.cardCode })}
+                />
+                <Tick
+                  label="артикул"
+                  on={saved.cardSku}
+                  onPress={() => set({ cardSku: !saved.cardSku })}
+                />
+                <Tick
+                  label="штрих-код"
+                  on={saved.cardBarcode}
+                  onPress={() => set({ cardBarcode: !saved.cardBarcode })}
+                />
+              </Block>
+
+              <Sample settings={saved} />
             </>
           ) : null}
         </View>
@@ -257,7 +319,10 @@ export function CashierSettings() {
             accessibilityRole="button"
             onPress={() => {
               resetPosSettings(db);
+              applyPosTheme(POS_DEFAULTS.theme);
+              setLanguage(DEFAULT_LANGUAGE);
               refresh();
+              say('Готово', 'Настройки кассы вернулись к тому, какими были при установке.');
             }}
             style={styles.reset}
           >
@@ -357,6 +422,68 @@ function Field({
           style={styles.fieldInput}
         />
         <Text style={styles.fieldUnit}>мм</Text>
+      </View>
+    </View>
+  );
+}
+
+/** Строка-галочка: отмечено — серая птичка слева, нет — пусто. */
+function Tick({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={styles.radioRow}
+    >
+      <View style={styles.tick}>
+        {on ? <WebIcon.done size={20} color={pos.muted} /> : null}
+      </View>
+      <Text style={styles.radioLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * «Пример товара» — та же плитка, что и на витрине, только с выдуманным
+ * товаром.
+ *
+ * Она здесь не для красоты: отметки «что показывать на карточке» иначе
+ * пришлось бы проверять, уходя в кассу и возвращаясь. А так видно сразу.
+ */
+function Sample({ settings }: { settings: PosSettings }) {
+  return (
+    <View style={styles.sampleBox}>
+      <Text style={styles.sampleTitle}>Пример товара</Text>
+
+      <View style={styles.sample}>
+        <View style={styles.sampleHead}>
+          <View style={styles.sampleBadge}>
+            <Text style={styles.sampleBadgeLabel}>5%</Text>
+          </View>
+          {settings.cardStock ? <Text style={styles.sampleStock}>84 шт</Text> : null}
+        </View>
+
+        {settings.cardImage ? (
+          <View style={styles.sampleImage}>
+            <View style={styles.glyph}>
+              <View style={styles.glyphSquare} />
+              <View style={styles.glyphDiamond} />
+              <View style={styles.glyphSquare} />
+              <View style={styles.glyphSquare} />
+            </View>
+          </View>
+        ) : null}
+
+        <Text style={styles.sampleName}>Название товара</Text>
+        {settings.cardCode ? <Text style={styles.sampleSmall}>00592</Text> : null}
+        {settings.cardSku ? <Text style={styles.sampleSmall}>70316re2014</Text> : null}
+        {settings.cardBarcode ? <Text style={styles.sampleSmall}>4600000000012</Text> : null}
+
+        <View style={styles.samplePrice}>
+          <Text style={styles.samplePriceLabel}>1 987,00 руб</Text>
+        </View>
       </View>
     </View>
   );
@@ -463,6 +590,84 @@ const styles = StyleSheet.create({
   fieldUnit: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
 
   note: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginTop: 8, lineHeight: 20 },
+
+  tick: { width: 22, alignItems: 'center' },
+
+  // Пример товара — на такой же серой подложке, как остальные блоки.
+  sampleBox: { backgroundColor: pos.bg, borderRadius: 6, paddingVertical: 24, marginTop: 24 },
+  sampleTitle: {
+    fontFamily: pos.font,
+    fontSize: 15,
+    color: pos.muted,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  sample: {
+    alignSelf: 'center',
+    width: 200,
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 10,
+  },
+  sampleHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    minHeight: 34,
+  },
+  // Оранжевая метка скидки — у него в левом верхнем углу плитки.
+  sampleBadge: {
+    backgroundColor: pos.accent,
+    borderRadius: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  sampleBadgeLabel: { fontFamily: pos.font, fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  sampleStock: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  sampleImage: {
+    height: 140,
+    margin: 10,
+    backgroundColor: pos.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glyph: { width: 62, height: 62, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  glyphSquare: { width: 28, height: 28, backgroundColor: '#B9BDC2' },
+  glyphDiamond: {
+    width: 28,
+    height: 28,
+    backgroundColor: '#B9BDC2',
+    transform: [{ rotate: '45deg' }, { scale: 0.78 }],
+  },
+  sampleName: {
+    fontFamily: pos.font,
+    fontSize: 16,
+    color: pos.text,
+    textAlign: 'center',
+    paddingHorizontal: 10,
+  },
+  sampleSmall: {
+    fontFamily: pos.font,
+    fontSize: 13,
+    color: pos.muted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  samplePrice: {
+    marginTop: 10,
+    paddingTop: 10,
+    marginHorizontal: 10,
+    borderTopWidth: 1,
+    borderTopColor: pos.border,
+  },
+  samplePriceLabel: {
+    fontFamily: pos.font,
+    fontSize: 17,
+    fontWeight: '700',
+    color: pos.text,
+    textAlign: 'center',
+  },
 
   reset: {
     alignSelf: 'flex-start',

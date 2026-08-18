@@ -100,28 +100,98 @@ export const web = {
  * там, где у них широкий. Поэтому здесь то, что видит пользователь, а не то,
  * что написано у них в теме.
  */
+/**
+ * Цвета кассы заданы **переменными CSS**, а не значениями.
+ *
+ * Это единственный способ дать кассе тёмное оформление, не переписывая все
+ * её экраны. `StyleSheet.create` вычисляет стили один раз при загрузке: если
+ * положить сюда `#FFFFFF`, белый останется белым навсегда, сколько потом ни
+ * меняй палитру. А `var(--pos-tile)` — строка, она не меняется никогда;
+ * меняется значение переменной у корня страницы, и вместе с ним перекрашивается
+ * всё разом, включая уже созданные стили.
+ *
+ * Сами значения — светлые и тёмные — лежат в `POS_LIGHT` и `POS_DARK` ниже,
+ * а расставляет их `applyPosTheme`.
+ */
 export const pos = {
   /** Полоса «ПРОДАЖА» внизу; она же — главная кнопка. `primary.main`. */
-  bar: '#1976D2',
-  barDark: '#115293',
+  bar: 'var(--pos-bar)',
+  barDark: 'var(--pos-bar-dark)',
   /** Кнопка добавления клиента и подтверждения. `secondary.main`. */
-  accent: '#ED6C02',
-  green: '#2E7D32',
-  red: '#D32F2F',
+  accent: 'var(--pos-accent)',
+  green: 'var(--pos-green)',
+  red: 'var(--pos-red)',
   /** `background.default` — подложка витрины. */
-  bg: '#F7F9FC',
+  bg: 'var(--pos-bg)',
   /** `background.paper` — плитки, чек, окна. */
-  tile: '#FFFFFF',
+  tile: 'var(--pos-tile)',
   /** `divider`. */
-  border: '#D8DEE4',
+  border: 'var(--pos-border)',
   /** `text.primary`. */
-  text: '#1F2328',
+  text: 'var(--pos-text)',
   /** `text.secondary`. */
-  muted: '#656D76',
+  muted: 'var(--pos-muted)',
   /** `action.hover` — подсветка строки под курсором. */
-  hover: 'rgba(0,0,0,0.04)',
+  hover: 'var(--pos-hover)',
   font: 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
 };
+
+/** Светлое оформление — те самые значения из его темы Material. */
+export const POS_LIGHT: Record<string, string> = {
+  '--pos-bar': '#1976D2',
+  '--pos-bar-dark': '#115293',
+  '--pos-accent': '#ED6C02',
+  '--pos-green': '#2E7D32',
+  '--pos-red': '#D32F2F',
+  '--pos-bg': '#F7F9FC',
+  '--pos-tile': '#FFFFFF',
+  '--pos-border': '#D8DEE4',
+  '--pos-text': '#1F2328',
+  '--pos-muted': '#656D76',
+  '--pos-hover': 'rgba(0,0,0,0.04)',
+};
+
+/**
+ * Тёмное оформление.
+ *
+ * Не «инверсия светлого»: чёрный текст на белом и белый на чёрном читаются
+ * по-разному, и просто перевернуть цвета — значит получить слепящие плитки.
+ * Подложка тёмно-серая, а не чёрная; синий и оранжевый взяты светлее, иначе
+ * на тёмном они проваливаются.
+ */
+export const POS_DARK: Record<string, string> = {
+  '--pos-bar': '#1E88E5',
+  '--pos-bar-dark': '#1565C0',
+  '--pos-accent': '#FB8C00',
+  '--pos-green': '#43A047',
+  '--pos-red': '#EF5350',
+  '--pos-bg': '#15181C',
+  '--pos-tile': '#1E2227',
+  '--pos-border': '#333A42',
+  '--pos-text': '#E6E9EC',
+  '--pos-muted': '#9AA4AE',
+  '--pos-hover': 'rgba(255,255,255,0.06)',
+};
+
+/**
+ * Ставит выбранное оформление кассы.
+ *
+ * `auto` — как в системе: у ноутбука за прилавком ночью включается тёмная
+ * тема, и касса не должна светить в глаза белым.
+ */
+export function applyPosTheme(theme: 'auto' | 'light' | 'dark'): void {
+  const root = globalThis.document?.documentElement;
+  if (!root) return;
+
+  const dark =
+    theme === 'dark' ||
+    (theme === 'auto' &&
+      globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches === true);
+
+  for (const [name, value] of Object.entries(dark ? POS_DARK : POS_LIGHT)) {
+    root.style.setProperty(name, value);
+  }
+}
 
 /**
  * Шрифт кабинета — тот же, что в оригинале.

@@ -234,16 +234,12 @@ export function CashierPayment({
               style={styles.printRow}
             >
               <Text style={styles.printLabel}>Печатать чек</Text>
+              {/* Цвет дорожки — обычным стилем, а не разгоном: цвета кассы
+                  заданы переменными CSS, а `Animated` умеет разгонять только
+                  настоящие цвета и на `var(...)` спотыкается. Ездит кружок —
+                  это и есть движение, которое видно. */}
               <Animated.View
-                style={[
-                  styles.track,
-                  {
-                    backgroundColor: print.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['rgba(0,0,0,0.12)', pos.bar],
-                    }),
-                  },
-                ]}
+                style={[styles.track, printReceipt ? styles.trackOn : null]}
               >
                 <Animated.View
                   style={[
@@ -463,6 +459,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   printLabel: { fontFamily: pos.font, fontSize: 15, color: pos.text },
+  trackOn: { backgroundColor: pos.bar },
   track: { width: 44, height: 20, borderRadius: 10, backgroundColor: '#D4D4D5', padding: 2 },
   knob: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' },
 

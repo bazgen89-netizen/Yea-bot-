@@ -47,7 +47,7 @@ import { useCart } from '../../state/CartProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { say } from '../../ui/alert';
 import { Icon, WebIcon } from '../../ui/icons';
-import { pos } from '../../ui/webTheme';
+import { applyPosTheme, pos } from '../../ui/webTheme';
 
 /**
  * Значок плитки в панели выбора: те же три фигуры, что у него.
@@ -276,6 +276,11 @@ export function Cashier() {
   // Настройки кассы: порядок товаров и нулевые остатки на витрине, звук
   // при добавлении, «печатать чек» в окне оплаты.
   const settings = useQuery((database) => getPosSettings(database));
+
+  // Оформление ставится при входе в кассу и всякий раз, когда его поменяли.
+  useEffect(() => {
+    applyPosTheme(settings.theme);
+  }, [settings.theme]);
 
   const products = useQuery(
     (database) =>
@@ -603,6 +608,14 @@ export function Cashier() {
                   product={product}
                   columns={columns}
                   selected={selected === product.id}
+                  card={{
+                    stock: settings.cardStock,
+                    image: settings.cardImage,
+                    code: settings.cardCode,
+                    sku: settings.cardSku,
+                    barcode: settings.cardBarcode,
+                  }}
+                  list={settings.view === 'list'}
                   onPick={pick}
                 />
               ))}
@@ -1062,12 +1075,24 @@ const Tile = memo(function Tile({
   product,
   columns,
   selected,
+  card,
+  list,
   onPick,
 }: {
   product: ProductWithStock;
   /** Сколько плиток в ряду: её ширина — доля от него. */
   columns: number;
   selected: boolean;
+  /** Что показывать на карточке — «Настройки → Отображение товаров». */
+  card: {
+    stock: boolean;
+    image: boolean;
+    code: boolean;
+    sku: boolean;
+    barcode: boolean;
+  };
+  /** Витрина строками вместо плиток. */
+  list: boolean;
   onPick: (product: ProductWithStock) => void;
 }) {
   return (
@@ -1092,29 +1117,49 @@ const Tile = memo(function Tile({
           product.name,
         );
       }}
-      style={[styles.tile, { width: `${100 / columns}%` }, selected && styles.tileSelected]}
+      style={[
+        list ? styles.line : styles.tile,
+        list ? null : { width: `${100 / columns}%` },
+        selected && styles.tileSelected,
+      ]}
     >
-      <Text style={styles.tileStock}>
-        {formatQty(product.stock)} {product.unit}
-      </Text>
+      {card.stock && !list ? (
+        <Text style={styles.tileStock}>
+          {formatQty(product.stock)} {product.unit}
+        </Text>
+      ) : null}
 
-      <View style={styles.tileImage}>
-        {product.photo_uri ? (
-          <Image source={{ uri: product.photo_uri }} style={styles.tilePhoto} />
-        ) : (
-          // Без фотографии — тот же значок, что у него: четыре фигуры,
-          // а не сетка из девяти квадратиков.
-          <BrowseGlyph kind="products" active={false} color="#C7C7CC" />
-        )}
+      {card.image ? (
+        <View style={list ? styles.lineImage : styles.tileImage}>
+          {product.photo_uri ? (
+            <Image source={{ uri: product.photo_uri }} style={styles.tilePhoto} />
+          ) : (
+            // Без фотографии — тот же значок, что у него: четыре фигуры,
+            // а не сетка из девяти квадратиков.
+            <BrowseGlyph kind="products" active={false} color="#C7C7CC" />
+          )}
+        </View>
+      ) : null}
+
+      <View style={list ? styles.lineMain : undefined}>
+        <Text
+          style={list ? styles.lineName : styles.tileName}
+          numberOfLines={list ? 1 : 2}
+        >
+          {product.name}
+        </Text>
+        {card.code ? <Text style={styles.tileСode}>{product.code ?? ''}</Text> : null}
+        {card.sku ? <Text style={styles.tileСode}>{product.sku ?? ''}</Text> : null}
+        {card.barcode ? <Text style={styles.tileСode}>{product.barcode ?? ''}</Text> : null}
       </View>
 
-      <Text style={styles.tileName} numberOfLines={2}>
-        {product.name}
-      </Text>
-      <Text style={styles.tileСode}>{product.sku ?? ''}</Text>
+      {card.stock && list ? (
+        <Text style={styles.lineStock}>
+          {formatQty(product.stock)} {product.unit}
+        </Text>
+      ) : null}
 
-
-      <View style={styles.tilePriceRow}>
+      <View style={list ? styles.linePrice : styles.tilePriceRow}>
         <Text style={styles.tilePrice}>{formatMoney(product.sale_price)} руб</Text>
       </View>
     </Pressable>
@@ -1154,6 +1199,30 @@ const styles = StyleSheet.create({
   panelBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   panelBackLabel: { fontFamily: pos.font, fontSize: 30, color: '#FFFFFF', lineHeight: 32 },
   panelTitle: { fontFamily: pos.font, fontSize: 19, color: '#FFFFFF' },
+  // Витрина строками: то же содержимое, но в ряд и во всю ширину.
+  line: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: pos.tile,
+    borderBottomWidth: 1,
+    borderBottomColor: pos.border,
+  },
+  lineImage: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pos.bg,
+  },
+  lineMain: { flex: 1, minWidth: 0 },
+  lineName: { fontFamily: pos.font, fontSize: 16, color: pos.text },
+  lineStock: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginRight: 12 },
+  linePrice: { minWidth: 120, alignItems: 'flex-end' },
+
   screen: { flex: 1, backgroundColor: pos.bg },
   body: { flex: 1, flexDirection: 'row' },
 
@@ -1208,7 +1277,9 @@ const styles = StyleSheet.create({
   tileStock: { fontFamily: pos.font, fontSize: 13, color: pos.muted, textAlign: 'center' },
   tileImage: {
     height: 128,
-    backgroundColor: '#F5F5F5',
+    // Подложка картинки — общая подложка витрины, а не свой серый: иначе
+    // в тёмном оформлении она осталась бы светлым пятном.
+    backgroundColor: pos.bg,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 8,

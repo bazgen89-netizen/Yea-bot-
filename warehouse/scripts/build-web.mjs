@@ -183,6 +183,22 @@ html body [tabindex]:focus,html body [tabindex]:focus-visible{outline:none!impor
 page = replaceOnce(page, '</head>', `<style id="focus">${NO_FOCUS_RING}</style></head>`);
 
 /**
+ * Светлые цвета кассы — значениями по умолчанию.
+ *
+ * Стили кассы ссылаются на переменные (`var(--pos-tile)`), а расставляет их
+ * `applyPosTheme` при входе в кассу. До этого мига страница успевает
+ * отрисоваться, и без этих строк она мигнула бы бесцветной.
+ */
+const POS_VARS = `:root{
+  --pos-bar:#1976D2; --pos-bar-dark:#115293; --pos-accent:#ED6C02;
+  --pos-green:#2E7D32; --pos-red:#D32F2F;
+  --pos-bg:#F7F9FC; --pos-tile:#FFFFFF; --pos-border:#D8DEE4;
+  --pos-text:#1F2328; --pos-muted:#656D76; --pos-hover:rgba(0,0,0,0.04);
+}`;
+
+page = replaceOnce(page, '</head>', `<style id="pos-vars">${POS_VARS}</style></head>`);
+
+/**
  * Наполнять ли базу при первом запуске.
  *
  * Обычная сборка приходит пустой: каталог в ней заводит тот, кто её поставил,

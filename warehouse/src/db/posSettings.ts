@@ -41,6 +41,25 @@ export interface PosSettings {
   /** Чем сортировать витрину. */
   sortBy: 'name' | 'price' | 'changed';
   sortAsc: boolean;
+
+  /**
+   * Собирать ли модификации одного товара под одну плитку.
+   *
+   * Модификаций — «тот же чай, но 100 и 300 грамм» — в нашем справочнике пока
+   * нет: из CloudShop они приходят отдельными позициями. Настройка стоит на
+   * своём месте и запоминается, но собирать ей нечего.
+   */
+  groupVariants: boolean;
+
+  /** Витрина плитками или строками. */
+  view: 'grid' | 'list';
+
+  /** Что показывать на карточке товара. */
+  cardStock: boolean;
+  cardImage: boolean;
+  cardCode: boolean;
+  cardSku: boolean;
+  cardBarcode: boolean;
 }
 
 export const POS_DEFAULTS: PosSettings = {
@@ -58,6 +77,16 @@ export const POS_DEFAULTS: PosSettings = {
 
   sortBy: 'name',
   sortAsc: true,
+
+  groupVariants: true,
+  view: 'grid',
+
+  // Отмечены те же, что у него: остаток, изображение и артикул.
+  cardStock: true,
+  cardImage: true,
+  cardCode: false,
+  cardSku: true,
+  cardBarcode: false,
 };
 
 const KEY = 'pos_settings';

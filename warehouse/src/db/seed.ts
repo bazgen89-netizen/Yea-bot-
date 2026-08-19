@@ -102,20 +102,27 @@ interface SeedSale {
    * нет вовсе — там и подписывать нечего.
    */
   cn?: string | null;
-  /** Итог и скидка, копейки. */
-  t: number;
-  disc: number;
-  pay: string;
+  /**
+   * Итог и скидка, копейки.
+   *
+   * Числа необязательные: в файле истории нули не записываются — на сорока
+   * пяти тысячах чеков они одни весят мегабайты. Отсутствие поля здесь и
+   * означает ноль.
+   */
+  t?: number;
+  disc?: number;
+  pay?: string;
   /** Магазин. */
-  st: string | null;
+  st?: string | null;
   /** Номер документа. */
-  no: string | null;
+  no?: string | null;
   ln: {
-    code: string | null;
-    n: string | null;
-    q: number;
-    p: number;
-    d: number;
+    code?: string | null;
+    /** Имя — только у товаров, которых в справочнике уже нет. */
+    n?: string | null;
+    q?: number;
+    p?: number;
+    d?: number;
   }[];
 }
 
@@ -348,12 +355,25 @@ function seedClients(db: SqlDriver): void {
 
   db.tx(() => {
     for (const client of clients) {
-      const digits = (client.p ?? '').replace(/\D/g, '');
-      const search = [client.n, client.p, client.e]
+      // Ищут клиента по имени и по телефону — значит, в подписи должно быть
+      // и то, и другое, и все запасные номера тоже: второй телефон человек
+      // помнит не хуже первого.
+      const phones = [client.p, ...(client.ph ?? [])].filter((v): v is string =>
+        Boolean(v?.trim()),
+      );
+
+      const parts = [client.n, client.e, ...phones]
         .filter((v): v is string => Boolean(v?.trim()))
-        .map((v) => v.trim().toLowerCase())
-        .concat(digits.length >= 10 ? [digits.slice(-10)] : [])
-        .join(' ');
+        .map((v) => v.trim().toLowerCase());
+
+      // Телефон — ещё и голыми цифрами: «+7 (961) 253-27-57» ищут набором
+      // «9612532757».
+      for (const phone of phones) {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length >= 10) parts.push(digits.slice(-10));
+      }
+
+      const search = [...new Set(parts)].join(' ');
 
       db.run(
         `INSERT INTO counterparties
@@ -441,7 +461,7 @@ function seedHistory(db: SqlDriver): void {
       if (lines.length === 0) continue;
 
       const cost = lines.reduce(
-        (sum, row) => sum + Math.round((row.product.cost * row.line.q) / 1000),
+        (sum, row) => sum + Math.round((row.product.cost * (row.line.q ?? 0)) / 1000),
         0,
       );
 
@@ -460,8 +480,8 @@ function seedHistory(db: SqlDriver): void {
         `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          sale.disc,
-          sale.t,
+          sale.disc ?? 0,
+          sale.t ?? 0,
           cost,
           sale.pay === 'card' || sale.pay === 'transfer' ? sale.pay : 'cash',
           sale.at ?? now,
@@ -476,7 +496,7 @@ function seedHistory(db: SqlDriver): void {
         db.run(
           `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
            VALUES (?, ?, ?, ?, ?)`,
-          [saleId, product.id, line.q, line.p, product.cost],
+          [saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost],
         );
       }
     }

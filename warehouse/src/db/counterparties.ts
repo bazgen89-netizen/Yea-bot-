@@ -74,10 +74,7 @@ export function listCounterparties(
     params.push(filter.kind);
   }
 
-  if (filter.search?.trim()) {
-    where.push('p.search_text LIKE ?');
-    params.push(`%${normalize(filter.search)}%`);
-  }
+  for (const condition of searchWhere(filter.search, params)) where.push(condition);
 
   const query = selectParties(where, params);
   return db.all<CounterpartyWithTotals>(query.sql, query.params);
@@ -332,6 +329,63 @@ export function importCounterparties(db: SqlDriver, rows: PartyInput[]): ImportP
 /** Строка для поиска: как её кладут в `search_text`, так и ищут. */
 export function normalize(value: string): string {
   return value.trim().toLowerCase();
+}
+
+/**
+ * Условия поиска — по слову за раз.
+ *
+ * Одной строкой искать нельзя, и вот почему. Клиента зовут «Рудник Михаил»,
+ * а вспоминают его то «Михаил Рудник», то «Рудник» и четыре цифры телефона.
+ * Одно `LIKE '%михаил рудник%'` не найдёт ничего: в подписи слова стоят в
+ * другом порядке. Поэтому запрос разбирается на слова, и каждое ищется
+ * само по себе — найтись должны все.
+ *
+ * Слово из цифр ищется ещё и без разделителей: набрали «+7 (961) 253» —
+ * ищем и «961253», потому что в подписи телефон лежит и слитно тоже.
+ */
+export function searchWhere(search: string | undefined, params: SqlParam[]): string[] {
+  const query = normalize(search ?? '');
+  if (!query) return [];
+
+  const conditions: string[] = [];
+
+  // Запрос без единой буквы — это телефон, и разбирать его на слова нельзя:
+  // «8 961 253 27 57» распалось бы на «8», «961», «253» и нашло бы пол-базы.
+  if (!/\p{L}/u.test(query)) {
+    const digits = query.replace(/\D/g, '');
+    if (digits.length < 2) return [];
+
+    conditions.push('p.search_text LIKE ?');
+    params.push(`%${tail(digits)}%`);
+    return conditions;
+  }
+
+  for (const word of query.split(/\s+/).filter(Boolean)) {
+    // Скобки и дефисы сами по себе — не запрос.
+    const bare = word.replace(/[^\p{L}\p{N}@._-]/gu, '');
+    const digits = word.replace(/\D/g, '');
+    if (!bare && !digits) continue;
+
+    if (digits.length >= 3 && digits !== bare) {
+      conditions.push('(p.search_text LIKE ? OR p.search_text LIKE ?)');
+      params.push(`%${bare}%`, `%${tail(digits)}%`);
+    } else {
+      conditions.push('p.search_text LIKE ?');
+      params.push(`%${bare || digits}%`);
+    }
+  }
+
+  return conditions;
+}
+
+/**
+ * Хвост номера — последние десять цифр.
+ *
+ * В подписи телефон лежит и так: «+7 999…» и «8 999…» — это один и тот же
+ * номер, и отличаются они только началом. Ищем по хвосту — находится любой.
+ */
+function tail(digits: string): string {
+  return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
 /**

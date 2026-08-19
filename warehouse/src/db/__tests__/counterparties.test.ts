@@ -266,6 +266,37 @@ describe('карточка контрагента целиком', () => {
     expect(found('нетакого')).toEqual([]);
   });
 
+  it('ищется по ФИО в любом порядке и по телефону как его набрали', () => {
+    createCounterparty(db, {
+      kind: 'customer',
+      name: 'Рудник Михаил Петрович',
+      phone: '+7 (961) 253-27-57',
+    });
+    createCounterparty(db, { kind: 'customer', name: 'Михаил Соколов', phone: '89990001122' });
+
+    const found = (search: string) =>
+      listCounterparties(db, { kind: 'customer', search }).map((party) => party.name);
+
+    // Фамилию с именем вспоминают в том порядке, в каком придётся.
+    expect(found('Рудник Михаил')).toEqual(['Рудник Михаил Петрович']);
+    expect(found('Михаил Рудник')).toEqual(['Рудник Михаил Петрович']);
+    expect(found('петрович рудник')).toEqual(['Рудник Михаил Петрович']);
+
+    // Одно имя — оба однофамильца.
+    expect(found('михаил').sort()).toEqual(['Михаил Соколов', 'Рудник Михаил Петрович']);
+
+    // Телефон: как записан, как набирают и кусками.
+    expect(found('+7 (961) 253-27-57')).toEqual(['Рудник Михаил Петрович']);
+    expect(found('89612532757')).toEqual(['Рудник Михаил Петрович']);
+    expect(found('9612532757')).toEqual(['Рудник Михаил Петрович']);
+    expect(found('2532757')).toEqual(['Рудник Михаил Петрович']);
+    // Номер, набранный через пробелы, не должен рассыпаться на «8», «961»…
+    expect(found('8 961 253 27 57')).toEqual(['Рудник Михаил Петрович']);
+
+    // Имя и телефон вместе — так отсеивают однофамильцев.
+    expect(found('михаил 9990001122')).toEqual(['Михаил Соколов']);
+  });
+
   it('контрагент по умолчанию только один в своём виде', () => {
     const first = createCounterparty(db, { kind: 'customer', name: 'Первый', is_default: true });
     const second = createCounterparty(db, { kind: 'customer', name: 'Второй', is_default: true });

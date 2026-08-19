@@ -26,6 +26,7 @@
  *   --no-photos       не забирать фотографии (быстро)
  *   --no-history      не забирать историю покупок
  *   --history=N       сколько последних чеков брать (по умолчанию все)
+ *   --since=ГГГГ-ММ-ДД  с какого дня история (по умолчанию 2019-01-01)
  *   --into-repo       положить в сборочную папку, которая лежит в git
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -159,6 +160,79 @@ async function all(path, limit, label, cap = Infinity) {
   return rows.slice(0, cap === Infinity ? rows.length : cap);
 }
 
+/**
+ * С какого дня забирать историю по умолчанию.
+ *
+ * Первые чеки у него — 2019 год. Дата вынесена сюда, чтобы её было видно:
+ * взять «с начала времён» нельзя, окна пришлось бы гонять впустую за годы,
+ * которых не было.
+ */
+const SINCE = '2019-01-01';
+
+/**
+ * Вся история покупок — окнами по месяцу.
+ *
+ * Без дат `documents/sales` отдаёт последние семь дней, и на этом всё: ни
+ * страницами, ни смещением дальше не уйти. Даты у него называются
+ * `time_start` и `time_end`, и **окно не может быть длиннее 31 дня** — иначе
+ * ответ 422. Поэтому история берётся помесячно, от свежего к старому: если
+ * перенос прервётся, на руках останутся последние месяцы, а не первые.
+ *
+ * Внутри окна — обычная разбивка по страницам: чеков за месяц бывает и
+ * восемьсот, а за раз отдают сто.
+ */
+async function history(since, cap) {
+  const documents = [];
+  const start = new Date(`${since}T00:00:00Z`);
+
+  // Идём от сегодняшнего дня назад, отступая по месяцу.
+  let to = new Date();
+
+  while (to > start && documents.length < cap) {
+    const from = new Date(to);
+    from.setUTCMonth(from.getUTCMonth() - 1);
+    if (from < start) from.setTime(start.getTime());
+
+    const window =
+      `time_start=${encodeURIComponent(stamp(from))}` +
+      `&time_end=${encodeURIComponent(stamp(to))}`;
+
+    for (let offset = 0; documents.length < cap; offset += 100) {
+      const page = await get(`/documents/sales?${window}&limit=100&offset=${offset}`);
+      const list = Array.isArray(page) ? page : (page.data ?? page.items ?? []);
+
+      documents.push(...list);
+      process.stdout.write(`\r  чеков: ${documents.length}  (${stamp(from).slice(0, 7)})   `);
+      if (list.length < 100) break;
+    }
+
+    // Следующее окно кончается там, где началось это, минус секунда: иначе
+    // чек, пробитый ровно на границе, приехал бы дважды.
+    to = new Date(from.getTime() - 1000);
+  }
+
+  process.stdout.write('\n');
+  return cap === Infinity ? documents : documents.slice(0, cap);
+}
+
+/**
+ * Пустые поля в файл не пишем.
+ *
+ * На одном чеке `"d":0` и `"cn":null` не стоят ничего; на сорока пяти
+ * тысячах — это лишние мегабайты, которые потом лежат в собранном файле и
+ * грузятся при каждом запуске. Разбор читает эти поля через `??` и `?? 0`,
+ * так что отсутствие для него то же самое, что ноль.
+ */
+function skipEmpty(key, value) {
+  if (value === null || value === 0) return undefined;
+  return value;
+}
+
+/** «2026-08-19 11:14:27» — время у них в этом виде и только в нём. */
+function stamp(date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 // Ошибки печатаем строкой, а не стеком: тому, кто запускает перенос, нужен
 // ответ «что не так», а не место в коде.
 process.on('unhandledRejection', (error) => {
@@ -275,7 +349,7 @@ let sales = [];
 if (!flag('no-history')) {
   console.log('История покупок…');
   const cap = Number(value('history', '')) || Infinity;
-  const documents = await all('/documents/sales', 100, 'чеков', cap);
+  const documents = await history(value('since', SINCE), cap);
 
   /**
    * Чем строка чека опознаётся в справочнике.
@@ -345,9 +419,14 @@ if (!flag('no-history')) {
       const product = inner.product ?? {};
       const name = (product.name ?? line.name ?? line.title ?? '').trim();
 
+      const code = resolve(product, line, name);
+
       return {
-        code: resolve(product, line, name),
-        n: name || null,
+        code,
+        // Название нужно только тогда, когда товара в справочнике уже нет:
+        // если код нашёлся, имя возьмётся из карточки. Повторять его в
+        // каждой из ста тысяч строк — те же мегабайты на пустом месте.
+        n: known.has(code) ? null : name || null,
         // Количество приходит движением склада, то есть со знаком минус:
         // продали две — в выгрузке «-2». В чеке нужны просто две.
         q: Math.abs(milli(inner.qty ?? line.quantity ?? 0)),
@@ -361,7 +440,11 @@ if (!flag('no-history')) {
   sales = mergeHistory(sales);
   if (sales.length > fresh) console.log(`  вместе с прежними: ${sales.length}`);
 
-  writeFileSync(`${out}/sales.json`, JSON.stringify(sales, null, 1));
+  // История пишется без отступов и без пустых полей. Отступ в один пробел
+  // стоит недорого на пятистах строках и дорого — на сорока пяти тысячах
+  // чеков: он один прибавляет к файлу мегабайты, а читать эту выгрузку
+  // глазами всё равно никто не будет.
+  writeFileSync(`${out}/sales.json`, JSON.stringify(sales, skipEmpty));
 }
 
 /**

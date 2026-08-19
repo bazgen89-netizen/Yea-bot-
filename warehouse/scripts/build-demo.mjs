@@ -1,23 +1,66 @@
 /**
  * Сборка без личных данных — та, которую можно показать по ссылке.
  *
- * Каталог, цены и остатки остаются настоящими: это данные магазина, и без
- * них смотреть нечего. Карточки клиентов подменяются: имя, телефон, почта,
- * день рождения и адрес — выдуманные. Ссылку можно переслать, а телефон
- * живого человека, единожды уехавший на чужой сервер, назад не вернёшь.
+ * Каталог, цены, остатки и история продаж остаются настоящими: это данные
+ * магазина, и без них смотреть нечего. Карточки клиентов подменяются: имя,
+ * телефон, почта, день рождения и адрес — выдуманные. Ссылку можно
+ * переслать, а телефон живого человека, единожды уехавший на чужой сервер,
+ * назад не вернёшь.
  *
  *   node scripts/build-demo.mjs
  *
- * Кладёт результат в dist-demo/index.html, рабочую сборку не трогает.
+ * Берёт свежую выгрузку из `src/db/seed/local/` — той папки, куда её кладёт
+ * перенос и которой нет в git, — подставляет на время сборки и убирает
+ * обратно. Кладёт результат в dist-demo/index.html, рабочую сборку не
+ * трогает.
  */
 import { execSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const clients = `${root}/src/db/seed/clients.json`;
-const backup = `${root}/src/db/seed/clients.real.json`;
+const seed = `${root}/src/db/seed`;
+const mine = `${seed}/local`;
+
+const clients = `${seed}/clients.json`;
+const backup = `${seed}/clients.real.json`;
+
+/**
+ * Сколько места отдать истории продаж.
+ *
+ * Страница по ссылке не может быть больше 16 МБ, а вся история — 13 МБ
+ * одним файлом: с ней страница не открылась бы вовсе. Поэтому по ссылке
+ * показываются свежие чеки, сколько влезает, а вся история — в файле,
+ * который собирается `build-mine.mjs`.
+ */
+const HISTORY_BUDGET = 3_500_000;
+
+/** Свежие чеки, пока не кончилось отведённое место. */
+function trimHistory(sales) {
+  const newestFirst = [...sales].sort((a, b) =>
+    String(b.at ?? '').localeCompare(String(a.at ?? '')),
+  );
+
+  const kept = [];
+  let size = 2;
+  for (const sale of newestFirst) {
+    const cost = JSON.stringify(sale).length + 1;
+    if (size + cost > HISTORY_BUDGET) break;
+    size += cost;
+    kept.push(sale);
+  }
+
+  // Обратно по времени: журнал читается сверху вниз, от старых к новым.
+  return kept.reverse();
+}
 
 const NAMES = [
   'Анна', 'Борис', 'Вера', 'Георгий', 'Дарья', 'Егор', 'Жанна', 'Зоя',
@@ -50,8 +93,12 @@ function hash(seed) {
  * и в выгрузку они попадают вместе с товарами. Для ссылки их надо вычистить:
  * это те же живые люди, что и в списке клиентов.
  */
-const products = `${root}/src/db/seed/products.json`;
-const productsBackup = `${root}/src/db/seed/products.real.json`;
+const products = `${seed}/products.json`;
+const productsBackup = `${seed}/products.real.json`;
+const sales = `${seed}/sales.json`;
+const salesBackup = `${seed}/sales.real.json`;
+const photos = `${seed}/photos.json`;
+const photosBackup = `${seed}/photos.real.json`;
 
 const PHONE = /(\+?[78][\s(-]*9\d{2}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2})/g;
 
@@ -72,11 +119,18 @@ function scrubName(name) {
     .join(' ');
 }
 
-const realProducts = JSON.parse(readFileSync(products, 'utf8'));
+// Свежая выгрузка лежит в `local/` — оттуда и берём. Если её нет (перенос
+// не запускали), работаем с тем, что лежит в сборочной папке.
+const source = (name) => {
+  const own = `${mine}/${name}`;
+  return existsSync(own) ? own : `${seed}/${name}`;
+};
+
+const realProducts = JSON.parse(readFileSync(source('products.json'), 'utf8'));
 const cleanProducts = realProducts.map((item) => ({ ...item, n: scrubName(item.n) }));
 const scrubbed = cleanProducts.filter((item, i) => item.n !== realProducts[i].n).length;
 
-const real = JSON.parse(readFileSync(clients, 'utf8'));
+const real = JSON.parse(readFileSync(source('clients.json'), 'utf8'));
 
 const fake = real.map((client, index) => {
   const seed = hash(`${client.n ?? ''}${index}`);
@@ -96,11 +150,27 @@ const fake = real.map((client, index) => {
   };
 });
 
-console.log(`Подменяю ${fake.length} карточек клиентов и ${scrubbed} названий товаров…`);
+const allSales = JSON.parse(readFileSync(source('sales.json'), 'utf8'));
+const shownSales = trimHistory(allSales);
+
+console.log(
+  `Подменяю ${fake.length} карточек клиентов и ${scrubbed} названий товаров; ` +
+    `истории по ссылке — ${shownSales.length} чеков из ${allSales.length}…`,
+);
+
 copyFileSync(clients, backup);
 writeFileSync(clients, JSON.stringify(fake));
 copyFileSync(products, productsBackup);
 writeFileSync(products, JSON.stringify(cleanProducts));
+copyFileSync(sales, salesBackup);
+writeFileSync(sales, JSON.stringify(shownSales));
+
+// Фотографии в сборочной папке могут быть старее свежей выгрузки.
+const photosFresh = source('photos.json');
+if (photosFresh !== photos) {
+  copyFileSync(photos, photosBackup);
+  copyFileSync(photosFresh, photos);
+}
 
 try {
   // DEMO=1 обязательно: обычная сборка приходит пустой, и показывать по
@@ -114,5 +184,7 @@ try {
   // иначе следующий коммит унёс бы выдуманные имена в репозиторий.
   renameSync(backup, clients);
   renameSync(productsBackup, products);
+  renameSync(salesBackup, sales);
+  if (photosFresh !== photos) renameSync(photosBackup, photos);
   console.log('Настоящие данные возвращены на место.');
 }

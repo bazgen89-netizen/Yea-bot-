@@ -17,10 +17,16 @@
  * перевыпустить в кабинете. Пароль от CloudShop не нужен вовсе.
  *
  * Ключи:
+ * Выгрузка ложится в `src/db/seed/local/` — рядом, но **не в git**: там
+ * телефоны и дни рождения живых людей. Собрать с ней программу:
+ *
+ *   node scripts/build-mine.mjs
+ *
+ * Ключи:
  *   --no-photos       не забирать фотографии (быстро)
  *   --no-history      не забирать историю покупок
  *   --history=N       сколько последних чеков брать (по умолчанию все)
- *   --local           положить рядом, в src/db/seed/local/, не трогая сборку
+ *   --into-repo       положить в сборочную папку, которая лежит в git
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -51,7 +57,23 @@ const value = (name, fallback) => {
   return found ? found.slice(name.length + 3) : fallback;
 };
 
-const out = flag('local') ? `${root}/src/db/seed/local` : `${root}/src/db/seed`;
+/**
+ * Кладём в `src/db/seed/local/` — папку, которой нет в git.
+ *
+ * В выгрузке три тысячи телефонов, дни рождения и бонусные счета живых
+ * людей. Файл, единожды попавший в историю репозитория, из неё уже не убрать
+ * — только переписав историю целиком, а до тех пор его видит каждый, у кого
+ * есть доступ. Поэтому по умолчанию личные данные никогда не ложатся туда,
+ * откуда их закоммитят одним `git add .`.
+ *
+ * Собирается программа с этой выгрузкой командой `node scripts/build-mine.mjs`
+ * — она подставляет её на время сборки и убирает обратно.
+ *
+ * `--into-repo` кладёт прямо в сборочную папку. Это осознанный шаг, и нужен
+ * он ровно для одного: обновить каталог в общей сборке, где личных данных
+ * нет.
+ */
+const out = flag('into-repo') ? `${root}/src/db/seed` : `${root}/src/db/seed/local`;
 mkdirSync(out, { recursive: true });
 
 /**
@@ -533,5 +555,5 @@ console.log(`
   клиентов         ${customers.length}   (${size('clients.json')})
   чеков в истории  ${flag('no-history') ? 'пропущено' : sales.length}   (${size('sales.json')})
 
-Записано в ${out.replace(root + '/', '')}.
-Дальше: SEED=1 npm run web:build — и всё это окажется в программе.`);
+Записано в ${out.replace(root + '/', '')} — эта папка не попадает в git.
+Дальше: node scripts/build-mine.mjs — и всё это окажется в программе.`);

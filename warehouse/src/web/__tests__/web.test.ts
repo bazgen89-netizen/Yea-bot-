@@ -70,7 +70,7 @@ describe('заголовок раздела', () => {
 describe('журнал движения товара', () => {
   it('складывает строки в группы по дням, сохраняя порядок', () => {
     const entry = (id: number, created_at: string) =>
-      ({ id, kind: 'sale', created_at, positions: 1, amount: 0, paid: 0,
+      ({ id, number: null, kind: 'sale', created_at, positions: 1, amount: 0, paid: 0,
          sender: null, receiver: null, author: null, note: null, posted: 1 }) as const;
 
     const groups = groupByDay([
@@ -90,7 +90,7 @@ describe('журнал движения товара', () => {
 
   it('называет документ так же, как в исходном приложении', () => {
     const base = {
-      created_at: '', positions: 0, amount: 0, paid: null,
+      number: null, created_at: '', positions: 0, amount: 0, paid: null,
       sender: null, receiver: null, author: null, note: null, posted: 1,
     };
     expect(entryTitle({ ...base, id: 4784, kind: 'sale' })).toBe('Продажа #4784');
@@ -99,5 +99,9 @@ describe('журнал движения товара', () => {
     expect(entryTitle({ ...base, id: 13, kind: 'purchase_return' })).toBe('Возврат закупки #13');
     expect(entryTitle({ ...base, id: 14, kind: 'stock_in' })).toBe('Оприходование #14');
     expect(entryTitle({ ...base, id: 15, kind: 'transfer' })).toBe('Перемещение #15');
+
+    // У перенесённого чека номер свой — тот, что был в CloudShop. Внутренний
+    // номер рядом с ним чужой: свой чек хозяин ищет по «#45658».
+    expect(entryTitle({ ...base, id: 7, number: 45658, kind: 'sale' })).toBe('Продажа #45658');
   });
 });

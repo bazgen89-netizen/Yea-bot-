@@ -434,7 +434,12 @@ if (!flag('no-history')) {
     disc: kopecks(doc.total_discounts),
     pay: payment(doc),
     st: storeName.get(doc.location_id) ?? null,
-    no: doc.order_number ?? doc.name ?? null,
+    // Номер документа — тот, под которым чек живёт в CloudShop: «Продажа
+    // #45658». Внутренний номер здесь никому не нужен, по нему он свой чек
+    // не найдёт.
+    no: doc.order_number ?? null,
+    // И номер прихода — под ним тот же чек виден в движении денег.
+    ono: orderNumber(doc),
     ln: (doc.line_items ?? []).map((line) => {
       // Всё о товаре строки лежит внутри `legacy_line`: наверху ни кода, ни
       // артикула нет — там только количество и идентификатор движения.
@@ -527,10 +532,32 @@ function customerName(customer) {
 
 /** Чем платили: у него это флаги в `payment_terms`. */
 function payment(doc) {
-  const terms = doc.payment_terms ?? {};
-  if (terms.card || terms.cashless || doc.payment_method === 'card') return 'card';
-  if (terms.transfer || doc.payment_method === 'transfer') return 'transfer';
-  return 'cash';
+  // Деньги по чеку лежат в `orders` — это те самые «Приход #46047», что
+  // видны в движении денег. У каждого прихода есть признак `cash`: правда —
+  // наличные, ложь — терминал. В `payment_terms`, куда я смотрел сначала,
+  // способа оплаты нет вовсе — там только «оплачен/недоплата», и оттого все
+  // сорок пять тысяч чеков выходили наличными, а счёт в движении денег
+  // всегда был «Касса магазина».
+  const orders = (doc.orders ?? []).filter((order) => order?.type === 'debit');
+  if (orders.length === 0) return 'cash';
+
+  // Чек бывает оплачен и так, и так. Считаем по деньгам: чем заплатили
+  // больше, тем чек и подписан.
+  let cash = 0;
+  let card = 0;
+  for (const order of orders) {
+    const sum = Math.abs(Number(order.sum ?? order.legacy_order?.sum ?? 0)) || 0;
+    if (order.cash ?? order.legacy_order?.cash) cash += sum;
+    else card += sum;
+  }
+
+  return card > cash ? 'card' : 'cash';
+}
+
+/** Номер прихода — по нему чек виден в движении денег. */
+function orderNumber(doc) {
+  const order = (doc.orders ?? []).find((item) => item?.type === 'debit' && item.number);
+  return order?.number ?? null;
 }
 
 // --- фотографии -----------------------------------------------------------

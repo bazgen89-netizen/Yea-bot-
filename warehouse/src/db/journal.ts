@@ -19,6 +19,14 @@ export type JournalKind = 'sale' | 'refund' | DocKind;
 export interface JournalEntry {
   /** Идентификатор внутри своего вида — чеки и документы нумеруются отдельно. */
   id: Id;
+  /**
+   * Свой номер документа.
+   *
+   * У перенесённой истории он уже был: тот же чек в CloudShop называется
+   * «Продажа #45658», и человек ищет его именно по этому номеру. Пусто — у
+   * документов, заведённых здесь: у них номер и есть внутренний.
+   */
+  number: number | null;
   kind: JournalKind;
   created_at: string;
   /** Сколько позиций в документе. */
@@ -101,6 +109,7 @@ export function listJournal(
   return db.all<JournalEntry>(
     `SELECT * FROM (
        SELECT s.id                                        AS id,
+              s.number                                     AS number,
               CASE WHEN EXISTS (
                 SELECT 1 FROM stock_moves m
                 WHERE m.sale_id = s.id AND m.reason = 'return'
@@ -122,6 +131,7 @@ export function listJournal(
        UNION ALL
 
        SELECT d.id,
+              NULL,
               ${KIND_SQL},
               d.created_at,
               -- У отложенного документа движений нет вовсе, и позиции с суммой
@@ -239,7 +249,9 @@ const KIND_LABEL: Record<JournalKind, string> = {
 };
 
 export function entryTitle(entry: JournalEntry): string {
-  return `${KIND_LABEL[entry.kind] ?? 'Документ'} #${entry.id}`;
+  // Свой номер, если он есть, — важнее внутреннего. У перенесённой истории
+  // номер уже был, и человек ищет чек именно по нему.
+  return `${KIND_LABEL[entry.kind] ?? 'Документ'} #${entry.number ?? entry.id}`;
 }
 
 /**
@@ -252,6 +264,8 @@ export function entryTitle(entry: JournalEntry): string {
  */
 export interface MoneyEntry {
   id: Id;
+  /** Свой номер прихода: у перенесённых — тот, что был в CloudShop. */
+  number: number | null;
   /** Из чего строка: из чека или из заведённого руками документа. */
   source: 'sale' | 'doc';
   type: MoneyType;
@@ -361,6 +375,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
   const rows = db.all<MoneyEntry & { payment: string | null }>(
     `SELECT * FROM (
        SELECT s.id                    AS id,
+              s.money_number          AS number,
               'sale'                  AS source,
               'income'                AS type,
               s.created_at            AS created_at,
@@ -383,6 +398,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
        UNION ALL
 
        SELECT d.id,
+              NULL,
               'doc',
               d.type,
               d.created_at,
@@ -418,7 +434,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
 
 /** «Приход #45679» — так документ называется в движении денег. */
 export function moneyTitle(entry: MoneyEntry): string {
-  return `${MONEY_TYPE_LABEL[entry.type]} #${entry.id}`;
+  return `${MONEY_TYPE_LABEL[entry.type]} #${entry.number ?? entry.id}`;
 }
 
 /** Группировка по дням — та же, что в движении товара. */

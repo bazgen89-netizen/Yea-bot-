@@ -116,8 +116,10 @@ interface SeedSale {
   pay?: string;
   /** Магазин. */
   st?: string | null;
-  /** Номер документа. */
-  no?: string | null;
+  /** Номер документа в CloudShop: «Продажа #45658». */
+  no?: number | string | null;
+  /** Номер прихода — под ним чек виден в движении денег. */
+  ono?: number | null;
   ln: {
     code?: string | null;
     /** Имя — только у товаров, которых в справочнике уже нет. */
@@ -553,16 +555,14 @@ function seedHistory(db: SqlDriver): void {
 
       // Подпись чека. Номер — всегда, имя покупателя — только когда карточку
       // по нему найти не удалось: иначе чек в журнале остался бы безымянным.
-      const note = [
-        sale.no ? `CloudShop №${sale.no}` : null,
-        customerId === null && sale.cn ? sale.cn : null,
-      ]
-        .filter(Boolean)
-        .join(' · ');
+      // Номер чека теперь стоит своей колонкой, а не прячется в примечании:
+      // «Продажа #45658» — так его называет и ищет хозяин магазина.
+      const number = Number(sale.no);
+      const note = customerId === null && sale.cn ? sale.cn : null;
 
       db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sale.disc ?? 0,
           sale.t ?? 0,
@@ -570,8 +570,10 @@ function seedHistory(db: SqlDriver): void {
           sale.pay === 'card' || sale.pay === 'transfer' ? sale.pay : 'cash',
           sale.at ?? now,
           customerId,
-          note || null,
+          note,
           sale.st ? (stores.get(sale.st) ?? null) : null,
+          Number.isFinite(number) && number > 0 ? number : null,
+          sale.ono ?? null,
         ],
       );
       const saleId = db.lastInsertId();

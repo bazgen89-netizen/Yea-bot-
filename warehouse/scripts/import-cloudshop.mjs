@@ -54,6 +54,29 @@ const value = (name, fallback) => {
 const out = flag('local') ? `${root}/src/db/seed/local` : `${root}/src/db/seed`;
 mkdirSync(out, { recursive: true });
 
+/**
+ * Пол — словом, а не по-английски.
+ *
+ * CloudShop отдаёт `male` / `female`, а в карточке выбирают «Мужской» и
+ * «Женский» — теми же словами он и должен быть записан, иначе выбор в карточке
+ * не совпадёт с тем, что в ней уже стоит.
+ */
+function gender(value) {
+  const word = String(value ?? '').trim().toLowerCase();
+  if (word === 'male' || word === 'м' || word === 'мужской') return 'Мужской';
+  if (word === 'female' || word === 'ж' || word === 'женский') return 'Женский';
+  return null;
+}
+
+/** День рождения — «12.07.2006». Приходит он как «2006-07-12». */
+function birthday(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  return iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : text;
+}
+
 /** Цены — копейки, количества — тысячные: в базе они целые. */
 const kopecks = (input) => Math.round((Number(input) || 0) * 100);
 const milli = (input) => Math.round((Number(input) || 0) * 1000);
@@ -189,23 +212,34 @@ const customers = rawCustomers.map((item) => {
     .filter((phone) => typeof phone === 'string' && phone.trim())
     .map((phone) => phone.trim());
 
+  // Почта приходит списком, и в нём бывает пустая строка вместо пропуска:
+  // без отсева карточка получала бы почту «ничего» вместо «почты нет».
+  const emails = []
+    .concat(item.emails ?? [], billing.email ?? [])
+    .filter((mail) => typeof mail === 'string' && mail.trim());
+
   return {
     // Идентификатор CloudShop нужен, чтобы привязать к клиенту его чеки.
     id: item.id ?? null,
     n: (item.name ?? '').trim(),
     p: phones[0] ?? null,
     ph: phones.length > 1 ? phones : null,
-    e: item.emails?.[0] ?? billing.email ?? null,
-    b: item.birthday || null,
-    g: item.sex || null,
+    e: emails[0]?.trim() ?? null,
+    b: birthday(item.birthday),
+    g: gender(item.sex),
     d: billing.note ?? null,
     a: billing.address ?? null,
     by: 'CloudShop',
     // Личная скидка — в сотых долях процента, как и везде у нас.
     dc: bp(item.discount),
-    // Бонусный счёт и что уже потрачено.
-    bo: kopecks(loyalty.bonus ?? loyalty.balance ?? 0),
-    bs: kopecks(loyalty.spent ?? 0),
+    // Бонусный счёт и что уже потрачено. Поля названы так, как их отдаёт
+    // CloudShop: `bonus_balance` и `bonus_spent`. Короткие `bonus`/`balance`,
+    // на которые я целился сначала, у них не существуют — и все бонусы
+    // переносились нулями.
+    bo: kopecks(loyalty.bonus_balance ?? 0),
+    bs: kopecks(loyalty.bonus_spent ?? 0),
+    // Процент возврата бонусами — в сотых долях процента.
+    cb: bp(loyalty.cashback_rate ?? 0),
     lt: loyalty.type ?? (Number(item.discount) > 0 ? 'discount' : null),
   };
 });
@@ -221,30 +255,146 @@ if (!flag('no-history')) {
   const cap = Number(value('history', '')) || Infinity;
   const documents = await all('/documents/sales', 100, 'чеков', cap);
 
-  // Товар в строке чека приходит идентификатором CloudShop; у нас товары
-  // опознаются кодом — по нему и связываем.
-  const codeById = new Map(rawProducts.map((item) => [item.id, item.code || null]));
+  /**
+   * Чем строка чека опознаётся в справочнике.
+   *
+   * У нас товар ищется кодом, а в чеке лежит карточка целиком — и код в ней
+   * есть не всегда: у половины строк заполнен только артикул. Поэтому
+   * собираем несколько подходов к одному и тому же товару и пробуем их по
+   * очереди, от самого надёжного к самому приблизительному.
+   */
+  const known = new Set(rawProducts.map((item) => item.code).filter(Boolean));
+  const codeById = new Map();
+  const codeBySku = new Map();
+  const codeByBarcode = new Map();
+  const codeByName = new Map();
+
+  for (const item of rawProducts) {
+    if (!item.code) continue;
+    codeById.set(item.id, item.code);
+    if (item.sku) codeBySku.set(String(item.sku).trim(), item.code);
+    if (item.barcode) codeByBarcode.set(String(item.barcode).trim(), item.code);
+
+    const name = (item.options?.name ?? '').trim();
+    if (name && !codeByName.has(name)) codeByName.set(name, item.code);
+  }
+
+  /** Первое попадание из всего, что известно о строке. */
+  const resolve = (product, line, name) => {
+    const code = product.code ? String(product.code).trim() : null;
+    if (code && known.has(code)) return code;
+
+    const sku = product.sku ? String(product.sku).trim() : null;
+    const barcode = product.barcode ? String(product.barcode).trim() : null;
+
+    return (
+      (sku && codeBySku.get(sku)) ||
+      (barcode && codeByBarcode.get(barcode)) ||
+      codeById.get(line.product_id) ||
+      codeByName.get(name) ||
+      // Товара в справочнике больше нет — оставляем код как есть: строка
+      // всё равно не найдётся, но по коду понятно, чего не хватает.
+      code ||
+      sku ||
+      null
+    );
+  };
 
   sales = documents.map((doc) => ({
     // Дата чека — та, что стоит в документе, а не время выгрузки.
     at: doc.processed_at ?? doc.created_at ?? null,
-    // Клиент — идентификатором CloudShop: имена повторяются, а он один.
-    c: doc.client_id ?? doc.customer?.id ?? null,
+    // Клиент лежит в `customer`, а не в `client_id`: `client_id` — это
+    // идентификатор компании, один и тот же во всех чеках (тот самый кусок,
+    // что стоит и в ключе). По нему вся история склеилась бы в одного
+    // покупателя.
+    c: doc.customer?.id ?? null,
+    // Имя клиента храним рядом: если карточку в справочнике потом удалят,
+    // чек всё равно будет подписан, а не «Розничный покупатель».
+    cn: customerName(doc.customer),
     t: kopecks(doc.total_price),
     disc: kopecks(doc.total_discounts),
     pay: payment(doc),
     st: storeName.get(doc.location_id) ?? null,
     no: doc.order_number ?? doc.name ?? null,
-    ln: (doc.line_items ?? []).map((line) => ({
-      code: line.product_code ?? codeById.get(line.product_id) ?? null,
-      n: (line.name ?? line.title ?? '').trim() || null,
-      q: milli(line.quantity ?? line.qty ?? 0),
-      p: kopecks(line.price ?? line.unit_price ?? 0),
-      d: kopecks(line.discount ?? 0),
-    })),
+    ln: (doc.line_items ?? []).map((line) => {
+      // Всё о товаре строки лежит внутри `legacy_line`: наверху ни кода, ни
+      // артикула нет — там только количество и идентификатор движения.
+      const inner = line.legacy_line ?? {};
+      const product = inner.product ?? {};
+      const name = (product.name ?? line.name ?? line.title ?? '').trim();
+
+      return {
+        code: resolve(product, line, name),
+        n: name || null,
+        // Количество приходит движением склада, то есть со знаком минус:
+        // продали две — в выгрузке «-2». В чеке нужны просто две.
+        q: Math.abs(milli(inner.qty ?? line.quantity ?? 0)),
+        p: kopecks(inner.price ?? line.price ?? line.unit_price ?? 0),
+        d: kopecks(inner.discount_sum ?? line.discount ?? 0),
+      };
+    }),
   }));
 
+  const fresh = sales.length;
+  sales = mergeHistory(sales);
+  if (sales.length > fresh) console.log(`  вместе с прежними: ${sales.length}`);
+
   writeFileSync(`${out}/sales.json`, JSON.stringify(sales, null, 1));
+}
+
+/**
+ * Прибавить свежие чеки к тем, что уже лежат в файле.
+ *
+ * CloudShop отдаёт по своему ключу **только последнюю неделю**: в кабинете
+ * чеков сорок пять тысяч, а `documents/sales` показывает две сотни — всё, что
+ * старше семи дней, из выдачи пропадает, и никакими датами его не достать
+ * (проверено: `from`/`to` возвращают пустоту, а разбивка по страницам
+ * заканчивается на двести девятом).
+ *
+ * Значит, всю историю разом забрать нельзя — её можно только накапливать:
+ * запускать перенос раз в несколько дней, и каждый раз новые чеки будут
+ * ложиться к уже собранным. Поэтому файл не переписывается, а дополняется.
+ *
+ * Чеки различаются номером документа: он у CloudShop сквозной и не
+ * повторяется. Чек без номера считаем новым — потерять его хуже, чем
+ * задвоить.
+ */
+function mergeHistory(fresh) {
+  let old = [];
+  try {
+    old = JSON.parse(readFileSync(`${out}/sales.json`, 'utf8'));
+  } catch {
+    return fresh;
+  }
+  if (!Array.isArray(old) || old.length === 0) return fresh;
+
+  const seen = new Set(fresh.map((sale) => sale.no).filter((no) => no !== null));
+  const kept = old.filter((sale) => sale.no === null || !seen.has(sale.no));
+
+  // По времени, от старых к новым: журнал читается сверху вниз.
+  return [...kept, ...fresh].sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')));
+}
+
+/**
+ * Как подписан покупатель в чеке.
+ *
+ * У розничных имя лежит в `legacy_party.name` («Розничный покупатель»), у
+ * заведённых карточек — в `first_name` и `last_name`.
+ */
+function customerName(customer) {
+  if (!customer) return null;
+
+  const full = [customer.first_name, customer.last_name]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join(' ')
+    .trim();
+
+  const name = full || (customer.legacy_party?.name ?? '').trim();
+
+  // «Розничный покупатель» — не имя, а его отсутствие: так подписан любой чек
+  // без карточки, и приходит оно разложенным на имя и фамилию. Повторять эту
+  // строку в каждом из тысяч чеков незачем — журнал подписывает их так и сам.
+  return name && name.toLowerCase() !== 'розничный покупатель' ? name : null;
 }
 
 /** Чем платили: у него это флаги в `payment_terms`. */
@@ -271,9 +421,19 @@ if (!flag('no-photos')) {
     if (!product.img || !product.c) continue;
 
     try {
+      // Картинку скачиваем здесь, а не в браузере, и передаём внутрь уже
+      // строкой. Иначе холст оказывается «испорченным»: браузер не отдаёт
+      // содержимое холста, на который легла картинка с чужого адреса, и
+      // `toDataURL` бросает ошибку — все до одной фотографии пропали бы.
+      const source = await download(product.img);
+      if (!source) {
+        failed++;
+        continue;
+      }
+
       // Ужимаем прямо в браузере: 590 фотографий по 2–3 КБ дают полтора
       // мегабайта, и файл это выдерживает. Полноразмерные — сотни мегабайт.
-      const data = await page.evaluate(shrink, { url: product.img, size: 96 });
+      const data = await page.evaluate(shrink, { url: source, size: 96 });
       if (data) {
         photos[product.c] = data;
         done++;
@@ -295,11 +455,33 @@ if (!flag('no-photos')) {
 }
 
 /**
- * Скачать картинку и ужать её до квадрата.
+ * Скачать картинку и превратить её в строку, которую поймёт браузер.
  *
- * Выполняется внутри браузера: там есть и загрузка по ссылке, и холст, на
- * котором картинку можно уменьшить, — в Node для этого пришлось бы тащить
- * стороннюю библиотеку.
+ * Возвращает `null`, если картинки нет: карточка на неё ссылается, а файл с
+ * тех пор удалили — обычное дело в каталоге, который правят годами.
+ */
+async function download(url) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+
+      const bytes = Buffer.from(await response.arrayBuffer());
+      const type = response.headers.get('content-type') ?? 'image/jpeg';
+      return `data:${type};base64,${bytes.toString('base64')}`;
+    } catch {
+      if (attempt === 3) return null;
+      await new Promise((done) => setTimeout(done, attempt * 500));
+    }
+  }
+  return null;
+}
+
+/**
+ * Ужать картинку до квадрата.
+ *
+ * Выполняется внутри браузера: там есть холст, на котором картинку можно
+ * уменьшить, — в Node для этого пришлось бы тащить стороннюю библиотеку.
  */
 function shrink({ url, size }) {
   return new Promise((done) => {

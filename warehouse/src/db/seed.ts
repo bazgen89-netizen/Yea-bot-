@@ -82,6 +82,8 @@ interface SeedClient {
   /** Бонусный счёт и уже потраченные бонусы, копейки. */
   bo?: number | null;
   bs?: number | null;
+  /** Кешбэк — сколько процентов покупки возвращается бонусами, сотые доли. */
+  cb?: number | null;
   /** Вид лояльности: скидка или бонусы. */
   lt?: string | null;
 }
@@ -92,6 +94,14 @@ interface SeedSale {
   at: string | null;
   /** Клиент — идентификатором CloudShop. */
   c: string | null;
+  /**
+   * Как покупатель подписан в самом чеке.
+   *
+   * Нужен на случай, когда карточки в справочнике уже нет: чек всё равно
+   * останется подписанным, а не потеряет покупателя. У розничных продаж поля
+   * нет вовсе — там и подписывать нечего.
+   */
+  cn?: string | null;
   /** Итог и скидка, копейки. */
   t: number;
   disc: number;
@@ -135,6 +145,46 @@ export function seedCatalog(db: SqlDriver): void {
  * три тысячи человек хватает.
  */
 const cloudCustomers = new Map<string, number>();
+
+/**
+ * Восстановить эту таблицу, если клиентов завели не в этот раз.
+ *
+ * Части наполнения помечаются в `app_state` по отдельности, и порядок бывает
+ * любой: клиенты уже загружены прошлым запуском, а история приехала только
+ * сейчас. Тогда `seedClients` выходит сразу, таблица остаётся пустой, и вся
+ * история легла бы без покупателей.
+ *
+ * Собственного столбца под идентификатор CloudShop у карточки нет, поэтому
+ * сверяем по телефону, а при его отсутствии — по имени. Этого хватает: обе
+ * стороны сравнения пришли из одной и той же выгрузки.
+ */
+function ensureCloudCustomers(db: SqlDriver): void {
+  if (cloudCustomers.size > 0) return;
+
+  const byPhone = new Map<string, number>();
+  const byName = new Map<string, number>();
+
+  for (const row of db.all<{ id: number; name: string; phone: string | null }>(
+    "SELECT id, name, phone FROM counterparties WHERE kind = 'customer'",
+  )) {
+    const digits = (row.phone ?? '').replace(/\D/g, '');
+    if (digits.length >= 10 && !byPhone.has(digits)) byPhone.set(digits, row.id);
+
+    const name = row.name.trim().toLowerCase();
+    if (name && !byName.has(name)) byName.set(name, row.id);
+  }
+
+  for (const client of CLIENTS as SeedClient[]) {
+    if (!client.id) continue;
+
+    const digits = (client.p ?? '').replace(/\D/g, '');
+    const found =
+      (digits.length >= 10 ? byPhone.get(digits) : undefined) ??
+      byName.get(client.n.trim().toLowerCase());
+
+    if (found !== undefined) cloudCustomers.set(client.id, found);
+  }
+}
 
 /** Пустая ли база: по ней экран данных решает, предлагать ли пример. */
 export function isEmpty(db: SqlDriver): boolean {
@@ -309,8 +359,8 @@ function seedClients(db: SqlDriver): void {
         `INSERT INTO counterparties
            (kind, name, phone, email, note, discount_bp, created_at, search_text,
             birthday, gender, address, created_by,
-            loyalty_type, bonus_balance, bonus_spent, phones)
-         VALUES ('customer', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            loyalty_type, bonus_balance, bonus_spent, cashback_bp, phones)
+         VALUES ('customer', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           client.n,
           client.p,
@@ -326,6 +376,7 @@ function seedClients(db: SqlDriver): void {
           client.lt ?? null,
           client.bo ?? 0,
           client.bs ?? 0,
+          client.cb ?? 0,
           JSON.stringify(client.ph ?? (client.p ? [client.p] : [])),
         ],
       );
@@ -362,6 +413,7 @@ function seedHistory(db: SqlDriver): void {
   const sales = SALES as SeedSale[];
   if (sales.length === 0) return;
 
+  ensureCloudCustomers(db);
   const now = new Date().toISOString();
 
   // Товары ищутся по коду: он есть у каждой позиции и не меняется.
@@ -393,6 +445,17 @@ function seedHistory(db: SqlDriver): void {
         0,
       );
 
+      const customerId = sale.c ? (cloudCustomers.get(sale.c) ?? null) : null;
+
+      // Подпись чека. Номер — всегда, имя покупателя — только когда карточку
+      // по нему найти не удалось: иначе чек в журнале остался бы безымянным.
+      const note = [
+        sale.no ? `CloudShop №${sale.no}` : null,
+        customerId === null && sale.cn ? sale.cn : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
       db.run(
         `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -402,8 +465,8 @@ function seedHistory(db: SqlDriver): void {
           cost,
           sale.pay === 'card' || sale.pay === 'transfer' ? sale.pay : 'cash',
           sale.at ?? now,
-          sale.c ? (cloudCustomers.get(sale.c) ?? null) : null,
-          sale.no ? `CloudShop №${sale.no}` : null,
+          customerId,
+          note || null,
           sale.st ? (stores.get(sale.st) ?? null) : null,
         ],
       );

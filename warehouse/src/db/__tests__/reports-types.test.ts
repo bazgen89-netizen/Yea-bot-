@@ -5,7 +5,7 @@ import { createMoneyDoc } from '../money';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
 import { REPORTS, reportById } from '../reportTypes';
-import { periodFor } from '../reports';
+import { periodFor, salesSummary, stockQty } from '../reports';
 import { postDoc } from '../stock';
 import { groupByMonth, groupByWeek } from '../../domain/grouping';
 import type { CartLine } from '../../domain/types';
@@ -118,5 +118,63 @@ describe('группировка по неделям и месяцам', () => {
     const months = groupByMonth(points);
     expect(months.map((m) => m.label)).toEqual(['июль 2026', 'август 2026']);
     expect(months[1].revenue).toBe(500);
+  });
+});
+
+/**
+ * Показатели считаются по выбранному магазину.
+ *
+ * Он прислал снимок телефона: выручка дня 12 930, а у нас за тот же день по
+ * всем магазинам 13 880 — и сказал «странные данные». Данные были верные,
+ * только его телефон показывал **один** магазин, а мы все сразу. Пока
+ * магазин нельзя выбрать, число на главной не отвечает ни на один вопрос:
+ * «двенадцать тысяч» — это где?
+ */
+describe('показатели по магазину', () => {
+  it('выручка и остаток считаются по выбранному магазину, а не по всем', () => {
+    const db = createTestDriver();
+
+    const first = ensureLocation(db, 'Черёмушки');
+    const second = ensureLocation(db, 'Чайный бар');
+
+    const product = createProduct(db, {
+      name: 'Пиала',
+      sku: null,
+      barcode: null,
+      unit: 'шт',
+      sale_price: 50000,
+      cost_price: 20000,
+      category_id: null,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    const line = {
+      product_id: product,
+      name: 'Пиала',
+      unit: 'шт',
+      stock: 0,
+      qty: 1000,
+      price: 50000,
+      cost_price: 20000,
+    };
+
+    createSale(db, { lines: [line], locationId: first, allowNegative: true });
+    createSale(db, { lines: [line], locationId: first, allowNegative: true });
+    createSale(db, { lines: [line], locationId: second, allowNegative: true });
+
+    const period = periodFor('today');
+
+    expect(salesSummary(db, period).revenue).toBe(150000);
+    expect(salesSummary(db, period, first).revenue).toBe(100000);
+    expect(salesSummary(db, period, second).revenue).toBe(50000);
+
+    expect(salesSummary(db, period).receipts).toBe(3);
+    expect(salesSummary(db, period, first).receipts).toBe(2);
+
+    // Остаток тоже: продали по одной — в каждом магазине ушло в минус.
+    expect(stockQty(db)).toBe(-3000);
+    expect(stockQty(db, first)).toBe(-2000);
+    expect(stockQty(db, second)).toBe(-1000);
   });
 });

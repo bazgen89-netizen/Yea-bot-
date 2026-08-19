@@ -1,9 +1,16 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { listProducts } from '../../src/db/products';
-import { dailySales, periodFor, salesSummary, stockValue } from '../../src/db/reports';
+import { listLocations } from '../../src/db/locations';
+import {
+  dailySales,
+  periodFor,
+  salesSummary,
+  stockQty,
+  stockValue,
+  type Scope,
+} from '../../src/db/reports';
 import { formatMoney } from '../../src/domain/money';
 import { formatQty } from '../../src/domain/qty';
 import { useQuery } from '../../src/state/DatabaseProvider';
@@ -43,25 +50,37 @@ function HomePhone() {
   const router = useRouter();
   const [kind, setKind] = useState<PeriodKind>('today');
 
+  /**
+   * Какой магазин показываем. `null` — все сразу.
+   *
+   * У него магазинов семь, и показатели у них разные: выручка дня по всем
+   * втрое больше, чем по одному. Пока магазин нельзя выбрать, число на
+   * главной не отвечает ни на один вопрос — «двенадцать тысяч» это где?
+   */
+  const [scope, setScope] = useState<Scope>(null);
+  const [picking, setPicking] = useState(false);
+
+  const stores = useQuery((db) => listLocations(db));
+  const storeName = stores.find((store) => store.id === scope)?.name ?? null;
+
   const period = periodFor(kind);
-  const summary = useQuery((db) => salesSummary(db, period), [kind]);
-  const stock = useQuery((db) => stockValue(db));
-  const daily = useQuery((db) => dailySales(db, period), [kind]);
-  const totalQty = useQuery((db) =>
-    listProducts(db).reduce((sum, product) => sum + product.stock, 0),
-  );
+  const summary = useQuery((db) => salesSummary(db, period, scope), [kind, scope]);
+  const stock = useQuery((db) => stockValue(db, scope), [scope]);
+  const daily = useQuery((db) => dailySales(db, period, scope), [kind, scope]);
+  const totalQty = useQuery((db) => stockQty(db, scope), [scope]);
 
   // Насколько выручка отличается от предыдущего такого же периода.
-  const previous = useQuery((db) => salesSummary(db, previousPeriod(kind)), [kind]);
+  const previous = useQuery((db) => salesSummary(db, previousPeriod(kind), scope), [kind, scope]);
   const change = percentChange(summary.revenue, previous.revenue);
 
   return (
     <View style={styles.screen}>
       <AppHeader
         title="WAYSTEA"
+        subtitle={storeName ?? 'Все магазины'}
         actions={
           <>
-            <HeaderAction label="Выбрать магазин" onPress={() => router.push('/locations')}>
+            <HeaderAction label="Выбрать магазин" onPress={() => setPicking(true)}>
               <Icon.store color="#FFFFFF" size={26} />
             </HeaderAction>
             <HeaderAction label="Оповещения" onPress={() => router.push('/notifications')}>
@@ -69,6 +88,17 @@ function HomePhone() {
             </HeaderAction>
           </>
         }
+      />
+
+      <StorePicker
+        visible={picking}
+        stores={stores}
+        chosen={scope}
+        onPick={(value) => {
+          setScope(value);
+          setPicking(false);
+        }}
+        onClose={() => setPicking(false)}
       />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -185,6 +215,75 @@ function HomePhone() {
   );
 }
 
+/**
+ * Выбор магазина — тот самый значок лавки в шапке.
+ *
+ * Список, а не переход на отдельный экран: выбрать магазин и увидеть, как
+ * поменялись цифры, надо здесь же. Уход на другой экран и возврат обратно
+ * рвёт это движение надвое.
+ */
+function StorePicker({
+  visible,
+  stores,
+  chosen,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  stores: { id: number; name: string }[];
+  chosen: Scope;
+  onPick: (scope: Scope) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.pickerBackdrop} onPress={onClose} accessibilityRole="button">
+        <View style={styles.pickerCard}>
+          <Text style={styles.pickerTitle}>Магазин</Text>
+
+          <StoreRow
+            label="Все магазины"
+            active={chosen === null}
+            onPress={() => onPick(null)}
+          />
+          {stores.map((store) => (
+            <StoreRow
+              key={store.id}
+              label={store.name}
+              active={chosen === store.id}
+              onPress={() => onPick(store.id)}
+            />
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function StoreRow({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.pickerRow, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={[styles.pickerLabel, active && styles.pickerLabelActive]} numberOfLines={1}>
+        {label}
+      </Text>
+      {active ? <Text style={styles.pickerTick}>✓</Text> : null}
+    </Pressable>
+  );
+}
+
 function Card({ children, style }: { children: React.ReactNode; style?: object }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
@@ -282,6 +381,35 @@ function percentChange(current: number, previous: number): number | null {
 }
 
 const styles = StyleSheet.create({
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    ...shadow,
+  },
+  pickerTitle: {
+    ...text.block,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  pickerLabel: { flex: 1, fontSize: 16, color: colors.text },
+  pickerLabelActive: { color: colors.primary, fontWeight: '600' },
+  pickerTick: { fontSize: 16, color: colors.primary },
+
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
   card: {

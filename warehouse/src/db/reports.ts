@@ -145,8 +145,8 @@ export interface StockValue {
   positions: number;
 }
 
-/** Сколько денег «лежит» на складе. */
-export function stockValue(db: SqlDriver): StockValue {
+/** Сколько денег «лежит» на складе — во всех магазинах или в одном. */
+export function stockValue(db: SqlDriver, scope: Scope = null): StockValue {
   const row = db.get<StockValue>(
     `SELECT CAST(ROUND(COALESCE(SUM(stock * p.cost_price), 0) / 1000.0) AS INTEGER) AS costValue,
             CAST(ROUND(COALESCE(SUM(stock * p.sale_price), 0) / 1000.0) AS INTEGER) AS retailValue,
@@ -154,7 +154,7 @@ export function stockValue(db: SqlDriver): StockValue {
      FROM (
        SELECT p.id,
               COALESCE((SELECT SUM(m.qty_delta) FROM stock_moves m
-                        WHERE m.product_id = p.id), 0) AS stock
+                        WHERE m.product_id = p.id${scopeSql('m.location_id', scope)}), 0) AS stock
        FROM products p
        WHERE p.archived = 0
      ) s
@@ -163,6 +163,23 @@ export function stockValue(db: SqlDriver): StockValue {
   );
 
   return row ?? { costValue: 0, retailValue: 0, positions: 0 };
+}
+
+/**
+ * Сколько единиц товара лежит на складе — во всех магазинах или в одном.
+ *
+ * Отдельной функцией, а не перебором справочника в экране: на главной нужно
+ * одно число, а `listProducts` тянет пятьсот девяносто карточек со всеми
+ * полями, и фильтра по магазину у него нет вовсе.
+ */
+export function stockQty(db: SqlDriver, scope: Scope = null): number {
+  const row = db.get<{ qty: number }>(
+    `SELECT COALESCE(SUM(m.qty_delta), 0) AS qty
+       FROM stock_moves m
+       JOIN products p ON p.id = m.product_id
+      WHERE p.archived = 0${scopeSql('m.location_id', scope)}`,
+  );
+  return row?.qty ?? 0;
 }
 
 export interface DailyPoint {

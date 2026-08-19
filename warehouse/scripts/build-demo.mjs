@@ -41,7 +41,21 @@ const backup = `${seed}/clients.real.json`;
  * показываются свежие чеки, сколько влезает, а вся история — в файле,
  * который собирается `build-mine.mjs`.
  */
-const HISTORY_BUDGET = 3_500_000;
+const HISTORY_BUDGET = 5_000_000;
+
+/**
+ * Ссылка с настоящими карточками клиентов — по его прямой просьбе.
+ *
+ *   node scripts/build-demo.mjs --real
+ *
+ * По умолчанию имена и телефоны подменяются: ссылку можно переслать, а
+ * телефон живого человека, единожды уехавший на чужой сервер, назад не
+ * вернёшь. С этим ключом на страницу кладутся настоящие — со всеми
+ * телефонами, днями рождения и бонусами.
+ *
+ * Такую страницу **нельзя пересылать**: она видна тому, у кого есть ссылка.
+ */
+const REAL = process.argv.includes('--real');
 
 /** Свежие чеки, пока не кончилось отведённое место. */
 function trimHistory(sales) {
@@ -127,12 +141,12 @@ const source = (name) => {
 };
 
 const realProducts = JSON.parse(readFileSync(source('products.json'), 'utf8'));
-const cleanProducts = realProducts.map((item) => ({ ...item, n: scrubName(item.n) }));
+const cleanProducts = REAL ? realProducts : realProducts.map((item) => ({ ...item, n: scrubName(item.n) }));
 const scrubbed = cleanProducts.filter((item, i) => item.n !== realProducts[i].n).length;
 
 const real = JSON.parse(readFileSync(source('clients.json'), 'utf8'));
 
-const fake = real.map((client, index) => {
+const fake = REAL ? real : real.map((client, index) => {
   const seed = hash(`${client.n ?? ''}${index}`);
   const name = NAMES[seed % NAMES.length];
   const surname = SURNAMES[(seed >> 5) % SURNAMES.length];
@@ -154,8 +168,11 @@ const allSales = JSON.parse(readFileSync(source('sales.json'), 'utf8'));
 const shownSales = trimHistory(allSales);
 
 console.log(
-  `Подменяю ${fake.length} карточек клиентов и ${scrubbed} названий товаров; ` +
-    `истории по ссылке — ${shownSales.length} чеков из ${allSales.length}…`,
+  REAL
+    ? `НАСТОЯЩИЕ данные: ${fake.length} карточек клиентов с телефонами; ` +
+      `истории по ссылке — ${shownSales.length} чеков из ${allSales.length}…`
+    : `Подменяю ${fake.length} карточек клиентов и ${scrubbed} названий товаров; ` +
+      `истории по ссылке — ${shownSales.length} чеков из ${allSales.length}…`,
 );
 
 copyFileSync(clients, backup);

@@ -204,10 +204,21 @@ export function importParties(
       return;
     }
 
+    // Телефоны: основной своей колонкой, остальные — списком через запятую
+    // или точку с запятой, как их пишут в таблице руками.
+    const phone = pick(row, 'телефон', 'phone', 'моб. телефон') || null;
+    const others = (pick(row, 'другие телефоны', 'телефоны', 'phones') || '')
+      .split(/[,;]/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const phones = [...new Set([phone, ...others].filter((v): v is string => Boolean(v)))];
+
     parsed.push({
       kind,
       name,
-      phone: pick(row, 'телефон', 'phone', 'моб. телефон') || null,
+      phone,
+      phones: phones.length > 1 ? phones : undefined,
       email: pick(row, 'почта', 'email', 'e-mail') || null,
       note: pick(row, 'описание', 'комментарий', 'note') || null,
       discount_bp: parsePercent(pick(row, 'скидка', 'discount')) ?? 0,
@@ -215,6 +226,14 @@ export function importParties(
       gender: pick(row, 'пол', 'gender') || null,
       address: pick(row, 'адрес', 'address') || null,
       created_by: pick(row, 'кто создал', 'создал') || null,
+
+      // Бонусная часть карточки. Без неё выгрузка не возвращалась обратно
+      // такой же, какой уехала: бонусы и кешбэк обнулялись при загрузке.
+      discount_card: pick(row, 'дисконтная карта', 'карта', 'discount card') || null,
+      loyalty_type: pick(row, 'вид лояльности', 'лояльность', 'loyalty') || null,
+      bonus_balance: parseMoney(pick(row, 'бонусы', 'бонусный счет', 'bonus')) ?? 0,
+      bonus_spent: parseMoney(pick(row, 'потрачено бонусов', 'бонусов потрачено')) ?? 0,
+      cashback_bp: parsePercent(pick(row, 'кешбэк', 'кэшбэк', 'cashback')) ?? 0,
     });
   });
 

@@ -118,6 +118,9 @@ export interface PartyInput {
   discount_card?: string | null;
   loyalty_type?: string | null;
   cashback_bp?: number;
+  /** Бонусный счёт и потраченные бонусы, копейки. */
+  bonus_balance?: number;
+  bonus_spent?: number;
   /** Реквизиты организации и банковские. */
   details?: Requisite[];
   bank_details?: Requisite[];
@@ -188,6 +191,8 @@ function fields(input: PartyInput): SqlParam[] {
     emptyToNull(input.discount_card),
     emptyToNull(input.loyalty_type),
     input.cashback_bp ?? 0,
+    input.bonus_balance ?? 0,
+    input.bonus_spent ?? 0,
     cleanPairs(input.details),
     cleanPairs(input.bank_details),
     emptyToNull(input.account_number),
@@ -199,6 +204,7 @@ function fields(input: PartyInput): SqlParam[] {
 const FIELD_NAMES = `kind, name, phone, email, note, discount_bp,
         birthday, gender, address, party_type, is_default, enable_savings,
         phones, discount_card, loyalty_type, cashback_bp,
+        bonus_balance, bonus_spent,
         details, bank_details, account_number, legal_address, search_text`;
 
 export function createCounterparty(db: SqlDriver, input: PartyInput): Id {
@@ -297,21 +303,39 @@ export function importCounterparties(db: SqlDriver, rows: PartyInput[]): ImportP
       const existing = digits ? byPhone.get(digits) : byName.get(normalize(row.name));
 
       if (existing !== undefined) {
-        const current = db.get<{
-          phone: string | null;
-          email: string | null;
-          note: string | null;
-          discount_bp: number;
-        }>('SELECT phone, email, note, discount_bp FROM counterparties WHERE id = ?', [existing]);
+        const current = getCounterparty(db, existing);
 
-        // Пустые поля в выгрузке не должны затирать заполненные в базе.
+        // Пустые поля в выгрузке не затирают заполненные в базе: файл чаще
+        // всего неполный — в нём донесли дни рождения, а адреса не трогали.
+        //
+        // Обновлять надо **всю** карточку, а не четыре поля: раньше здесь
+        // стояли только телефон, почта, описание и скидка, и обратная
+        // загрузка собственной же выгрузки обнуляла бонусы, кешбэк, день
+        // рождения и вторые телефоны — молча, без единой жалобы.
         updateCounterparty(db, existing, {
           kind: row.kind,
           name: row.name,
           phone: emptyToNull(row.phone) ?? current?.phone ?? null,
           email: emptyToNull(row.email) ?? current?.email ?? null,
           note: emptyToNull(row.note) ?? current?.note ?? null,
-          discount_bp: row.discount_bp ?? current?.discount_bp ?? 0,
+          discount_bp: row.discount_bp || (current?.discount_bp ?? 0),
+          birthday: emptyToNull(row.birthday) ?? current?.birthday ?? null,
+          gender: emptyToNull(row.gender) ?? current?.gender ?? null,
+          address: emptyToNull(row.address) ?? current?.address ?? null,
+          created_by: emptyToNull(row.created_by) ?? current?.created_by ?? null,
+          party_type: row.party_type ?? current?.party_type,
+          phones: row.phones?.length ? row.phones : parseList(current?.phones),
+          discount_card: emptyToNull(row.discount_card) ?? current?.discount_card ?? null,
+          loyalty_type: emptyToNull(row.loyalty_type) ?? current?.loyalty_type ?? null,
+          cashback_bp: row.cashback_bp || (current?.cashback_bp ?? 0),
+          bonus_balance: row.bonus_balance ?? current?.bonus_balance ?? 0,
+          bonus_spent: row.bonus_spent ?? current?.bonus_spent ?? 0,
+          details: parsePairs(current?.details),
+          bank_details: parsePairs(current?.bank_details),
+          account_number: current?.account_number ?? null,
+          legal_address: current?.legal_address ?? null,
+          is_default: Boolean(current?.is_default),
+          enable_savings: Boolean(current?.enable_savings),
         });
         result.updated++;
       } else {

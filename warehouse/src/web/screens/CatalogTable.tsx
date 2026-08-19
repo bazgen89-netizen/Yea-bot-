@@ -10,7 +10,7 @@ import { ColumnPicker } from '../ColumnPicker';
 import { FilterPanel } from '../FilterPanel';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { archiveProducts } from '../../db/bulk';
-import { stockCsv } from '../../db/export';
+import { catalogCsv, stockCsv } from '../../db/export';
 import { listLocations, stockByLocation } from '../../db/locations';
 import { listProducts } from '../../db/products';
 import { formatMoneyWeb } from '../../domain/money';
@@ -176,6 +176,19 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
                         void saveFile(
                           `Товары ${today()}.csv`,
                           stockCsv(db),
+                          'text/csv;charset=utf-8',
+                        );
+                      },
+                    },
+                    {
+                      // Эта выгрузка возвращается обратно: заголовки колонок —
+                      // те же слова, по которым импорт узнаёт поля. Каталог
+                      // правят таблицей и заливают целиком.
+                      label: 'Все поля карточки',
+                      onPress: () => {
+                        void saveFile(
+                          `Каталог ${today()}.csv`,
+                          catalogCsv(db),
                           'text/csv;charset=utf-8',
                         );
                       },

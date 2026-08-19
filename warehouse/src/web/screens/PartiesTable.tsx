@@ -8,8 +8,11 @@ import { partySets, SET_LABEL, type PartyColumn, type PartySet } from '../partyC
 import { HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { PartyCard } from './PartyCard';
 import { listCounterparties } from '../../db/counterparties';
+import { partiesCsv } from '../../db/export';
+import { today } from '../../domain/pricing';
 import type { CounterpartyWithTotals, Id, PartyKind } from '../../domain/types';
-import { useQuery } from '../../state/DatabaseProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { saveFile } from '../../ui/download';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
@@ -48,6 +51,7 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
   );
 
   const customers = kind !== 'supplier';
+  const { db } = useDatabase();
 
   return (
     <View style={styles.screen}>
@@ -88,7 +92,17 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
         <ToolButton
           label="Скачать в Excel"
           icon={<WebIcon.excel color={web.text} />}
-          soon
+          onPress={() => {
+            // Выгружаем весь справочник, а не то, что осталось на экране
+            // после поиска: «скачать в Excel» — это про базу целиком, и
+            // молча отдать полсотни строк вместо трёх тысяч хуже, чем
+            // не отдать ничего.
+            void saveFile(
+              `${customers ? 'Клиенты' : 'Поставщики'} ${today()}.csv`,
+              partiesCsv(db, kind),
+              'text/csv;charset=utf-8',
+            );
+          }}
         />
       </Toolbar>
 

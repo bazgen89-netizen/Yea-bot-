@@ -86,6 +86,8 @@ interface SeedClient {
   cb?: number | null;
   /** Вид лояльности: скидка или бонусы. */
   lt?: string | null;
+  /** Когда карточку завели, ISO. Пусто — считаем днём загрузки. */
+  at?: string | null;
 }
 
 /** Чек из истории покупок CloudShop. */
@@ -387,7 +389,7 @@ function seedClients(db: SqlDriver): void {
           client.e,
           client.d,
           client.dc ?? 0,
-          now,
+          client.at ?? now,
           search,
           client.b,
           client.g,

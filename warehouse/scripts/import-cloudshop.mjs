@@ -91,6 +91,22 @@ function gender(value) {
   return null;
 }
 
+/**
+ * Когда карточку завели.
+ *
+ * CloudShop отдаёт метку времени в секундах, да ещё строкой: `"1787048594"`.
+ * Хранить дату создания клиента днём сегодняшним нельзя — тогда вся база
+ * выглядит заведённой в день переноса, и «давно ли он у нас покупает» уже
+ * не спросишь.
+ */
+function created(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 /** День рождения — «12.07.2006». Приходит он как «2006-07-12». */
 function birthday(value) {
   const text = String(value ?? '').trim();
@@ -323,9 +339,16 @@ const customers = rawCustomers.map((item) => {
     e: emails[0]?.trim() ?? null,
     b: birthday(item.birthday),
     g: gender(item.sex),
-    d: billing.note ?? null,
-    a: billing.address ?? null,
+    // Адреса и комментария по ключу CloudShop не отдаёт вовсе: в карточке
+    // приезжают только имя, телефоны, почта, день рождения, пол, скидка и
+    // бонусы. Читать `billing.address` и `billing.note`, как я делал
+    // сначала, — значит каждый раз получать пустоту: таких полей у них нет.
+    // Донести адреса и комментарии можно файлом: «Импорт клиентов».
+    d: null,
+    a: null,
     by: 'CloudShop',
+    // Когда карточку завели. Приходит меткой времени в секундах.
+    at: created(item.date_created),
     // Личная скидка — в сотых долях процента, как и везде у нас.
     dc: bp(item.discount),
     // Бонусный счёт и что уже потрачено. Поля названы так, как их отдаёт

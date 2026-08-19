@@ -4,7 +4,13 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
 import { Dropdown } from '../Dropdown';
-import { partySets, SET_LABEL, type PartyColumn, type PartySet } from '../partyColumns';
+import {
+  partySets,
+  SET_LABEL,
+  usefulColumns,
+  type PartyColumn,
+  type PartySet,
+} from '../partyColumns';
 import { HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { PartyCard } from './PartyCard';
 import { listCounterparties } from '../../db/counterparties';
@@ -36,12 +42,18 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
   const [open, setOpen] = useState<Id | 'new' | null>(null);
 
   const sets = useMemo(() => partySets(kind), [kind]);
-  const columns = sets.find((item) => item.key === set)?.columns ?? sets[0].columns;
 
   const parties = useQuery(
     (db) => listCounterparties(db, { kind, search }),
     [kind, search],
   );
+
+  // Колонки считаем по всему справочнику, а не по видимой странице: иначе
+  // они появлялись бы и пропадали при перелистывании.
+  const columns = useMemo(() => {
+    const all = sets.find((item) => item.key === set)?.columns ?? sets[0].columns;
+    return usefulColumns(all, parties);
+  }, [sets, set, parties]);
 
   const pages = Math.max(1, Math.ceil(parties.length / PAGE_SIZE));
   const current = Math.min(page, pages);

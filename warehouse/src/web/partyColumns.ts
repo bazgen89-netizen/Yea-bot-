@@ -29,6 +29,38 @@ export interface PartyColumn {
 
 export type PartySet = 'basic' | 'loyalty' | 'stats';
 
+/**
+ * Колонки, в которых нет ни одного значения, не показываются.
+ *
+ * Адрес и описание CloudShop по ключу не отдаёт вовсе — и две колонки на пол
+ * экрана стояли заполненные прочерками у всех трёх тысяч карточек. Почта
+ * есть у двадцати восьми человек из 3206, и её колонка выглядела так же.
+ * Пустая колонка не «как у него», а занятое место: из-за неё скидка с
+ * бонусами уезжали за правый край, и казалось, что данные не перенеслись.
+ *
+ * Правило само себя чинит: как только адреса появятся — хоть у одного
+ * человека, хоть загрузкой из файла, — колонка вернётся.
+ *
+ * Наименование и телефон остаются всегда: таблица без них перестаёт быть
+ * таблицей клиентов.
+ */
+const ALWAYS = new Set(['name', 'phone']);
+
+export function usefulColumns(
+  columns: PartyColumn[],
+  parties: CounterpartyWithTotals[],
+): PartyColumn[] {
+  if (parties.length === 0) return columns;
+
+  return columns.filter((column) => {
+    if (ALWAYS.has(column.key)) return true;
+    return parties.some((party) => {
+      const value = column.value(party).trim();
+      return value !== '' && value !== '—';
+    });
+  });
+}
+
 export const SET_LABEL: Record<PartySet, string> = {
   basic: 'Информация',
   loyalty: 'Лояльность',
@@ -46,6 +78,23 @@ const dash = (value: string | null) => value ?? '—';
 
 const BASIC_CUSTOMER: PartyColumn[] = [
   ...START,
+  // Скидка и бонусы стоят здесь, а не только в «Лояльности». Открывая
+  // клиентов, первым делом смотрят, сколько человеку положено, — держать
+  // это в другом наборе колонок значит прятать главное.
+  {
+    key: 'discount',
+    title: 'Скидка',
+    width: 110,
+    numeric: true,
+    value: (p) => (p.discount_bp ? formatPercent(p.discount_bp) : '—'),
+  },
+  {
+    key: 'bonus',
+    title: 'Бонусов',
+    width: 130,
+    numeric: true,
+    value: (p) => (p.bonus_balance ? formatMoneyWeb(p.bonus_balance) : '—'),
+  },
   { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
   { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender) },
   { key: 'note', title: 'Описание', width: 240, value: (p) => p.note ?? '' },

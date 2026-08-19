@@ -261,7 +261,21 @@ process.on('unhandledRejection', (error) => {
 console.log('Магазины…');
 const { shops = [] } = await get('/stores');
 const storeName = new Map(shops.map((shop) => [shop.id, (shop.name ?? '').trim()]));
-console.log(`  ${shops.length}`);
+
+/**
+ * Настоящие магазины — те, у которых есть адрес.
+ *
+ * CloudShop отдаёт семь «магазинов», но три из них — счета («№1»,
+ * «Терминал / Счет в банке») и старые двойники, оставшиеся от переездов.
+ * В его телефоне в выборе магазина ровно три строки, и у каждой адрес.
+ * Остатки и чеки тоже лежат только в этих трёх.
+ */
+const realStores = shops
+  .filter((shop) => (shop.address ?? '').trim())
+  .map((shop) => ({ n: (shop.name ?? '').trim(), a: shop.address.trim() }));
+
+writeFileSync(`${out}/stores.json`, JSON.stringify(realStores, null, 1));
+console.log(`  ${shops.length}, из них магазинов: ${realStores.length}`);
 
 // --- товары ---------------------------------------------------------------
 

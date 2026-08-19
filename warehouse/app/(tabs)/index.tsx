@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { listLocations } from '../../src/db/locations';
 import {
   dailySales,
+  hourlySales,
   periodFor,
   salesSummary,
   stockQty,
@@ -66,7 +67,12 @@ function HomePhone() {
   const period = periodFor(kind);
   const summary = useQuery((db) => salesSummary(db, period, scope), [kind, scope]);
   const stock = useQuery((db) => stockValue(db, scope), [scope]);
-  const daily = useQuery((db) => dailySales(db, period, scope), [kind, scope]);
+  // За день график рисуется по часам: одна точка на весь день — это не
+  // график, а синий прямоугольник во всю карточку.
+  const daily = useQuery(
+    (db) => (kind === 'today' ? hourlySales(db, period, scope) : dailySales(db, period, scope)),
+    [kind, scope],
+  );
   const totalQty = useQuery((db) => stockQty(db, scope), [scope]);
 
   // Насколько выручка отличается от предыдущего такого же периода.
@@ -218,9 +224,12 @@ function HomePhone() {
 /**
  * Выбор магазина — тот самый значок лавки в шапке.
  *
- * Список, а не переход на отдельный экран: выбрать магазин и увидеть, как
- * поменялись цифры, надо здесь же. Уход на другой экран и возврат обратно
- * рвёт это движение надвое.
+ * Лист снизу, а не окошко по центру: так это устроено у него, и так удобнее
+ * — до списка дотягивается большой палец, а верх экрана с цифрами остаётся
+ * на виду, и видно, что именно меняется.
+ *
+ * Поиск сверху нужен не для трёх магазинов, а для тридцати: список растёт
+ * вместе с сетью, и искать глазами тогда нечего.
  */
 function StorePicker({
   visible,
@@ -230,56 +239,92 @@ function StorePicker({
   onClose,
 }: {
   visible: boolean;
-  stores: { id: number; name: string }[];
+  stores: { id: number; name: string; address: string | null }[];
   chosen: Scope;
   onPick: (scope: Scope) => void;
   onClose: () => void;
 }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.pickerBackdrop} onPress={onClose} accessibilityRole="button">
-        <View style={styles.pickerCard}>
-          <Text style={styles.pickerTitle}>Магазин</Text>
+  const [search, setSearch] = useState('');
 
+  const found = stores.filter((store) => {
+    const text = search.trim().toLowerCase();
+    if (!text) return true;
+    return `${store.name} ${store.address ?? ''}`.toLowerCase().includes(text);
+  });
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {/* Нажатие мимо листа закрывает его — как и везде у него. */}
+      <Pressable style={styles.sheetBackdrop} onPress={onClose} accessibilityRole="button" />
+
+      <View style={styles.sheet}>
+        <View style={styles.sheetGrip} />
+
+        <View style={styles.sheetSearch}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Поиск"
+            placeholderTextColor={colors.textMuted}
+            style={styles.sheetSearchInput}
+          />
+        </View>
+
+        <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
           <StoreRow
             label="Все магазины"
+            note="Сводка по всей сети"
             active={chosen === null}
             onPress={() => onPick(null)}
           />
-          {stores.map((store) => (
+          {found.map((store) => (
             <StoreRow
               key={store.id}
               label={store.name}
+              note={store.address}
               active={chosen === store.id}
               onPress={() => onPick(store.id)}
             />
           ))}
-        </View>
-      </Pressable>
+        </ScrollView>
+      </View>
     </Modal>
   );
 }
 
 function StoreRow({
   label,
+  note,
   active,
   onPress,
 }: {
   label: string;
+  note?: string | null;
   active: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="radio"
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      style={({ pressed }) => [styles.pickerRow, pressed && { opacity: 0.6 }]}
+      style={({ pressed }) => [styles.sheetRow, pressed && { opacity: 0.6 }]}
     >
-      <Text style={[styles.pickerLabel, active && styles.pickerLabelActive]} numberOfLines={1}>
-        {label}
-      </Text>
-      {active ? <Text style={styles.pickerTick}>✓</Text> : null}
+      <View style={styles.sheetRowText}>
+        <Text style={styles.sheetRowLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {note ? (
+          <Text style={styles.sheetRowNote} numberOfLines={1}>
+            {note}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Кружок, а не галочка: выбрать можно только один магазин. */}
+      <View style={[styles.radio, active && styles.radioActive]}>
+        {active ? <View style={styles.radioDot} /> : null}
+      </View>
     </Pressable>
   );
 }
@@ -293,19 +338,39 @@ function Chart({ points }: { points: { day: string; revenue: number }[] }) {
   const max = Math.max(...points.map((point) => point.revenue), 1);
 
   return (
-    <View style={styles.chart}>
-      {points.map((point) => (
-        <View key={point.day} style={styles.chartColumn}>
-          <View
-            style={[
-              styles.chartBar,
-              { height: `${Math.max((point.revenue / max) * 100, 2)}%` },
-            ]}
-          />
-        </View>
-      ))}
+    <View>
+      <View style={styles.chart}>
+        {points.map((point) => (
+          <View key={point.day} style={styles.chartColumn}>
+            {/* Серая дорожка во всю высоту, а на ней — столбик. Так у него:
+                видно, насколько этот час или день дотянул до лучшего. */}
+            <View style={styles.chartTrack}>
+              <View
+                style={[
+                  styles.chartBar,
+                  { height: `${Math.max((point.revenue / max) * 100, 3)}%` },
+                ]}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.chartAxis}>
+        {points.map((point) => (
+          <Text key={point.day} style={styles.chartTick} numberOfLines={1}>
+            {tick(point.day)}
+          </Text>
+        ))}
+      </View>
     </View>
   );
+}
+
+/** Подпись под столбиком: час — числом, день — числом месяца. */
+function tick(day: string): string {
+  if (day.length <= 2) return String(Number(day));
+  return String(Number(day.slice(8, 10)));
 }
 
 function Metric({ label, value, active }: { label: string; value: string; active?: boolean }) {
@@ -381,34 +446,56 @@ function percentChange(current: number, previous: number): number | null {
 }
 
 const styles = StyleSheet.create({
-  pickerBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  pickerCard: {
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.sm,
-    ...shadow,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingBottom: spacing.lg,
+    maxHeight: '70%',
   },
-  pickerTitle: {
-    ...text.block,
+  sheetGrip: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  sheetSearch: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  sheetSearchInput: {
+    height: 44,
+    borderRadius: 22,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    backgroundColor: colors.bg,
+    color: colors.text,
+    fontSize: 16,
   },
-  pickerRow: {
+  sheetList: { minHeight: 0 },
+  sheetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  pickerLabel: { flex: 1, fontSize: 16, color: colors.text },
-  pickerLabelActive: { color: colors.primary, fontWeight: '600' },
-  pickerTick: { fontSize: 16, color: colors.primary },
+  sheetRowText: { flex: 1 },
+  sheetRowLabel: { fontSize: 17, color: colors.text },
+  sheetRowNote: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  radio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioActive: { borderColor: colors.primary },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
 
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
@@ -439,12 +526,26 @@ const styles = StyleSheet.create({
   chart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 3,
-    height: 190,
+    gap: 6,
+    height: 170,
     marginTop: spacing.sm,
   },
-  chartColumn: { flex: 1, height: '100%', justifyContent: 'flex-end' },
-  chartBar: { width: '100%', backgroundColor: colors.accent, borderRadius: 3 },
+  chartColumn: { flex: 1, height: '100%', alignItems: 'center' },
+  // Дорожка уже колонки: у него столбики тонкие, а не во всю ширину клетки.
+  chartTrack: {
+    width: 12,
+    maxWidth: '80%',
+    height: '100%',
+    justifyContent: 'flex-end',
+    // Дорожка — цветом рамки, а не подложки: на тёмной карточке подложка
+    // черна, и дорожка на ней исчезала.
+    backgroundColor: colors.border,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  chartBar: { width: '100%', backgroundColor: colors.accent, borderRadius: 6 },
+  chartAxis: { flexDirection: 'row', gap: 6, marginTop: spacing.xs },
+  chartTick: { flex: 1, textAlign: 'center', fontSize: 11, color: colors.textMuted },
   metrics: { flexDirection: 'row' },
   metric: {
     flex: 1,

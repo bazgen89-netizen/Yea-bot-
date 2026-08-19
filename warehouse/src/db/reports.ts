@@ -208,6 +208,56 @@ export function dailySales(db: SqlDriver, period: Period, scope: Scope = null): 
   );
 }
 
+/**
+ * Выручка по часам — для графика дня.
+ *
+ * За один день `dailySales` возвращает одну точку, и столбик растягивается на
+ * всю карточку синим прямоугольником: график, на котором нечего сравнивать.
+ * В его телефоне за день нарисованы часы — с восьми до семнадцати видно, в
+ * какие часы торговали.
+ *
+ * Пустые часы возвращаются нулями, а не пропускаются: иначе столбики
+ * съезжаются, и десять утра оказывается там, где должно быть восемь.
+ */
+export function hourlySales(db: SqlDriver, period: Period, scope: Scope = null): DailyPoint[] {
+  const rows = db.all<{ hour: string; revenue: number; profit: number; receipts: number }>(
+    `SELECT substr(s.created_at, 12, 2)              AS hour,
+            COALESCE(SUM(s.total), 0)                AS revenue,
+            COALESCE(SUM(s.total - s.cost_total), 0) AS profit,
+            COUNT(*)                                 AS receipts
+     FROM sales s
+     WHERE s.created_at >= ? AND s.created_at < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
+       )${scopeSql('s.location_id', scope)}
+     GROUP BY hour
+     ORDER BY hour`,
+    [period.from, period.to],
+  );
+
+  const byHour = new Map(rows.map((row) => [Number(row.hour), row]));
+
+  // Показываем не сутки целиком, а рабочие часы: ночью магазин закрыт, и
+  // восемь пустых столбиков слева — не сведения, а шум. Границы берём по
+  // самим продажам, с запасом в час.
+  const hours = rows.map((row) => Number(row.hour));
+  const from = hours.length ? Math.max(0, Math.min(...hours) - 1) : 8;
+  const to = hours.length ? Math.min(23, Math.max(...hours) + 1) : 20;
+
+  const points: DailyPoint[] = [];
+  for (let hour = from; hour <= to; hour++) {
+    const row = byHour.get(hour);
+    points.push({
+      day: String(hour).padStart(2, '0'),
+      revenue: row?.revenue ?? 0,
+      profit: row?.profit ?? 0,
+      receipts: row?.receipts ?? 0,
+    });
+  }
+
+  return points;
+}
+
 /** Периоды выпадающего списка в кабинете: сегодня, неделю, месяц, квартал, год. */
 export type PeriodKind = 'today' | 'week' | 'month' | 'quarter' | 'year';
 

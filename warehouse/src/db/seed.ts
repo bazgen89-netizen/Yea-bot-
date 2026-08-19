@@ -1,6 +1,7 @@
 import type { SqlDriver } from './driver';
 import { ensureLocation, listLocations } from './locations';
 import CLIENTS from './seed/clients.json';
+import STORES from './seed/stores.json';
 import PHOTOS from './seed/photos.json';
 import CATALOG from './seed/products.json';
 import SALES from './seed/sales.json';
@@ -143,9 +144,30 @@ interface SeedSale {
  */
 export function seedCatalog(db: SqlDriver): void {
   seedProducts(db);
+  seedStoreAddresses(db);
   seedClients(db);
   seedRegisters(db);
   seedHistory(db);
+}
+
+/**
+ * Адреса магазинов.
+ *
+ * Проставляются после товаров: магазины появляются вместе с остатками, и до
+ * этого адрес писать некуда. В выборе магазина адрес стоит второй строкой —
+ * без него два «Чайный бар» в списке отличить не по чему.
+ */
+function seedStoreAddresses(db: SqlDriver): void {
+  // Файл писали две разные выгрузки, и поля в нём называются по-разному:
+  // старая клала `name`/`address`, новая — короткие `n`/`a`. Читаем оба:
+  // ронять наполнение из-за имени поля незачем.
+  for (const store of STORES as { n?: string; a?: string; name?: string; address?: string }[]) {
+    const name = (store.n ?? store.name ?? '').trim();
+    const address = (store.a ?? store.address ?? '').trim();
+    if (!name || !address) continue;
+
+    db.run('UPDATE locations SET address = ? WHERE name = ?', [address, name]);
+  }
 }
 
 /**

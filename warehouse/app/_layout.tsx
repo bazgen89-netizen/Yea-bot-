@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CartProvider } from '../src/state/CartProvider';
@@ -7,11 +8,18 @@ import { DatabaseProvider } from '../src/state/DatabaseProvider';
 import { LanguageProvider } from '../src/state/LanguageProvider';
 import { PosSettingsProvider } from '../src/state/PosSettingsProvider';
 import { ScannerProvider } from '../src/state/ScannerProvider';
-import { colors } from '../src/ui/theme';
+import { colors, followSystemTheme } from '../src/ui/theme';
 import { useDesktop } from '../src/ui/useDesktop';
 import { Shell } from '../src/web/Shell';
 
 export default function RootLayout() {
+  // Светлое или тёмное — как в телефоне. У него после заката всё переключается
+  // само, и программа не должна оставаться единственным белым пятном.
+  //
+  // Ставится до экранов и на весь их век: переменные оформления живут на
+  // корне страницы, а не в разметке, и переживают любые переходы.
+  useEffect(followSystemTheme, []);
+
   return (
     <SafeAreaProvider>
       <DatabaseProvider>

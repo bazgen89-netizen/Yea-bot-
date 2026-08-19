@@ -7,6 +7,23 @@ import { formatQty, lineTotal } from '../domain/qty';
 import type { Kopecks } from '../domain/money';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
 
+/**
+ * Следующий номер чека — на единицу больше самого большого.
+ *
+ * Своя нумерация продолжается с того места, где её оставил CloudShop.
+ * Внутренний номер строки для этого не годится: перенесённых чеков сорок пять
+ * тысяч, а строк в таблице ровно столько же, и новый чек получал номер из
+ * середины — «Продажа #41766» при последней проданной «#45868». Такой номер
+ * не найти в кабинете и не назвать покупателю: он уже занят чеком трёхлетней
+ * давности.
+ *
+ * На пустой базе нумерация начинается с единицы — как и должна.
+ */
+function nextNumber(db: SqlDriver): number {
+  const row = db.get<{ top: number | null }>('SELECT MAX(number) AS top FROM sales');
+  return (row?.top ?? 0) + 1;
+}
+
 /** Магазин, к которому привязана касса открытой смены. */
 function shiftLocation(db: SqlDriver, shiftId: Id | null): Id | null {
   if (shiftId === null) return null;
@@ -110,8 +127,8 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          customer_id, note, debt, staff_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          customer_id, note, debt, staff_id, created_at, number)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         totals.total,
@@ -126,6 +143,7 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         // считать не из чего.
         currentStaffId(db),
         now,
+        nextNumber(db),
       ],
     );
     const saleId = db.lastInsertId();
@@ -255,8 +273,8 @@ export function createReturn(db: SqlDriver, input: SaleInput): Id {
 
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          customer_id, note, staff_id, created_at)
-       VALUES (?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+                          customer_id, note, staff_id, created_at, number)
+       VALUES (?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
         payment,
@@ -266,6 +284,7 @@ export function createReturn(db: SqlDriver, input: SaleInput): Id {
         input.note?.trim() || null,
         currentStaffId(db),
         now,
+        nextNumber(db),
       ],
     );
     const saleId = db.lastInsertId();

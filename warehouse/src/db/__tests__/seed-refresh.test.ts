@@ -1,5 +1,7 @@
 import { createTestDriver } from '../testDriver';
 import type { SqlDriver } from '../driver';
+import { createProduct } from '../products';
+import { createSale } from '../sales';
 import {
   SEED_STAMP,
   loadedSeedStamp,
@@ -92,5 +94,93 @@ describe('обновление поставляемых данных', () => {
     seedCatalog(db);
 
     expect(named()).toBe(before);
+  });
+});
+
+/**
+ * Своя нумерация продолжает чужую.
+ *
+ * Перенесённые чеки принесли с собой номера CloudShop — до «#45868». Новый
+ * чек, пробитый на кассе, должен встать следующим, а не получить номер из
+ * середины: такой номер уже занят чеком трёхлетней давности, его не найти в
+ * кабинете и не назвать покупателю.
+ */
+describe('нумерация новых чеков', () => {
+  it('новый чек продолжает номера перенесённой истории', () => {
+    const db = createTestDriver();
+
+    const product = createProduct(db, {
+      name: 'Пиала бордовая 45 мл',
+      sku: null,
+      barcode: null,
+      unit: 'шт',
+      sale_price: 55000,
+      cost_price: 0,
+      category_id: null,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    // Так выглядит перенесённая история: у чеков стоят номера CloudShop, и
+    // они много больше внутренних номеров строк.
+    db.run(
+      `INSERT INTO sales (discount, total, cost_total, payment, created_at, number)
+       VALUES (0, 55000, 0, 'cash', '2026-08-19T09:00:00.000Z', 45868)`,
+    );
+
+    const id = createSale(db, {
+      lines: [
+        {
+          product_id: product,
+          name: 'Пиала бордовая 45 мл',
+          unit: 'шт',
+          stock: 0,
+          qty: 1000,
+          price: 55000,
+          cost_price: 0,
+        },
+      ],
+      allowNegative: true,
+    });
+
+    // Внутренний номер строки здесь — 2, и именно его чек получал раньше.
+    expect(id).toBeLessThan(45868);
+    expect(
+      db.get<{ number: number }>('SELECT number FROM sales WHERE id = ?', [id])?.number,
+    ).toBe(45869);
+  });
+
+  it('на пустой базе нумерация начинается с единицы', () => {
+    const db = createTestDriver();
+    const product = createProduct(db, {
+      name: 'Пиала',
+      sku: null,
+      barcode: null,
+      unit: 'шт',
+      sale_price: 55000,
+      cost_price: 0,
+      category_id: null,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    const id = createSale(db, {
+      lines: [
+        {
+          product_id: product,
+          name: 'Пиала',
+          unit: 'шт',
+          stock: 0,
+          qty: 1000,
+          price: 55000,
+          cost_price: 0,
+        },
+      ],
+      allowNegative: true,
+    });
+
+    expect(
+      db.get<{ number: number }>('SELECT number FROM sales WHERE id = ?', [id])?.number,
+    ).toBe(1);
   });
 });

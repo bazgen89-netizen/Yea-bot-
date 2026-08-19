@@ -1,5 +1,6 @@
 import { createTestDriver } from '../testDriver';
 import type { SqlDriver } from '../driver';
+import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
 import {
@@ -69,6 +70,36 @@ describe('обновление поставляемых данных', () => {
     expect(count('products')).toBe(products);
     expect(count('sales')).toBe(sales);
     expect(loadedSeedStamp(db)).toBe(SEED_STAMP);
+  });
+
+  it('очистка не спотыкается о связи между таблицами', () => {
+    // Ровно эта ошибка вышла у него при запуске: «Не удалось открыть
+    // исходные данные. Нарушено ограничение внешнего ключа». Смена
+    // ссылается на кассу, а кассы стирались раньше смен — и файл не
+    // открывался вовсе.
+    db.exec('PRAGMA foreign_keys = ON;');
+    seedCatalog(db);
+
+    const location = ensureLocation(db, 'Черёмушки');
+    db.run('INSERT INTO registers (name, location_id, created_at) VALUES (?, ?, ?)', [
+      'Касса — Черёмушки',
+      location,
+      '2026-08-19T09:00:00.000Z',
+    ]);
+    const register = db.lastInsertId();
+    db.run('INSERT INTO shifts (register_id, opened_at, created_at) VALUES (?, ?, ?)', [
+      register,
+      '2026-08-19T09:00:00.000Z',
+      '2026-08-19T09:00:00.000Z',
+    ]);
+
+    expect(() => resetSeed(db)).not.toThrow();
+    expect(count('shifts')).toBe(0);
+    expect(count('registers')).toBe(0);
+
+    // И после очистки связи снова включены — иначе база молча наберёт
+    // висячих ссылок.
+    expect(db.get<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
   });
 
   it('очистка снимает отметки, иначе следующий проход ничего не заведёт', () => {

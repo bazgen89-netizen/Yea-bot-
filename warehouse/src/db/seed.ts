@@ -458,40 +458,60 @@ export function rememberSeedStamp(db: SqlDriver): void {
  * иначе ссылки повисают.
  */
 export function resetSeed(db: SqlDriver): void {
-  db.tx(() => {
-    for (const table of [
-      'sale_items',
-      'sales',
-      'stock_moves',
-      'doc_payments',
-      'doc_lines',
-      'docs',
-      'money_docs',
-      'debt_payments',
-      'held_receipts',
-      'reco_items',
-      'reco_lists',
-      'product_set_items',
-      'product_packs',
-      'product_prices',
-      'product_categories',
-      'products',
-      'categories',
-      'counterparties',
-      'registers',
-      'shifts',
-      'locations',
-    ]) {
-      db.run(`DELETE FROM ${table}`);
-    }
+  // Связи между таблицами на время очистки снимаем.
+  //
+  // Иначе порядок удаления становится головоломкой, а цена ошибки — «Не
+  // удалось открыть исходные данные. Нарушено ограничение внешнего ключа»
+  // при запуске программы. Ровно это и вышло: смена ссылается на кассу, а
+  // кассы я стирал раньше смен, — и файл не открывался вовсе.
+  //
+  // Снимать надо **снаружи** транзакции: внутри неё `PRAGMA foreign_keys`
+  // молча ничего не делает, и защита осталась бы включённой.
+  //
+  // Опасности в этом нет: стираются все таблицы разом, и висячих ссылок
+  // после очистки не остаётся — их не на что оставлять.
+  db.exec('PRAGMA foreign_keys = OFF;');
 
-    // Отметки о том, что часть уже заведена, снимаются вместе с данными:
-    // иначе следующий проход снова ничего не сделает.
-    db.run(
-      `DELETE FROM app_state
-        WHERE key IN ('catalog_seeded', 'clients_seeded', 'registers_seeded', 'history_seeded')`,
-    );
-  });
+  try {
+    db.tx(() => {
+      // Порядок всё равно от зависимых к главным: если проверку однажды
+      // не выйдет снять, очистка должна пройти и так.
+      for (const table of [
+        'sale_items',
+        'doc_payments',
+        'doc_lines',
+        'reco_items',
+        'reco_lists',
+        'product_set_items',
+        'product_packs',
+        'product_prices',
+        'product_categories',
+        'debt_payments',
+        'held_receipts',
+        'money_docs',
+        'stock_moves',
+        'sales',
+        'docs',
+        'shifts',
+        'registers',
+        'products',
+        'categories',
+        'counterparties',
+        'locations',
+      ]) {
+        db.run(`DELETE FROM ${table}`);
+      }
+
+      // Отметки о том, что часть уже заведена, снимаются вместе с данными:
+      // иначе следующий проход снова ничего не сделает.
+      db.run(
+        `DELETE FROM app_state
+          WHERE key IN ('catalog_seeded', 'clients_seeded', 'registers_seeded', 'history_seeded')`,
+      );
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 
   // Соответствие «клиент CloudShop → наш» собрано для стёртых карточек и
   // теперь ведёт в никуда. Не очистить его — и вся история легла бы на

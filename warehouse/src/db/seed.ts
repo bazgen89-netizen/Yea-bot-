@@ -414,6 +414,88 @@ function seedClients(db: SqlDriver): void {
 /** Сколько позиций и карточек в поставляемых данных — для сообщений и тестов. */
 export const SEED_PRODUCTS = (CATALOG as SeedProduct[]).length;
 export const SEED_CLIENTS = (CLIENTS as SeedClient[]).length;
+export const SEED_SALES = (SALES as SeedSale[]).length;
+
+/**
+ * Подпись поставляемых данных: «590:3206:45765».
+ *
+ * Нужна, чтобы новый файл программы **привозил** новые данные, а не делал
+ * вид. Каждая часть наполнения помечается в `app_state` и второй раз не
+ * заводится — иначе повторный запуск задваивал бы каталог. Но у этой защиты
+ * есть обратная сторона: когда приходит файл со свежей выгрузкой, браузер
+ * открывает его со старой базой, отметки уже стоят, и ничего не грузится.
+ * Снаружи это выглядит так, будто перенос не сработал.
+ *
+ * Подпись меняется вместе с данными — по ней сборка со своими данными
+ * понимает, что выгрузка другая, и заводит её заново.
+ */
+export const SEED_STAMP = `${SEED_PRODUCTS}:${SEED_CLIENTS}:${SEED_SALES}`;
+
+/** Ключ, под которым подпись лежит в базе. */
+const STAMP_KEY = 'seed_stamp';
+
+/** Какая выгрузка сейчас в базе. `null` — наполнения ещё не было. */
+export function loadedSeedStamp(db: SqlDriver): string | null {
+  const row = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [STAMP_KEY]);
+  return row?.value ?? null;
+}
+
+export function rememberSeedStamp(db: SqlDriver): void {
+  db.run('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)', [STAMP_KEY, SEED_STAMP]);
+}
+
+/**
+ * Стереть всё, что завело наполнение, — чтобы завести заново.
+ *
+ * Вызывается **только** в сборке, которая везёт данные с собой: там вся база
+ * и есть эта выгрузка, и заменить её целиком честнее, чем сличать построчно.
+ * В обычной установке этого не происходит никогда — там наполнение
+ * запускают руками и один раз.
+ *
+ * Таблицы чистятся от зависимых к главным: сначала строки чеков, потом чеки,
+ * иначе ссылки повисают.
+ */
+export function resetSeed(db: SqlDriver): void {
+  db.tx(() => {
+    for (const table of [
+      'sale_items',
+      'sales',
+      'stock_moves',
+      'doc_payments',
+      'doc_lines',
+      'docs',
+      'money_docs',
+      'debt_payments',
+      'held_receipts',
+      'reco_items',
+      'reco_lists',
+      'product_set_items',
+      'product_packs',
+      'product_prices',
+      'product_categories',
+      'products',
+      'categories',
+      'counterparties',
+      'registers',
+      'shifts',
+      'locations',
+    ]) {
+      db.run(`DELETE FROM ${table}`);
+    }
+
+    // Отметки о том, что часть уже заведена, снимаются вместе с данными:
+    // иначе следующий проход снова ничего не сделает.
+    db.run(
+      `DELETE FROM app_state
+        WHERE key IN ('catalog_seeded', 'clients_seeded', 'registers_seeded', 'history_seeded')`,
+    );
+  });
+
+  // Соответствие «клиент CloudShop → наш» собрано для стёртых карточек и
+  // теперь ведёт в никуда. Не очистить его — и вся история легла бы на
+  // случайные номера.
+  cloudCustomers.clear();
+}
 
 /**
  * История покупок из CloudShop.

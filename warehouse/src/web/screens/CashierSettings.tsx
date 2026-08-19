@@ -13,6 +13,8 @@ import {
   type CategoryView,
 } from '../../db/categories';
 import { POS_DEFAULTS, type PosSettings } from '../../db/posSettings';
+import { findByBarcode } from '../../db/products';
+import { parseMarking } from '../../domain/marking';
 import { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode } from '../../i18n/languages';
 import { useLanguage } from '../../state/LanguageProvider';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -241,16 +243,7 @@ export function CashierSettings() {
           {/* Что лежит в остальных трёх разделах, я не видел: на снимках
               открыты только «Основные». Придумывать их содержимое не стану —
               лучше пустой раздел с честной строкой, чем выдуманный. */}
-          {section === 'hardware' ? (
-            <>
-              <Text style={styles.title}>Оборудование</Text>
-              <Note>
-                Сканер штрихкодов уже работает — касса принимает его как клавиатуру, настраивать
-                нечего. Что в этом разделе у CloudShop (весы, терминал, денежный ящик), я не
-                видел: пришлите снимок — сделаю.
-              </Note>
-            </>
-          ) : null}
+          {section === 'hardware' ? <Hardware /> : null}
 
           {section === 'categories' ? <Categories /> : null}
 
@@ -337,6 +330,161 @@ export function CashierSettings() {
 
 /** Своя версия, а не их 4.0.1: подписывать чужой номер было бы неправдой. */
 const VERSION = '1.0.0';
+
+/**
+ * «Оборудование» — три карточки, как у него.
+ *
+ * Первая рассказывает про приложение для Windows, вторая собирает
+ * безналичные приёмы оплаты, третья проверяет железо. Порядок и подписи — с
+ * его экрана; отличие одно и важное: там, где у него подключение работает, а
+ * у нас нет, кнопка честно об этом говорит, а не притворяется рабочей.
+ */
+function Hardware() {
+  const { db } = useDatabase();
+
+  /** Что отсканировали в поля проверки. */
+  const [barcode, setBarcode] = useState('');
+  const [marking, setMarking] = useState('');
+
+  const found = useQuery(
+    (database) => (barcode.trim() ? findByBarcode(database, barcode.trim()) : null),
+    [barcode],
+  );
+  const parsed = parseMarking(marking);
+  const byGtin = useQuery(
+    (database) => (parsed.gtin ? findByBarcode(database, parsed.gtin.replace(/^0+/, '')) : null),
+    [parsed.gtin],
+  );
+  void db;
+
+  return (
+    <>
+      {/* Карточка первая: возможности приложения для Windows. */}
+      <View style={styles.hwCard}>
+        <Text style={styles.hwTitle}>Возможности Windows кассы</Text>
+        <Text style={styles.hwLine}>Подключение ККТ АТОЛ</Text>
+        <Text style={styles.hwLine}>Подключение весов МАССА-К и CAS</Text>
+        <Text style={styles.hwLine}>
+          Подключение 2D сканеров штрих-кодов для считывания кодов маркировки
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: true }}
+          disabled
+          style={styles.hwButton}
+        >
+          <Text style={styles.hwButtonLabel}>СКАЧАТЬ ПРИЛОЖЕНИЕ WINDOWS КАССЫ</Text>
+        </Pressable>
+        <Text style={styles.hwCaption}>Windows 7 64-bit и более новые</Text>
+
+        <Note>
+          Отдельного приложения для Windows у нас пока нет: касса работает в браузере, и
+          сканер она уже принимает — он печатает как клавиатура. Фискальный регистратор и
+          весы требуют программы, которая говорит с ними по кабелю.
+        </Note>
+      </View>
+
+      {/* Карточка вторая: безналичные. */}
+      <View style={styles.hwCard}>
+        <Text style={styles.hwHeading}>Безналичные</Text>
+
+        {['Яндекс Пэй', 'Сбербанк', 'Альфа-Банк', 'Mertech QR'].map((name) => (
+          <Integration key={name} name={name} />
+        ))}
+      </View>
+
+      {/* Карточка третья: проверка железа. */}
+      <View style={styles.hwCard}>
+        <Text style={styles.hwHeading}>Диагностика оборудования</Text>
+
+        <Text style={styles.hwSub}>Сканер штрих-кодов</Text>
+        <Text style={styles.hwHint}>Отсканируйте код для проверки</Text>
+
+        <Text style={styles.hwLabel}>Штрих-код:</Text>
+        {/* Значок внутри поля — как у него: слева от места ввода. */}
+        <View style={styles.hwField}>
+          <WebIcon.info size={20} color={pos.bar} />
+          <TextInput
+            value={barcode}
+            onChangeText={setBarcode}
+            accessibilityLabel="Штрих-код"
+            style={styles.hwInput}
+          />
+        </View>
+        {barcode.trim() ? (
+          <Text style={styles.hwResult}>
+            {found ? `Нашёлся товар: ${found.name}` : 'Такого штрих-кода в справочнике нет'}
+          </Text>
+        ) : null}
+
+        <Text style={styles.hwLabel}>Маркировка:</Text>
+        <View style={styles.hwField}>
+          <WebIcon.barcode size={20} color={pos.bar} />
+          <TextInput
+            value={marking}
+            onChangeText={setMarking}
+            accessibilityLabel="Маркировка"
+            style={styles.hwInput}
+          />
+        </View>
+        {marking.trim() ? (
+          <Text style={styles.hwResult}>
+            {parsed.gtin
+              ? `Код товара: ${parsed.gtin}` +
+                (parsed.serial ? ` · номер экземпляра: ${parsed.serial}` : '') +
+                (byGtin ? ` · это «${byGtin.name}»` : '')
+              : 'Это не код маркировки: в нём нет поля 01 с кодом товара'}
+          </Text>
+        ) : null}
+
+        <Text style={styles.hwSub}>Весы</Text>
+        <Text style={styles.hwHint}>Положите товар на весы</Text>
+        <View style={[styles.hwField, styles.hwFieldOff]}>
+          <WebIcon.scales size={20} color={pos.muted} />
+          <Text style={styles.hwFieldOffLabel}>Весы не подключены</Text>
+        </View>
+        <Note>
+          Весы касса в браузере не слышит: чтобы читать вес, нужен доступ к кабелю — либо
+          программа для Windows, либо весы с сетевым выходом. Скажите, какие у вас стоят
+          (МАССА-К, CAS, модель) — посмотрю, что из этого можно сделать.
+        </Note>
+      </View>
+    </>
+  );
+}
+
+/** Плашка «Требуется настройка» — по одной на каждый приём оплаты. */
+function Integration({ name }: { name: string }) {
+  return (
+    <>
+      <Text style={styles.hwSub}>Интеграция {name}</Text>
+      <View style={styles.warn}>
+        <View style={styles.warnHead}>
+          <Text style={styles.warnGlyph}>⚠</Text>
+          <Text style={styles.warnTitle}>Требуется настройка</Text>
+        </View>
+        <Text style={styles.warnText}>
+          Для приема платежей через {name} необходимо создать интеграцию.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            say(
+              `Интеграция ${name}`,
+              'Подключение делается не в программе: сперва договор и ключи от ' +
+                'самой службы. Пришлите ключи — заведу приём оплаты, и кнопка ' +
+                'станет рабочей.',
+            )
+          }
+          style={styles.warnButton}
+        >
+          <Text style={styles.warnButtonLabel}>⊕ СОЗДАТЬ ИНТЕГРАЦИЮ</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+}
 
 /**
  * «Категории» — как они выглядят на витрине.
@@ -792,6 +940,83 @@ const styles = StyleSheet.create({
   fieldUnit: { fontFamily: pos.font, fontSize: 13, color: pos.muted },
 
   note: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 8, lineHeight: 20 },
+
+  // Раздел «Оборудование»: три карточки, у каждой своя рамка.
+  hwCard: {
+    backgroundColor: pos.tile,
+    borderWidth: 1,
+    borderColor: pos.border,
+    borderRadius: 6,
+    padding: 24,
+    marginBottom: 16,
+  },
+  hwTitle: {
+    fontFamily: pos.font,
+    fontSize: 18,
+    fontWeight: '700',
+    color: pos.text,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  hwHeading: { fontFamily: pos.font, fontSize: 22, color: pos.text, marginBottom: 16 },
+  hwLine: { fontFamily: pos.font, fontSize: 15, color: pos.text, marginBottom: 10 },
+  hwButton: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingHorizontal: 24,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pos.bar,
+    borderRadius: 4,
+    // Кнопка видна, но не нажимается: приложения для Windows у нас нет.
+    opacity: 0.5,
+  },
+  hwButtonLabel: { fontFamily: pos.font, fontSize: 14, color: '#FFFFFF', letterSpacing: 0.4 },
+  hwCaption: {
+    fontFamily: pos.font,
+    fontSize: 13,
+    color: pos.muted,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  hwSub: { fontFamily: pos.font, fontSize: 17, color: pos.text, marginTop: 20, marginBottom: 4 },
+  hwHint: { fontFamily: pos.font, fontSize: 14, color: pos.muted, marginBottom: 12 },
+  hwLabel: { fontFamily: pos.font, fontSize: 14, color: pos.text, marginTop: 12, marginBottom: 6 },
+  hwField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 46,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: pos.bar,
+    borderRadius: 4,
+    fontFamily: pos.font,
+    fontSize: 15,
+    color: pos.text,
+    outlineWidth: 0,
+    justifyContent: 'center',
+  },
+  hwInput: {
+    flex: 1,
+    fontFamily: pos.font,
+    fontSize: 15,
+    color: pos.text,
+    outlineWidth: 0,
+  },
+  hwFieldOff: { borderColor: pos.border },
+  hwFieldOffLabel: { fontFamily: pos.font, fontSize: 15, color: pos.muted },
+  hwResult: { fontFamily: pos.font, fontSize: 13, color: pos.muted, marginTop: 6 },
+
+  // Жёлтая плашка «Требуется настройка».
+  warn: { backgroundColor: '#FDF3E3', borderRadius: 4, padding: 16, marginBottom: 8 },
+  warnHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  warnGlyph: { fontSize: 16, color: '#ED6C02' },
+  warnTitle: { fontFamily: pos.font, fontSize: 15, color: '#8A5A00' },
+  warnText: { fontFamily: pos.font, fontSize: 14, color: '#6B4E16', lineHeight: 20 },
+  warnButton: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 6 },
+  warnButtonLabel: { fontFamily: pos.font, fontSize: 14, color: pos.bar, letterSpacing: 0.3 },
 
   // Раздел «Категории».
   //

@@ -308,6 +308,11 @@ export const WebIcon = {
     <MaterialCommunityIcons name="drag" size={p.size ?? 22} color={p.color} />
   ),
 
+  /** Весы — в диагностике оборудования. */
+  scales: (p: Props) => (
+    <MaterialCommunityIcons name="scale-balance" size={p.size ?? 22} color={p.color} />
+  ),
+
   /** Часы со стрелкой назад — «Отложить чек», как у него `history`. */
   history: (p: Props) => (
     <MaterialCommunityIcons name="history" size={p.size ?? 22} color={p.color} />

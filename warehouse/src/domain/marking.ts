@@ -103,3 +103,65 @@ export function barcodeFromCode(code: string): string | null {
 
   return body + String((10 - (sum % 10)) % 10);
 }
+
+/** Что удалось прочитать в коде маркировки. */
+export interface Marking {
+  /** Код товара по GS1 — четырнадцать цифр. */
+  gtin: string | null;
+  /** Серийный номер экземпляра: он у каждой пачки свой. */
+  serial: string | null;
+  /** Криптохвост — проверочный код Честного знака. */
+  check: string | null;
+}
+
+/**
+ * Разбор кода маркировки — того, что печатают квадратиком DataMatrix.
+ *
+ * Внутри не одна строка, а несколько полей подряд, каждое со своим номером:
+ * `01` — код товара, `21` — серийный номер, `91`–`93` — проверочный код.
+ * Разделяются они невидимым знаком GS (U+001D); сканер отдаёт его как есть.
+ *
+ * Разбираем ровно те поля, которые показывает диагностика оборудования: по
+ * коду товара видно, что за товар, по серийному — что пачка не повторяется.
+ * Остальные поля пропускаем: угадывать их длину без справочника нельзя.
+ */
+export function parseMarking(code: string): Marking {
+  const clean = code.trim();
+  const result: Marking = { gtin: null, serial: null, check: null };
+  if (!clean) return result;
+
+  const GS = '\u001d';
+  // Поля с заранее известной длиной: их сканер не отделяет разделителем,
+  // они просто идут подряд. Остальные тянутся до GS или до конца строки.
+  const FIXED: Record<string, number> = { '01': 14, '11': 6, '13': 6, '17': 6, '7003': 10 };
+
+  let at = 0;
+  while (at < clean.length) {
+    if (clean[at] === GS) {
+      at++;
+      continue;
+    }
+
+    const ai = clean.slice(at, at + 2);
+    if (!/^\d{2}$/.test(ai)) break;
+
+    at += 2;
+    const fixed = FIXED[ai];
+    let value: string;
+
+    if (fixed) {
+      value = clean.slice(at, at + fixed);
+      at += fixed;
+    } else {
+      const end = clean.indexOf(GS, at);
+      value = clean.slice(at, end === -1 ? undefined : end);
+      at = end === -1 ? clean.length : end;
+    }
+
+    if (ai === '01' && /^\d{14}$/.test(value)) result.gtin = value;
+    if (ai === '21') result.serial = value.slice(0, 20);
+    if (ai === '91' || ai === '92' || ai === '93') result.check = value.slice(0, 88);
+  }
+
+  return result;
+}

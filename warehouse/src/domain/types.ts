@@ -134,6 +134,8 @@ export interface Counterparty {
 export interface CounterpartyWithTotals extends Counterparty {
   /** Сумма всех покупок, копейки. */
   purchases: Kopecks;
+  /** Сколько по этим покупкам осталось за ним, копейки. */
+  debt_sales: Kopecks;
   /** Сколько чеков пробито. */
   receipts: number;
   /** Дата последней покупки или null. */

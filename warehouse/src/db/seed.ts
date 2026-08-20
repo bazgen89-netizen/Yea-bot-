@@ -577,18 +577,61 @@ function seedHistory(db: SqlDriver): void {
   );
 
   db.tx(() => {
+    /**
+     * Товар, которого в справочнике уже нет, — заводим в архив.
+     *
+     * Раньше строка с таким товаром выбрасывалась, а чек, где все строки
+     * такие, не заводился вовсе. Из-за этого у клиента вместо шестнадцати
+     * покупок оказывалось четырнадцать, а сумма не сходилась с кабинетом —
+     * ровно на те чеки, где куплено что-то давно снятое с продажи.
+     *
+     * Позиция заводится архивной: в справочнике и на витрине её не видно,
+     * продать её нельзя, а история остаётся целой. Так же поступает и
+     * CloudShop: в карточке клиента такие товары показаны наравне с
+     * остальными.
+     */
+    const gone = new Map<string, number>();
+    const now = new Date().toISOString();
+
+    const missingProduct = (code: string, name: string | null, price: number): number => {
+      const known = gone.get(code);
+      if (known !== undefined) return known;
+
+      const title = name?.trim() || `Товар ${code}`;
+      db.run(
+        `INSERT INTO products
+           (name, sku, code, barcode, category_id, unit, cost_price, sale_price, min_qty,
+            discount_bp, photo_uri, created_at, search_text, archived)
+         VALUES (?, NULL, ?, NULL, NULL, 'шт', 0, ?, 0, 0, NULL, ?, ?, 1)`,
+        [title, code, price, now, `${title} ${code}`.toLowerCase()],
+      );
+
+      const id = db.lastInsertId();
+      gone.set(code, id);
+      return id;
+    };
+
     for (const sale of sales) {
-      const lines = sale.ln
-        .map((line) => ({ line, product: line.code ? byCode.get(line.code) : undefined }))
-        .filter((row): row is { line: SeedSale['ln'][number]; product: { id: number; cost: number } } =>
-          Boolean(row.product),
-        );
+      const lines = sale.ln.map((line) => {
+        const found = line.code ? byCode.get(line.code) : undefined;
+        if (found) return { line, product: found };
 
-      // Чек, в котором не нашлось ни одного товара, не заводим: пустая
-      // строка в истории ничего не рассказывает, а в отчётах мешает.
-      if (lines.length === 0) continue;
+        // Кода нет вовсе — брать нечего: такую строку пропускаем, но чек
+        // всё равно заведём, у него есть итог.
+        if (!line.code) return null;
 
-      const cost = lines.reduce(
+        return {
+          line,
+          product: { id: missingProduct(line.code, line.n ?? null, line.p ?? 0), cost: 0 },
+        };
+      });
+
+      const kept = lines.filter(
+        (row): row is { line: SeedSale['ln'][number]; product: { id: number; cost: number } } =>
+          row !== null,
+      );
+
+      const cost = kept.reduce(
         (sum, row) => sum + Math.round((row.product.cost * (row.line.q ?? 0)) / 1000),
         0,
       );
@@ -620,7 +663,7 @@ function seedHistory(db: SqlDriver): void {
       );
       const saleId = db.lastInsertId();
 
-      for (const { line, product } of lines) {
+      for (const { line, product } of kept) {
         db.run(
           `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
            VALUES (?, ?, ?, ?, ?)`,

@@ -16,6 +16,9 @@ function selectParties(where: string[], params: SqlParam[], order = 'p.name COLL
     sql: `
       SELECT p.*,
              COALESCE(SUM(s.total), 0) AS purchases,
+             -- Сколько за ним осталось: долг живёт в самом чеке, отдельной
+             -- колонкой, и складывается тем же соединением, что и покупки.
+             COALESCE(SUM(s.debt), 0)  AS debt_sales,
              COUNT(s.id)               AS receipts,
              MAX(s.created_at)         AS last_sale_at,
              -- Возвраты и деньги — подзапросами, а не ещё двумя соединениями:

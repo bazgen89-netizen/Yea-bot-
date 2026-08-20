@@ -15,8 +15,10 @@ import {
   type Requisite,
 } from '../../db/counterparties';
 import { entryTitle, listJournal, type JournalEntry } from '../../db/journal';
+import { receiptLines } from '../../db/receipts';
 import { getSettings } from '../../db/settings';
 import { formatMoneyWeb } from '../../domain/money';
+import { formatQty } from '../../domain/qty';
 import type { CounterpartyWithTotals, Id, PartyKind } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
@@ -47,6 +49,24 @@ import { FORM_BORDER, web, WEB_FONT } from '../../ui/webTheme';
  */
 
 /**
+ * Строка статистики: подпись, точки до края, число справа.
+ *
+ * Точки не украшение: колонок две, числа разной длины, и без них глаз теряет,
+ * какое число к какой подписи. У него ровно так же.
+ */
+function StatLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <View style={styles.statLine}>
+      <Text style={[styles.statLineLabel, strong && styles.statStrong]} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={styles.statDots} />
+      <Text style={[styles.statLineValue, strong && styles.statStrong]}>{value}</Text>
+    </View>
+  );
+}
+
+/**
  * Одна операция в истории клиента — карточкой, как у него.
  *
  * Строка «дата, название, сумма» отвечала только на «сколько». А спрашивают
@@ -56,6 +76,15 @@ import { FORM_BORDER, web, WEB_FONT } from '../../ui/webTheme';
  */
 function HistoryCard({ entry, party }: { entry: JournalEntry; party: string }) {
   const refund = entry.kind === 'refund' || entry.kind === 'sale_return';
+  const [open, setOpen] = useState(false);
+
+  // Позиции читаются только когда чек раскрыли: у клиента их восемьдесят, и
+  // тянуть строки всех сразу — это восемьдесят запросов на открытие карточки.
+  const sale = entry.kind === 'sale' || entry.kind === 'refund';
+  const lines = useQuery(
+    (database) => (open && sale ? receiptLines(database, entry.id) : []),
+    [open, sale, entry.id],
+  );
 
   // Кто кому: у продажи товар уходит из магазина клиенту, у возврата наоборот.
   const from = entry.sender ?? '—';
@@ -87,10 +116,43 @@ function HistoryCard({ entry, party }: { entry: JournalEntry; party: string }) {
             ? '✓  Документ оплачен'
             : '•  Документ не оплачен'}
         </Text>
-        <Text style={styles.opPositions}>
-          {entry.positions} {plural(entry.positions, 'позиция', 'позиции', 'позиций')}
-        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen(!open)}
+          style={styles.opPositionsRow}
+        >
+          <Text style={styles.opPositions}>
+            {entry.positions} {plural(entry.positions, 'позиция', 'позиции', 'позиций')}
+          </Text>
+          <Text style={styles.opChevron}>{open ? '⌃' : '⌄'}</Text>
+        </Pressable>
       </View>
+
+      {open ? (
+        <View style={styles.itemsTable}>
+          <View style={[styles.itemsRow, styles.itemsHead]}>
+            <Text style={[styles.itemsName, styles.itemsHeadText]}>Наименование</Text>
+            <Text style={[styles.itemsCell, styles.itemsHeadText]}>Кол-во</Text>
+            <Text style={[styles.itemsCell, styles.itemsHeadText]}>Цена</Text>
+            <Text style={[styles.itemsCell, styles.itemsHeadText]}>Итог</Text>
+          </View>
+
+          {lines.map((line, index) => (
+            <View key={`${line.name}${index}`} style={styles.itemsRow}>
+              <Text style={styles.itemsName}>{line.name}</Text>
+              <Text style={styles.itemsCell}>{formatQty(line.qty)}</Text>
+              <Text style={styles.itemsCell}>{formatMoneyWeb(line.price)}</Text>
+              <Text style={styles.itemsCell}>{formatMoneyWeb(line.total)}</Text>
+            </View>
+          ))}
+
+          {lines.length === 0 ? (
+            <Text style={styles.itemsEmpty}>Строк по этому документу нет</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -325,22 +387,33 @@ function PartyView({ party }: { party: CounterpartyWithTotals }) {
       ) : null}
 
       <Divider>Статистика</Divider>
-      <View style={styles.stats}>
-        <Stat label="Покупки" value={formatMoneyWeb(party.purchases)} note={`${party.receipts} чеков`} />
-        <Stat
-          label="Возвраты"
-          value={formatMoneyWeb(party.returns_sum)}
-          note={`${party.returns} шт`}
-        />
-        <Stat label="Приход денег" value={formatMoneyWeb(party.debit_sum)} />
-        <Stat label="Расход денег" value={formatMoneyWeb(party.credit_sum)} />
-        {party.kind !== 'customer' ? (
-          <Stat
-            label="Закупки"
-            value={formatMoneyWeb(party.purchases_sum)}
-            note={`${party.purchases_count} документов`}
+      {/* Двумя колонками с точками до числа — как у него. Слева всё про
+          продажи, справа про возвраты и деньги: так пара «продал / вернул»
+          читается строкой, а не поиском по экрану. */}
+      <View style={styles.statTable}>
+        <View style={styles.statColumn}>
+          <StatLine label="Долг по продажам" value={formatMoneyWeb(party.debt_sales)} strong />
+          <StatLine label="Кол-во продаж" value={String(party.receipts)} />
+          <StatLine label="Сумма продаж" value={formatMoneyWeb(party.purchases)} />
+          <StatLine label="Сумма приходов" value={formatMoneyWeb(party.debit_sum + party.purchases)} />
+          <StatLine
+            label="Средний чек"
+            value={formatMoneyWeb(party.receipts ? Math.round(party.purchases / party.receipts) : 0)}
+            strong
           />
-        ) : null}
+        </View>
+
+        <View style={styles.statColumn}>
+          <StatLine label="Долг по возвратам" value={formatMoneyWeb(0)} strong />
+          <StatLine label="Количество возвратов продаж" value={String(party.returns)} />
+          <StatLine label="Сумма возвратов продаж" value={formatMoneyWeb(party.returns_sum)} />
+          <StatLine label="Сумма расходов" value={formatMoneyWeb(party.credit_sum)} />
+          <StatLine
+            label="Баланс"
+            value={formatMoneyWeb(party.debit_sum - party.credit_sum)}
+            strong
+          />
+        </View>
       </View>
 
       <Divider>Последние операции</Divider>
@@ -930,6 +1003,27 @@ const styles = StyleSheet.create({
   historyLabel: { fontFamily: WEB_FONT, fontSize: 13, color: web.text },
   historyLabelOn: { color: web.link },
 
+  statTable: { flexDirection: 'row', gap: 40 },
+  statColumn: { flex: 1, gap: 10 },
+  statLine: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  statLineLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  // Точки — нижней границей пустой растяжки: так они всегда доходят ровно
+  // до числа, какой бы длины ни были подпись и сумма.
+  statDots: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: FORM_BORDER,
+    borderStyle: 'dotted',
+    marginBottom: 4,
+  },
+  statLineValue: {
+    fontFamily: WEB_FONT,
+    fontSize: 14,
+    color: web.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statStrong: { fontWeight: '700' },
+
   historyDay: {
     fontFamily: WEB_FONT,
     fontSize: 20,
@@ -966,7 +1060,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   opPaid: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
-  opPositions: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+  opPositionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  opPositions: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+  opChevron: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
+
+  itemsTable: { marginTop: 10, borderTopWidth: 1, borderTopColor: FORM_BORDER },
+  itemsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: FORM_BORDER,
+  },
+  itemsHead: { backgroundColor: web.tableHead },
+  itemsHeadText: { color: web.textMuted },
+  itemsName: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.link, paddingLeft: 8 },
+  itemsCell: {
+    width: 90,
+    textAlign: 'right',
+    fontFamily: WEB_FONT,
+    fontSize: 13,
+    color: web.text,
+    fontVariant: ['tabular-nums'],
+  },
+  itemsEmpty: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted, padding: 10 },
 
   historyRow: {
     flexDirection: 'row',

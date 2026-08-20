@@ -5,7 +5,7 @@ import { createMoneyDoc } from '../money';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
 import { REPORTS, reportById } from '../reportTypes';
-import { periodFor, salesSummary, stockQty } from '../reports';
+import { dailySales, hourlySales, periodFor, salesSummary, stockQty } from '../reports';
 import { postDoc } from '../stock';
 import { groupByMonth, groupByWeek } from '../../domain/grouping';
 import type { CartLine } from '../../domain/types';
@@ -176,5 +176,63 @@ describe('показатели по магазину', () => {
     expect(stockQty(db)).toBe(-3000);
     expect(stockQty(db, first)).toBe(-2000);
     expect(stockQty(db, second)).toBe(-1000);
+  });
+});
+
+/**
+ * Сутки и часы — по времени магазина, а не по Гринвичу.
+ *
+ * Он сказал «данные не верные». И был прав: чек, пробитый в половине первого
+ * ночи, по Гринвичу помечен половиной десятого **вчерашнего** вечера — и
+ * уезжал во вчерашнюю выручку. А график часов показывал семь утра там, где
+ * торговали в десять.
+ */
+describe('сутки по времени магазина', () => {
+  const MOSCOW = 180;
+
+  it('ночной чек остаётся в своём дне, а не уезжает во вчерашний', () => {
+    const db = createTestDriver();
+
+    const product = createProduct(db, {
+      name: 'Пиала',
+      sku: null,
+      barcode: null,
+      unit: 'шт',
+      sale_price: 50000,
+      cost_price: 0,
+      category_id: null,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    // 20 августа, 00:30 в Нижнем — это 19 августа, 21:30 по Гринвичу.
+    db.run(
+      `INSERT INTO sales (discount, total, cost_total, payment, created_at)
+       VALUES (0, 50000, 0, 'cash', '2026-08-19T21:30:00.000Z')`,
+    );
+    // 19 августа, 22:30 в Нижнем — 19 августа, 19:30 по Гринвичу.
+    db.run(
+      `INSERT INTO sales (discount, total, cost_total, payment, created_at)
+       VALUES (0, 30000, 0, 'cash', '2026-08-19T19:30:00.000Z')`,
+    );
+
+    const wide = { from: '2026-08-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' };
+    const days = dailySales(db, wide, null, MOSCOW);
+
+    const at = (day: string) => days.find((point) => point.day === day)?.revenue ?? 0;
+
+    expect(at('2026-08-19')).toBe(30000);
+    expect(at('2026-08-20')).toBe(50000);
+
+    // По Гринвичу оба легли бы в 19-е — ровно так и было.
+    const byGreenwich = dailySales(db, wide, null, 0);
+    expect(byGreenwich.find((point) => point.day === '2026-08-19')?.revenue).toBe(80000);
+
+    // Часы тоже местные: 22 и 0, а не 19 и 21.
+    const hours = hourlySales(db, wide, null, MOSCOW).filter((point) => point.revenue > 0);
+    expect(hours.map((point) => point.day).sort()).toEqual(['00', '22']);
+
+    // Товар в проверке нужен, чтобы каталог не был пуст.
+    expect(product).toBeGreaterThan(0);
   });
 });

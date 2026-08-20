@@ -14,7 +14,7 @@ import {
   type PartyInput,
   type Requisite,
 } from '../../db/counterparties';
-import { listJournal } from '../../db/journal';
+import { entryTitle, listJournal, type JournalEntry } from '../../db/journal';
 import { getSettings } from '../../db/settings';
 import { formatMoneyWeb } from '../../domain/money';
 import type { CounterpartyWithTotals, Id, PartyKind } from '../../domain/types';
@@ -45,6 +45,105 @@ import { FORM_BORDER, web, WEB_FONT } from '../../ui/webTheme';
  * — **Последние операции** тремя вкладками: движение товара, движение денег,
  *   история бонусов.
  */
+
+/**
+ * Одна операция в истории клиента — карточкой, как у него.
+ *
+ * Строка «дата, название, сумма» отвечала только на «сколько». А спрашивают
+ * другое: где куплено, кем пробито, во сколько, оплачен ли документ и сколько
+ * в нём позиций. Всё это в чеке есть, и в его карточке всё это показано —
+ * значит, и здесь должно быть.
+ */
+function HistoryCard({ entry, party }: { entry: JournalEntry; party: string }) {
+  const refund = entry.kind === 'refund' || entry.kind === 'sale_return';
+
+  // Кто кому: у продажи товар уходит из магазина клиенту, у возврата наоборот.
+  const from = entry.sender ?? '—';
+  const to = entry.receiver ?? party;
+
+  return (
+    <View style={[styles.opCard, refund && styles.opCardBack]}>
+      <View style={styles.opHead}>
+        <Text style={styles.opTitle}>{entryTitle(entry)}</Text>
+        <Text style={styles.opAmount}>{formatMoneyWeb(entry.amount)} руб</Text>
+      </View>
+
+      <View style={styles.opRoute}>
+        <View style={[styles.opDot, refund && styles.opDotBack]} />
+        <Text style={styles.opRouteText} numberOfLines={1}>
+          Магазин <Text style={styles.opLink}>{from}</Text>
+          {'  ❯  '}
+          клиент <Text style={styles.opLink}>{to}</Text>
+        </Text>
+      </View>
+
+      <Text style={styles.opWhen}>
+        {[entry.author ?? entry.sender, when(entry.created_at)].filter(Boolean).join(' ')}
+      </Text>
+
+      <View style={styles.opFoot}>
+        <Text style={styles.opPaid}>
+          {entry.paid !== null && entry.paid >= entry.amount
+            ? '✓  Документ оплачен'
+            : '•  Документ не оплачен'}
+        </Text>
+        <Text style={styles.opPositions}>
+          {entry.positions} {plural(entry.positions, 'позиция', 'позиции', 'позиций')}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** «28 июля 10:27» — как подписаны операции у него. */
+function when(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${time}`;
+}
+
+const MONTHS = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
+/** «3 позиции», «5 позиций» — иначе подпись читается как ошибка. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 14) return many;
+  const last = n % 10;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+/**
+ * Операции по дням, новые сверху — с подписью «28 июля» над каждой стопкой.
+ *
+ * Без разделителей список из восьмидесяти чеков читается как лента цифр:
+ * непонятно, где кончается один день и начинается другой.
+ */
+function groupByDay(entries: JournalEntry[]): { day: string; entries: JournalEntry[] }[] {
+  const sorted = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const groups: { day: string; entries: JournalEntry[] }[] = [];
+  for (const entry of sorted) {
+    const date = new Date(entry.created_at);
+    const day = Number.isNaN(date.getTime())
+      ? ''
+      : `${date.getDate()} ${MONTHS[date.getMonth()]}${
+          date.getFullYear() === new Date().getFullYear() ? '' : ` ${date.getFullYear()}`
+        }`;
+
+    const last = groups[groups.length - 1];
+    if (last?.day === day) last.entries.push(entry);
+    else groups.push({ day, entries: [entry] });
+  }
+
+  return groups;
+}
 
 const KIND_LABEL: Record<PartyKind, string> = {
   customer: 'Клиент',
@@ -263,15 +362,12 @@ function PartyView({ party }: { party: CounterpartyWithTotals }) {
 
       {tab === 'documents' ? (
         rows.length ? (
-          rows.map((entry) => (
-            <View key={`${entry.kind}${entry.id}`} style={styles.historyRow}>
-              <Text style={styles.historyCell}>
-                {new Date(entry.created_at).toLocaleDateString('ru-RU')}
-              </Text>
-              <Text style={[styles.historyCell, styles.historyName]} numberOfLines={1}>
-                {entry.kind === 'sale' ? 'Продажа' : 'Документ'} #{entry.id}
-              </Text>
-              <Text style={styles.historyAmount}>{formatMoneyWeb(entry.amount)}</Text>
+          groupByDay(rows).map((group) => (
+            <View key={group.day}>
+              <Text style={styles.historyDay}>{group.day}</Text>
+              {group.entries.map((entry) => (
+                <HistoryCard key={`${entry.kind}${entry.id}`} entry={entry} party={party.name} />
+              ))}
             </View>
           ))
         ) : (
@@ -833,6 +929,44 @@ const styles = StyleSheet.create({
   historyTabOn: { backgroundColor: '#E8F4FD', borderColor: web.link },
   historyLabel: { fontFamily: WEB_FONT, fontSize: 13, color: web.text },
   historyLabelOn: { color: web.link },
+
+  historyDay: {
+    fontFamily: WEB_FONT,
+    fontSize: 20,
+    color: web.text,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  // Карточка операции: слева цветная полоса — синяя у продажи, красная у
+  // возврата. По ней видно, что это, не читая заголовка.
+  opCard: {
+    borderWidth: 1,
+    borderColor: FORM_BORDER,
+    borderLeftWidth: 4,
+    borderLeftColor: web.link,
+    borderRadius: 4,
+    padding: 14,
+    marginBottom: 10,
+  },
+  opCardBack: { borderLeftColor: web.danger },
+  opHead: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
+  opTitle: { flex: 1, fontFamily: WEB_FONT, fontSize: 17, color: web.link },
+  opAmount: { fontFamily: WEB_FONT, fontSize: 17, color: web.text },
+  opRoute: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  opDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: web.link },
+  opDotBack: { backgroundColor: web.danger },
+  opRouteText: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.text },
+  opLink: { color: web.link },
+  opWhen: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, marginTop: 3, marginLeft: 17 },
+  opFoot: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: FORM_BORDER,
+    gap: 6,
+  },
+  opPaid: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+  opPositions: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
 
   historyRow: {
     flexDirection: 'row',

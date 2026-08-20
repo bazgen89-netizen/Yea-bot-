@@ -46,6 +46,38 @@ function scopeSql(column: string, scope: Scope): string {
 }
 
 /**
+ * Сдвиг от Гринвича до времени магазина, словами SQLite: «+180 minutes».
+ *
+ * Время чека хранится по Гринвичу — так его отдаёт CloudShop и так пишет
+ * `toISOString`. А смотрит на него хозяин по-своему: чек, пробитый в
+ * 22:30 в Нижнем, по Гринвичу помечен 19:30 **того же** дня, а вот
+ * пробитый в 00:30 — 21:30 **вчерашнего**.
+ *
+ * Пока сутки резались прямо по строке, такие чеки уезжали в соседний день:
+ * выручка дня не сходилась с кассой, а график часов показывал 7 утра там,
+ * где торговали в 10. Поэтому перед тем как отрезать день или час, время
+ * сдвигаем к местному.
+ *
+ * Сдвиг берётся у самого браузера, а не из справочника часовых поясов: в
+ * SQLite, собранном для страницы, справочника нет вовсе, и `'localtime'`
+ * там молча ничего не делает.
+ */
+function localShift(offsetMinutes = -new Date().getTimezoneOffset()): string {
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  return `${sign}${Math.abs(Math.round(offsetMinutes))} minutes`;
+}
+
+/** «2026-08-19» по местному времени. */
+export function localDaySql(column: string, offsetMinutes?: number): string {
+  return `substr(datetime(${column}, '${localShift(offsetMinutes)}'), 1, 10)`;
+}
+
+/** «22» — час по местному времени. */
+export function localHourSql(column: string, offsetMinutes?: number): string {
+  return `substr(datetime(${column}, '${localShift(offsetMinutes)}'), 12, 2)`;
+}
+
+/**
  * Возвращённые чеки исключаются: при возврате их суммы обнуляются, и учитывать
  * такой чек в количестве и среднем чеке было бы неверно.
  */
@@ -191,9 +223,14 @@ export interface DailyPoint {
 }
 
 /** Выручка по дням — для графика в отчётах. */
-export function dailySales(db: SqlDriver, period: Period, scope: Scope = null): DailyPoint[] {
+export function dailySales(
+  db: SqlDriver,
+  period: Period,
+  scope: Scope = null,
+  offsetMinutes?: number,
+): DailyPoint[] {
   return db.all<DailyPoint>(
-    `SELECT substr(s.created_at, 1, 10)               AS day,
+    `SELECT ${localDaySql('s.created_at', offsetMinutes)} AS day,
             COALESCE(SUM(s.total), 0)                 AS revenue,
             COALESCE(SUM(s.total - s.cost_total), 0)  AS profit,
             COUNT(*)                                  AS receipts
@@ -219,9 +256,14 @@ export function dailySales(db: SqlDriver, period: Period, scope: Scope = null): 
  * Пустые часы возвращаются нулями, а не пропускаются: иначе столбики
  * съезжаются, и десять утра оказывается там, где должно быть восемь.
  */
-export function hourlySales(db: SqlDriver, period: Period, scope: Scope = null): DailyPoint[] {
+export function hourlySales(
+  db: SqlDriver,
+  period: Period,
+  scope: Scope = null,
+  offsetMinutes?: number,
+): DailyPoint[] {
   const rows = db.all<{ hour: string; revenue: number; profit: number; receipts: number }>(
-    `SELECT substr(s.created_at, 12, 2)              AS hour,
+    `SELECT ${localHourSql('s.created_at', offsetMinutes)} AS hour,
             COALESCE(SUM(s.total), 0)                AS revenue,
             COALESCE(SUM(s.total - s.cost_total), 0) AS profit,
             COUNT(*)                                 AS receipts

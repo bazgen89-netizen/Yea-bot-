@@ -2,7 +2,7 @@ import type { SqlDriver } from './driver';
 import { createMoneyDoc, SALE_ACCOUNT } from './money';
 import { openShiftAnywhere } from './shifts';
 import { currentStaffId } from './staff';
-import { cartTotals, findStockIssues } from '../domain/cart';
+import { cartTotals, findStockIssues, lineDiscountOf } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
 import type { Kopecks } from '../domain/money';
 import type { CartLine, Id, PaymentMethod, Sale, SaleItem } from '../domain/types';
@@ -150,9 +150,9 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 
     for (const line of verified) {
       db.run(
-        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
-         VALUES (?, ?, ?, ?, ?)`,
-        [saleId, line.product_id, line.qty, line.price, line.cost_price],
+        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [saleId, line.product_id, line.qty, line.price, line.cost_price, lineDiscountOf(line)],
       );
       db.run(
         `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)
@@ -319,9 +319,9 @@ export function createReturn(db: SqlDriver, input: SaleInput): Id {
 
     for (const line of input.lines) {
       db.run(
-        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
-         VALUES (?, ?, ?, ?, ?)`,
-        [saleId, line.product_id, line.qty, line.price, line.cost_price],
+        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [saleId, line.product_id, line.qty, line.price, line.cost_price, lineDiscountOf(line)],
       );
       db.run(
         `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)

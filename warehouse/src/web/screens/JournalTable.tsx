@@ -5,6 +5,7 @@ import { Text } from '../Translated';
 
 import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
+import { SaleDocumentDrawer } from './SaleDocument';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
   entryTitle,
@@ -94,6 +95,14 @@ export function JournalTable() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  /**
+   * Открытый чек — панелью поверх журнала, как у него.
+   *
+   * Он кликает документ в списке, и список остаётся слева: закрыл панель — и
+   * ты там же, где был. Раньше мы уходили на отдельную страницу, и журнал
+   * пропадал целиком вместе с отбором и местом прокрутки.
+   */
+  const [openSale, setOpenSale] = useState<number | null>(null);
   const [values, setValues] = useState<Record<string, FilterValue>>({});
 
   // Отбор делает база, а не память: журнал бывает длинным, и фильтровать уже
@@ -262,13 +271,15 @@ export function JournalTable() {
                     key={`${entry.kind}${entry.id}`}
                     entry={entry}
                     onPress={() => {
-                      // Чек и складской документ — разные экраны: у чека есть
-                      // оплата и возврат, у документа — контрагент и магазины.
-                      router.push(
-                        entry.kind === 'sale' || entry.kind === 'refund'
-                          ? { pathname: '/sale/[id]', params: { id: String(entry.id) } }
-                          : { pathname: '/doc/[id]', params: { id: String(entry.id) } },
-                      );
+                      // Чек открывается панелью поверх журнала, складской
+                      // документ — своей страницей: у него там контрагент,
+                      // магазины и правка строк, и на панель это не садится.
+                      if (entry.kind === 'sale' || entry.kind === 'refund') {
+                        setOpenSale(Number(entry.id));
+                        return;
+                      }
+
+                      router.push({ pathname: '/doc/[id]', params: { id: String(entry.id) } });
                     }}
                   />
                 ))}
@@ -283,6 +294,10 @@ export function JournalTable() {
           </ScrollView>
         </View>
       </ScrollView>
+
+      {openSale !== null ? (
+        <SaleDocumentDrawer id={openSale} onClose={() => setOpenSale(null)} />
+      ) : null}
     </View>
   );
 }

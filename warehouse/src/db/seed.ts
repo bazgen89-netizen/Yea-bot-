@@ -780,9 +780,9 @@ function seedHistory(db: SqlDriver): void {
 
       for (const { line, product } of kept) {
         db.run(
-          `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price)
-           VALUES (?, ?, ?, ?, ?)`,
-          [saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost],
+          `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost, line.d ?? 0],
         );
       }
     }

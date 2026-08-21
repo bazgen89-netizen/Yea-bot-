@@ -679,6 +679,16 @@ export const MIGRATIONS: string[] = [
   -- приходят и без продажи.
   ALTER TABLE sales ADD COLUMN money_number INTEGER;
   `,
+
+  // 23. Бонусы по чеку: сколько начислено и сколько списано.
+  //
+  // В карточке клиента у него есть «История бонусов» — когда и за какую
+  // покупку сколько начислено. Итог бонусного счёта у нас был, а из чего он
+  // сложился — нет, и вкладка стояла пустой.
+  `
+  ALTER TABLE sales ADD COLUMN bonus_earned INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sales ADD COLUMN bonus_used   INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

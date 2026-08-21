@@ -457,6 +457,24 @@ if (!flag('no-history')) {
     no: doc.order_number ?? null,
     // И номер прихода — под ним тот же чек виден в движении денег.
     ono: orderNumber(doc),
+    // Бонусы по чеку: начислено и списано. Лежат построчно, в `legacy_line`,
+    // и складываются по всему чеку — в карточке клиента история бонусов
+    // ведётся по покупкам, а не по строкам.
+    be: kopecks(
+      (doc.line_items ?? []).reduce(
+        (sum, line) => sum + (Number(line.legacy_line?.bonus_cashback) || 0),
+        0,
+      ),
+    ),
+    bu: kopecks(
+      (doc.line_items ?? []).reduce(
+        (sum, line) =>
+          sum +
+          (Number(line.legacy_line?.bonus_spent) || 0) +
+          (Number(line.legacy_line?.bonus_discount) || 0),
+        0,
+      ),
+    ),
     ln: (doc.line_items ?? []).map((line) => {
       // Всё о товаре строки лежит внутри `legacy_line`: наверху ни кода, ни
       // артикула нет — там только количество и идентификатор движения.

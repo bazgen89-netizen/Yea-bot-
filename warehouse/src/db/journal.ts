@@ -432,6 +432,57 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
   }));
 }
 
+/**
+ * История бонусов клиента: за что начислено и когда списано.
+ *
+ * Начисление и списание лежат в самом чеке — их приносит выгрузка построчно,
+ * а мы складываем по чеку. Отдельной таблицы бонусных операций нет и не
+ * нужно: второй источник правды разошёлся бы с чеками при первой же правке.
+ *
+ * Остаток считается на ходу, от старых к новым, и возвращается вместе с
+ * каждой строкой — в карточке важно не «сколько сейчас», а «как накопилось».
+ */
+export interface BonusEntry {
+  id: Id;
+  number: number | null;
+  created_at: string;
+  /** Начислено и списано по этому чеку, копейки. */
+  earned: Kopecks;
+  used: Kopecks;
+  /** Сколько стало на счету после этого чека. */
+  balance: Kopecks;
+  /** Сумма чека — чтобы видеть, с чего начислено. */
+  total: Kopecks;
+  store: string | null;
+}
+
+export function bonusHistory(db: SqlDriver, customerId: Id, limit = 200): BonusEntry[] {
+  const rows = db.all<Omit<BonusEntry, 'balance'>>(
+    `SELECT s.id                AS id,
+            s.number            AS number,
+            s.created_at        AS created_at,
+            s.bonus_earned      AS earned,
+            s.bonus_used        AS used,
+            s.total             AS total,
+            (SELECT l.name FROM locations l WHERE l.id = s.location_id) AS store
+       FROM sales s
+      WHERE s.customer_id = ?
+        AND (s.bonus_earned <> 0 OR s.bonus_used <> 0)
+      ORDER BY s.created_at
+      LIMIT ?`,
+    [customerId, limit],
+  );
+
+  let balance = 0;
+  const withBalance = rows.map((row) => {
+    balance += row.earned - row.used;
+    return { ...row, balance };
+  });
+
+  // Показываем новыми сверху — но считали снизу, иначе остаток не сложить.
+  return withBalance.reverse();
+}
+
 /** «Приход #45679» — так документ называется в движении денег. */
 export function moneyTitle(entry: MoneyEntry): string {
   return `${MONEY_TYPE_LABEL[entry.type]} #${entry.number ?? entry.id}`;

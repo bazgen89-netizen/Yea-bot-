@@ -121,6 +121,9 @@ interface SeedSale {
   no?: number | string | null;
   /** Номер прихода — под ним чек виден в движении денег. */
   ono?: number | null;
+  /** Бонусы по чеку: начислено и списано, копейки. */
+  be?: number;
+  bu?: number;
   ln: {
     code?: string | null;
     /** Имя — только у товаров, которых в справочнике уже нет. */
@@ -646,8 +649,8 @@ function seedHistory(db: SqlDriver): void {
       const note = customerId === null && sale.cn ? sale.cn : null;
 
       db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sale.disc ?? 0,
           sale.t ?? 0,
@@ -659,6 +662,8 @@ function seedHistory(db: SqlDriver): void {
           sale.st ? (stores.get(sale.st) ?? null) : null,
           Number.isFinite(number) && number > 0 ? number : null,
           sale.ono ?? null,
+          sale.be ?? 0,
+          sale.bu ?? 0,
         ],
       );
       const saleId = db.lastInsertId();

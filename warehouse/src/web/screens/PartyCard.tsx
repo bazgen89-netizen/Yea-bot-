@@ -14,7 +14,14 @@ import {
   type PartyInput,
   type Requisite,
 } from '../../db/counterparties';
-import { entryTitle, listJournal, type JournalEntry } from '../../db/journal';
+import {
+  bonusHistory,
+  entryTitle,
+  listJournal,
+  listMoney,
+  moneyTitle,
+  type JournalEntry,
+} from '../../db/journal';
 import { receiptLines } from '../../db/receipts';
 import { getSettings } from '../../db/settings';
 import { formatMoneyWeb } from '../../domain/money';
@@ -187,10 +194,10 @@ function plural(n: number, one: string, few: string, many: string): string {
  * Без разделителей список из восьмидесяти чеков читается как лента цифр:
  * непонятно, где кончается один день и начинается другой.
  */
-function groupByDay(entries: JournalEntry[]): { day: string; entries: JournalEntry[] }[] {
+function groupByDay<T extends { created_at: string }>(entries: T[]): { day: string; entries: T[] }[] {
   const sorted = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
-  const groups: { day: string; entries: JournalEntry[] }[] = [];
+  const groups: { day: string; entries: T[] }[] = [];
   for (const entry of sorted) {
     const date = new Date(entry.created_at);
     const day = Number.isNaN(date.getTime())
@@ -294,6 +301,17 @@ function PartyView({ party }: { party: CounterpartyWithTotals }) {
   const senderHistory = useQuery(
     (database) => listJournal(database, 100, { sender: party.name }),
     [party.name],
+  );
+
+  // Деньги и бонусы читаются только на своей вкладке: у клиента с восемью
+  // десятками чеков лишний запрос на открытие карточки заметен.
+  const money = useQuery(
+    (database) => (tab === 'money' ? listMoney(database, 100, { counterparty: party.name }) : []),
+    [tab, party.name],
+  );
+  const bonusRows = useQuery(
+    (database) => (tab === 'bonus' ? bonusHistory(database, party.id) : []),
+    [tab, party.id],
   );
 
   const phones = parseList(party.phones);
@@ -448,14 +466,87 @@ function PartyView({ party }: { party: CounterpartyWithTotals }) {
         )
       ) : null}
 
-      {tab === 'money' ? <Text style={styles.empty}>Денежных документов по нему нет</Text> : null}
+      {tab === 'money' ? (
+        money.length ? (
+          groupByDay(money).map((group) => (
+            <View key={group.day}>
+              <Text style={styles.historyDay}>{group.day}</Text>
+              {group.entries.map((entry) => (
+                <View key={`${entry.source}${entry.id}`} style={styles.opCard}>
+                  <View style={styles.opHead}>
+                    <Text style={styles.opTitle}>{moneyTitle(entry)}</Text>
+                    <Text style={styles.opAmount}>
+                      {formatMoneyWeb(entry.income || entry.expense)} руб
+                    </Text>
+                  </View>
+
+                  <View style={styles.opRoute}>
+                    <View style={styles.opDot} />
+                    <Text style={styles.opRouteText} numberOfLines={1}>
+                      {entry.category ?? 'Оплата от клиента'}
+                      {entry.account ? ` · ${entry.account}` : ''}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.opWhen}>
+                    {[entry.author, when(entry.created_at)].filter(Boolean).join(' ')}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ))
+        ) : (
+          <Text style={styles.empty}>Денежных документов по нему нет</Text>
+        )
+      ) : null}
 
       {tab === 'bonus' ? (
-        <Text style={styles.empty}>
-          {party.bonus_balance || party.bonus_spent
-            ? `Начислено ${formatMoneyWeb(party.bonus_balance + party.bonus_spent)}, потрачено ${formatMoneyWeb(party.bonus_spent)}`
-            : 'Бонусы по нему не начислялись'}
-        </Text>
+        <>
+          <View style={styles.bonusTotals}>
+            <StatLine label="На счету" value={formatMoneyWeb(party.bonus_balance)} strong />
+            <StatLine label="Потрачено" value={formatMoneyWeb(party.bonus_spent)} />
+            {party.cashback_bp ? (
+              <StatLine label="Возврат с покупки" value={`${party.cashback_bp / 100} %`} />
+            ) : null}
+          </View>
+
+          {bonusRows.length ? (
+            <View style={styles.itemsTable}>
+              <View style={[styles.itemsRow, styles.itemsHead]}>
+                <Text style={[styles.itemsName, styles.itemsHeadText]}>Покупка</Text>
+                <Text style={[styles.itemsCell, styles.itemsHeadText]}>Начислено</Text>
+                <Text style={[styles.itemsCell, styles.itemsHeadText]}>Списано</Text>
+                <Text style={[styles.itemsCell, styles.itemsHeadText]}>Остаток</Text>
+              </View>
+
+              {bonusRows.map((row) => (
+                <View key={row.id} style={styles.itemsRow}>
+                  <View style={styles.itemsName}>
+                    <Text style={styles.bonusWhat}>
+                      Продажа #{row.number ?? row.id} · {formatMoneyWeb(row.total)}
+                    </Text>
+                    <Text style={styles.bonusWhen}>
+                      {[row.store, when(row.created_at)].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.itemsCell, row.earned ? styles.bonusPlus : null]}>
+                    {row.earned ? `+${formatMoneyWeb(row.earned)}` : '—'}
+                  </Text>
+                  <Text style={[styles.itemsCell, row.used ? styles.bonusMinus : null]}>
+                    {row.used ? `−${formatMoneyWeb(row.used)}` : '—'}
+                  </Text>
+                  <Text style={styles.itemsCell}>{formatMoneyWeb(row.balance)}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.empty}>
+              {party.bonus_balance || party.bonus_spent
+                ? 'Бонусный счёт есть, но в перенесённых чеках начислений по нему нет.'
+                : 'Бонусы по нему не начислялись'}
+            </Text>
+          )}
+        </>
       ) : null}
     </ScrollView>
   );
@@ -1085,6 +1176,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   itemsEmpty: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted, padding: 10 },
+
+  bonusTotals: { gap: 10, marginBottom: 16 },
+  bonusWhat: { fontFamily: WEB_FONT, fontSize: 13, color: web.text },
+  bonusWhen: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, marginTop: 2 },
+  bonusPlus: { color: web.green },
+  bonusMinus: { color: web.danger },
 
   historyRow: {
     flexDirection: 'row',

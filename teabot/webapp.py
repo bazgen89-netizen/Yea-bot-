@@ -6,10 +6,12 @@ from telegram import Update
 from telegram.ext import Application
 
 from .cache import TTLCache
-from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
+from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
+from .handlers.social import ADMIN_KEY, HUB_KEY, poll_job
 from .http import create_session, close_session
 from .services import GroqClient, SerperClient
+from .social import SeenStore, SocialHub, build_connectors
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,10 @@ async def on_startup(app: web.Application):
         settings.serper_key, session,
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
-    ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    ai = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    ptb.bot_data[AI_KEY] = ai
+
+    setup_social(ptb, settings, session, ai)
 
     await ptb.initialize()
     await ptb.start()
@@ -46,8 +51,41 @@ async def on_startup(app: web.Application):
     logger.info(f"🤖 AI: Groq {settings.groq_model}")
 
 
+def setup_social(ptb: Application, settings: Settings,
+                 session, ai: GroqClient) -> None:
+    """Собирает единый хаб соцсетей и запускает автономный опрос площадок."""
+    social: SocialSettings = settings.social or SocialSettings.from_env()
+    hub = SocialHub(
+        connectors=build_connectors(social.env, session),
+        seen=SeenStore(social.state_path),
+        ai=ai,
+        autopilot=social.autopilot,
+    )
+    ptb.bot_data[HUB_KEY] = hub
+    ptb.bot_data[ADMIN_KEY] = social.admin_chat_id
+
+    if not social.polling_enabled:
+        logger.warning("⚠️ SOCIAL_ADMIN_CHAT_ID не задан — автономный опрос соцсетей выключен")
+        return
+    if ptb.job_queue is None:
+        logger.warning("⚠️ JobQueue недоступна — автономный опрос соцсетей выключен")
+        return
+
+    ptb.job_queue.run_repeating(
+        poll_job, interval=social.poll_interval, first=20, name="social_poll",
+    )
+    logger.info(
+        "🌐 Автономный опрос соцсетей: каждые %d с → чат %s (автопилот: %s)",
+        social.poll_interval, social.admin_chat_id,
+        "вкл" if social.autopilot else "выкл",
+    )
+
+
 async def on_shutdown(app: web.Application):
     ptb: Application = app['ptb_app']
+    hub = ptb.bot_data.get(HUB_KEY)
+    if hub is not None:
+        hub.seen.save()
     await ptb.stop()
     await ptb.shutdown()
     session = app.get('http_session')

@@ -25,14 +25,15 @@ class GroqClient:
             "Content-Type": "application/json",
         }
 
-    async def ask(self, prompt: str) -> str:
+    async def ask(self, prompt: str, system: str = "") -> str:
+        """system позволяет сменить роль модели (например, ответы в соцсетях)."""
         if not self.api_key:
             return "⚠️ AI отключён. Задайте GROQ_API_KEY в переменных окружения."
 
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "system", "content": system or AI_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": 1500,

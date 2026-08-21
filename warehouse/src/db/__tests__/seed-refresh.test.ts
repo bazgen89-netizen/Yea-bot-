@@ -239,6 +239,8 @@ describe('подстановка распакованного набора', () 
           s: '8883014',
           u: 'гр',
           p: 3299,
+          cp: 1200,
+          pp: 1000,
           d: 0,
           q: { 'Чайный бар': 10_000 },
         },
@@ -266,9 +268,18 @@ describe('подстановка распакованного набора', () 
 
     seedCatalog(db);
 
-    expect(
-      db.get<{ n: string }>('SELECT name AS n FROM products WHERE code = ?', ['00145'])?.n,
-    ).toBe('Габа Алишань');
+    const product = db.get<{ n: string; cost: number; purchase: number }>(
+      'SELECT name AS n, cost_price AS cost, purchase_price AS purchase FROM products WHERE code = ?',
+      ['00145'],
+    );
+
+    expect(product?.n).toBe('Габа Алишань');
+
+    // Себестоимость и цена закупки: в карточке товара CloudShop их не
+    // отдаёт, перенос собирает их из документов корректировки. Без них
+    // «Себестоимость продаж» и «Прибыль» на главной оставались нулями.
+    expect(product?.cost).toBe(1200);
+    expect(product?.purchase).toBe(1000);
 
     // Бонусный счёт клиента переносится вместе с карточкой: он приходит из
     // CloudShop итогом, а не строками чеков, и без него карточка пустая.

@@ -32,6 +32,15 @@ interface SeedProduct {
   u: string;
   /** Цена продажи, копейки. */
   p: number;
+  /**
+   * Себестоимость и цена закупки, копейки.
+   *
+   * В карточке товара CloudShop их не отдаёт — они собраны переносом из
+   * документов корректировки. Ноль значит «не проставлена»: у части товаров
+   * себестоимости нет и в самом кабинете.
+   */
+  cp?: number | null;
+  pp?: number | null;
   /** Скидка, сотые доли процента. */
   d: number;
   /** Категория. Пусто — товар без категории. */
@@ -397,10 +406,10 @@ function seedProducts(db: SqlDriver): void {
 
       db.run(
         `INSERT INTO products
-           (name, sku, code, barcode, category_id, unit, cost_price, sale_price, min_qty,
-            discount_bp, photo_uri, created_at, search_text,
+           (name, sku, code, barcode, category_id, unit, cost_price, purchase_price,
+            sale_price, min_qty, discount_bp, photo_uri, created_at, search_text,
             plu_code, description, weight_g, height_mm, width_mm, depth_mm)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.n,
           item.s,
@@ -408,6 +417,8 @@ function seedProducts(db: SqlDriver): void {
           item.bc ?? null,
           categoryId,
           item.u,
+          item.cp ?? 0,
+          item.pp ?? 0,
           item.p,
           item.d,
           photo,

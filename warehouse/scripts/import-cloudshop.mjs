@@ -282,11 +282,77 @@ console.log(`  ${shops.length}, из них магазинов: ${realStores.len
 console.log('Товары…');
 const rawProducts = await all('/product', 1000, 'товаров');
 
+console.log('Себестоимость и цены закупки…');
+const prices = await costPrices(value('since', SINCE));
+
 /**
  * Формат — тот же, в котором лежит наполнение базы: короткие ключи и целые
  * числа. Он читается и глазами: остатки подписаны названием магазина, а не
  * идентификатором CloudShop, который у нас ничего не значит.
  */
+/**
+ * Себестоимость и закупочная цена — из документов корректировки.
+ *
+ * В карточке товара (`/product`) их нет вовсе: Connect API отдаёт только
+ * цену продажи и скидку. Но в строках документов «Корректировка»
+ * (`/documents/changes`) лежит `legacy_line.prices` — там и `cost`
+ * (себестоимость), и `purchase` (цена закупки), теми числами, какими они
+ * стояли в карточке на день документа.
+ *
+ * Поэтому документы читаются от свежих к старым, и первое попавшееся
+ * значение и есть нынешнее. Ноль — тоже значение: у части товаров
+ * себестоимость не проставлена, и подставлять вместо неё позапрошлогоднюю
+ * было бы хуже, чем оставить ноль.
+ *
+ * Это всё, что о себестоимости отдаёт ключ. Точной сходимости с отчётом
+ * кабинета отсюда не будет: там себестоимость продажи берётся на момент
+ * чека, а не из карточки. Но карточка товара переносится такой, какая она
+ * есть в CloudShop, — а этого и просили.
+ */
+async function costPrices(since) {
+  const cost = new Map();
+  const purchase = new Map();
+  let documents = 0;
+
+  let to = new Date();
+  const edge = new Date(`${since}T00:00:00Z`);
+
+  while (to > edge) {
+    const from = new Date(to);
+    from.setUTCMonth(from.getUTCMonth() - 1);
+    if (from < edge) from.setTime(edge.getTime());
+
+    const window =
+      `time_start=${encodeURIComponent(stamp(from))}&time_end=${encodeURIComponent(stamp(to))}`;
+
+    for (let offset = 0; ; offset += 100) {
+      const page = await get(`/documents/changes?${window}&limit=100&offset=${offset}`);
+      const rows = page.data ?? page.documents ?? page;
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      documents += rows.length;
+
+      for (const document of rows) {
+        for (const line of document.line_items ?? []) {
+          const prices = line.legacy_line?.prices;
+          const id = line.id ?? line.legacy_line?._id;
+          if (!prices || !id) continue;
+
+          if (!cost.has(id)) cost.set(id, kopecks(prices.cost));
+          if (!purchase.has(id)) purchase.set(id, kopecks(prices.purchase));
+        }
+      }
+
+      if (rows.length < 100) break;
+    }
+
+    process.stdout.write(`\r  корректировок: ${documents}   `);
+    to = new Date(from.getTime() - 1000);
+  }
+
+  process.stdout.write('\n');
+  return { cost, purchase };
+}
+
 const products = rawProducts.map((item) => {
   const options = item.options ?? {};
   const size = item.dimensions ?? {};
@@ -306,6 +372,10 @@ const products = rawProducts.map((item) => {
     plu: item.plu_code || null,
     u: item.unit || 'шт',
     p: kopecks(item.price),
+    // Себестоимость и цена закупки: в самой карточке их нет, они собраны
+    // выше из документов корректировки.
+    cp: prices.cost.get(item.id) ?? 0,
+    pp: prices.purchase.get(item.id) ?? 0,
     d: bp(item.discount),
     // Категорий у товара в CloudShop может быть несколько, у нас одна:
     // берём первую, а не склеиваем в строку, которой нигде нет.

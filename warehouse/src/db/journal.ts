@@ -123,7 +123,12 @@ export function listJournal(
                 (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
                 'Розничный покупатель'
               )                                            AS receiver,
-              (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author,
+              -- Свой сотрудник, если чек пробит здесь; иначе учётная запись,
+              -- из которой он пришёл при переносе.
+              COALESCE(
+                (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
+                s.author
+              )                                            AS author,
               NULL                                         AS note,
               1                                            AS posted
        FROM sales s
@@ -388,7 +393,10 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
               s.payment               AS payment,
               ''                      AS account,
               'Оплата от клиента'     AS category,
-              (SELECT f.name FROM staff f WHERE f.id = s.staff_id) AS author,
+              COALESCE(
+                (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
+                s.author
+              )                       AS author,
               NULL                    AS note
        FROM sales s
        WHERE NOT EXISTS (

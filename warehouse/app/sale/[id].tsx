@@ -9,6 +9,8 @@ import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { Badge, Button, Card, Empty, Row } from '../../src/ui/components';
 import { colors, spacing, text } from '../../src/ui/theme';
 import { confirm, say } from '../../src/ui/alert';
+import { useDesktop } from '../../src/ui/useDesktop';
+import { SaleDocument } from '../../src/web/screens/SaleDocument';
 
 const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   cash: 'Наличные',
@@ -17,6 +19,17 @@ const PAYMENT_LABEL: Record<PaymentMethod, string> = {
 };
 
 export default function SaleScreen() {
+  // На широком экране документ показывается страницей, как в кабинете:
+  // шапка с магазином и автором, таблицы оплаты и товаров. Карточка
+  // телефона на нём отвечала на четверть вопросов.
+  const desktop = useDesktop();
+  const params = useLocalSearchParams<{ id: string }>();
+  if (desktop) return <SaleDocument id={Number(params.id)} />;
+
+  return <SalePhone />;
+}
+
+function SalePhone() {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { id } = useLocalSearchParams<{ id: string }>();

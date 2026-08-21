@@ -689,6 +689,15 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sales ADD COLUMN bonus_earned INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE sales ADD COLUMN bonus_used   INTEGER NOT NULL DEFAULT 0;
   `,
+
+  // 24. Кто пробил чек — именем, а не ссылкой на сотрудника.
+  //
+  // В журнале колонка «Автор» показывает учётную запись, из которой пробит
+  // чек: «Чайный бар», «Черёмушки», «waystea». Своих сотрудников в базе на
+  // момент переноса нет, и связывать не с кем, а имя нужно уже сейчас.
+  `
+  ALTER TABLE sales ADD COLUMN author TEXT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

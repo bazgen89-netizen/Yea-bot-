@@ -117,6 +117,8 @@ interface SeedSale {
   pay?: string;
   /** Магазин. */
   st?: string | null;
+  /** Кто пробил чек — учётная запись. */
+  au?: string | null;
   /** Номер документа в CloudShop: «Продажа #45658». */
   no?: number | string | null;
   /** Номер прихода — под ним чек виден в движении денег. */
@@ -649,8 +651,8 @@ function seedHistory(db: SqlDriver): void {
       const note = customerId === null && sale.cn ? sale.cn : null;
 
       db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used, author)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sale.disc ?? 0,
           sale.t ?? 0,
@@ -664,6 +666,7 @@ function seedHistory(db: SqlDriver): void {
           sale.ono ?? null,
           sale.be ?? 0,
           sale.bu ?? 0,
+          sale.au ?? null,
         ],
       );
       const saleId = db.lastInsertId();

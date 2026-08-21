@@ -203,16 +203,44 @@ export function refundSale(db: SqlDriver, saleId: Id): void {
 }
 
 export interface SaleWithItems extends Sale {
-  items: (SaleItem & { name: string; unit: string })[];
+  items: (SaleItem & {
+    name: string;
+    unit: string;
+    sku: string | null;
+    barcode: string | null;
+  })[];
   refunded: boolean;
+  /** Чем чек подписан в просмотре документа. */
+  store: string | null;
+  customer: string | null;
+  register: string | null;
+  shift_number: number | null;
 }
 
 export function getSale(db: SqlDriver, saleId: Id): SaleWithItems | null {
-  const sale = db.get<Sale>('SELECT * FROM sales WHERE id = ?', [saleId]);
+  // Вместе с чеком тянем то, чем он подписан в просмотре документа: магазин,
+  // покупателя, кассу и смену. Отдельными запросами это были бы четыре
+  // похода в базу за четырьмя строчками.
+  const sale = db.get<Sale & {
+    store: string | null;
+    customer: string | null;
+    register: string | null;
+    shift_number: number | null;
+  }>(
+    `SELECT s.*,
+            (SELECT l.name FROM locations l WHERE l.id = s.location_id)      AS store,
+            (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id) AS customer,
+            (SELECT r.name FROM registers r
+               JOIN shifts h ON h.register_id = r.id WHERE h.id = s.shift_id) AS register,
+            s.shift_id                                                        AS shift_number
+       FROM sales s
+      WHERE s.id = ?`,
+    [saleId],
+  );
   if (!sale) return null;
 
-  const items = db.all<SaleItem & { name: string; unit: string }>(
-    `SELECT i.*, p.name, p.unit
+  const items = db.all<SaleItem & { name: string; unit: string; sku: string | null; barcode: string | null }>(
+    `SELECT i.*, p.name, p.unit, p.sku, p.barcode
      FROM sale_items i
      JOIN products p ON p.id = i.product_id
      WHERE i.sale_id = ?`,

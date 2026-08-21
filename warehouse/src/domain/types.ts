@@ -255,6 +255,17 @@ export interface Sale {
   cost_total: Kopecks;
   payment: PaymentMethod;
   created_at: string;
+  /** Свой номер документа — у перенесённых чеков номер CloudShop. */
+  number: number | null;
+  /** Номер прихода: под ним чек виден в движении денег. */
+  money_number: number | null;
+  /** Кто пробил чек — учётная запись, если своего сотрудника нет. */
+  author: string | null;
+  /** Сколько осталось за покупателем, копейки. */
+  debt: Kopecks;
+  /** Бонусы по чеку: начислено и списано, копейки. */
+  bonus_earned: Kopecks;
+  bonus_used: Kopecks;
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer';

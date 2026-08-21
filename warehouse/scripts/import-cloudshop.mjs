@@ -451,6 +451,9 @@ if (!flag('no-history')) {
     disc: kopecks(doc.total_discounts),
     pay: payment(doc),
     st: storeName.get(doc.location_id) ?? null,
+    // Кто пробил чек: учётная запись кассы или хозяина — «Чайный бар»,
+    // «Черёмушки», «waystea». Именно её показывает колонка «Автор».
+    au: (doc.actor?.name ?? '').trim() || null,
     // Номер документа — тот, под которым чек живёт в CloudShop: «Продажа
     // #45658». Внутренний номер здесь никому не нужен, по нему он свой чек
     // не найдёт.

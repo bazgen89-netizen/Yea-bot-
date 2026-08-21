@@ -200,8 +200,14 @@ export async function openWebDatabase(): Promise<SqlDriver> {
   // Исключение — сборка для показа: в ней флаг ставится при сборке, и пустая
   // витрина не имела бы смысла.
   if ((globalThis as { __DEMO__?: boolean }).__DEMO__) {
-    const { SEED_STAMP, loadedSeedStamp, rememberSeedStamp, resetSeed, seedCatalog } =
+    const { seedStamp, loadedSeedStamp, rememberSeedStamp, resetSeed, seedCatalog, loadSeedPack } =
       await import('./seed');
+
+    // Данные для показа могут лежать рядом со страницей пожатыми: так в
+    // один файл влезает вся история, а не последние восемнадцать тысяч
+    // чеков. Распаковать надо до подписи — иначе подпись посчитается по
+    // пустышкам, которые вшиты в сборку вместо файлов.
+    await loadSeedPack();
 
     // Новый файл — новые данные, а не «уже загружено».
     //
@@ -218,7 +224,7 @@ export async function openWebDatabase(): Promise<SqlDriver> {
     // заведённые прежними сборками, подписи не знают вовсе. Не считать их
     // устаревшими значило бы навсегда оставить у них старые данные. На
     // свежей базе стирать нечего, и проход обходится даром.
-    if (loadedSeedStamp(driver) !== SEED_STAMP) resetSeed(driver);
+    if (loadedSeedStamp(driver) !== seedStamp()) resetSeed(driver);
 
     seedCatalog(driver);
     rememberSeedStamp(driver);

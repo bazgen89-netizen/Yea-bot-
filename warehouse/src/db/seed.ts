@@ -1,10 +1,10 @@
 import type { SqlDriver } from './driver';
 import { ensureLocation, listLocations } from './locations';
-import CLIENTS from './seed/clients.json';
-import STORES from './seed/stores.json';
-import PHOTOS from './seed/photos.json';
-import CATALOG from './seed/products.json';
-import SALES from './seed/sales.json';
+import CLIENTS_JSON from './seed/clients.json';
+import STORES_JSON from './seed/stores.json';
+import PHOTOS_JSON from './seed/photos.json';
+import CATALOG_JSON from './seed/products.json';
+import SALES_JSON from './seed/sales.json';
 
 /**
  * Пример данных — каталог одной чайной: 590 позиций с остатками по магазинам
@@ -156,6 +156,87 @@ export function seedCatalog(db: SqlDriver): void {
 }
 
 /**
+ * Данные, с которыми работает наполнение.
+ *
+ * Обычно это файлы рядом — их подставляет сборщик, и они попадают в
+ * программу как есть. Но у страницы по ссылке есть предел размера, а
+ * сорок пять тысяч чеков текстом — четырнадцать мегабайт: в предел они не
+ * помещались, и историю приходилось обрезать до последних восемнадцати
+ * тысяч. Пожатая та же история весит меньше двух мегабайт, и влезает
+ * целиком.
+ *
+ * Поэтому набор данных сделан подменяемым: сборка для ссылки кладёт вместо
+ * файлов пустышки, а рядом со страницей — тот же набор, пожатый gzip.
+ * Распаковывает его `loadSeedPack` до того, как наполнение началось.
+ */
+interface SeedData {
+  products: SeedProduct[];
+  clients: SeedClient[];
+  sales: SeedSale[];
+  photos: Record<string, string>;
+  stores: { n?: string; a?: string; name?: string; address?: string }[];
+}
+
+const data: SeedData = {
+  products: CATALOG_JSON as SeedProduct[],
+  clients: CLIENTS_JSON as SeedClient[],
+  sales: SALES_JSON as SeedSale[],
+  photos: PHOTOS_JSON as Record<string, string>,
+  stores: STORES_JSON as SeedData['stores'],
+};
+
+/** Подставить распакованный набор вместо файлов. Только до наполнения. */
+export function useSeedData(next: Partial<SeedData>): void {
+  if (next.products) data.products = next.products;
+  if (next.clients) data.clients = next.clients;
+  if (next.sales) data.sales = next.sales;
+  if (next.photos) data.photos = next.photos;
+  if (next.stores) data.stores = next.stores;
+}
+
+/** Куда сборщик кладёт пакет: base64 от gzip, строкой в самой странице. */
+declare global {
+  // eslint-disable-next-line no-var
+  var __SEED_GZ__: string | undefined;
+}
+
+/**
+ * Распаковать набор данных, положенный рядом со страницей.
+ *
+ * Возвращает `true`, если данные подменены. Ошибка распаковки запуск не
+ * роняет: программа откроется на том, что вшито в сборку.
+ *
+ * Распаковывает браузер, `DecompressionStream` — он есть во всех, где
+ * программа вообще открывается. Функция живёт здесь, а не в соседнем файле:
+ * отдельный модуль сборщик вынес бы в отдельный файл рядом со страницей, а
+ * страница — один файл, и подгружать ему нечего. Ровно на это я и напоролся:
+ * «Не удалось открыть базу данных» вместо программы.
+ */
+export async function loadSeedPack(): Promise<boolean> {
+  const packed = globalThis.__SEED_GZ__;
+  if (!packed) return false;
+
+  try {
+    const binary = atob(packed);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+
+    const stream = new Blob([bytes as unknown as BlobPart])
+      .stream()
+      .pipeThrough(new DecompressionStream('gzip'));
+
+    useSeedData(JSON.parse(await new Response(stream).text()) as Partial<SeedData>);
+
+    // Распакован — больше не нужен, а держит он мегабайты строки.
+    globalThis.__SEED_GZ__ = undefined;
+    return true;
+  } catch (error) {
+    console.warn('Не удалось распаковать данные для показа', error);
+    return false;
+  }
+}
+
+/**
  * Адреса магазинов.
  *
  * Проставляются после товаров: магазины появляются вместе с остатками, и до
@@ -166,7 +247,7 @@ function seedStoreAddresses(db: SqlDriver): void {
   // Файл писали две разные выгрузки, и поля в нём называются по-разному:
   // старая клала `name`/`address`, новая — короткие `n`/`a`. Читаем оба:
   // ронять наполнение из-за имени поля незачем.
-  for (const store of STORES as { n?: string; a?: string; name?: string; address?: string }[]) {
+  for (const store of data.stores) {
     const name = (store.n ?? store.name ?? '').trim();
     const address = (store.a ?? store.address ?? '').trim();
     if (!name || !address) continue;
@@ -212,7 +293,7 @@ function ensureCloudCustomers(db: SqlDriver): void {
     if (name && !byName.has(name)) byName.set(name, row.id);
   }
 
-  for (const client of CLIENTS as SeedClient[]) {
+  for (const client of data.clients) {
     if (!client.id) continue;
 
     const digits = (client.p ?? '').replace(/\D/g, '');
@@ -262,7 +343,7 @@ function seedProducts(db: SqlDriver): void {
   const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
   if (done) return;
 
-  const products = CATALOG as SeedProduct[];
+  const products = data.products;
   const now = new Date().toISOString();
 
   db.tx(() => {
@@ -312,7 +393,7 @@ function seedProducts(db: SqlDriver): void {
       // Фотография ищется по коду товара: артикул и штрихкод есть не у всех,
       // код есть всегда. Пока `scripts/sync-photos.mjs` не запускали, файл
       // пуст, и товары идут без картинок — как и было.
-      const photo = item.c ? ((PHOTOS as Record<string, string>)[item.c] ?? null) : null;
+      const photo = item.c ? (data.photos[item.c] ?? null) : null;
 
       db.run(
         `INSERT INTO products
@@ -381,7 +462,7 @@ function seedClients(db: SqlDriver): void {
   const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
   if (done) return;
 
-  const clients = CLIENTS as SeedClient[];
+  const clients = data.clients;
   const now = new Date().toISOString();
 
   db.tx(() => {
@@ -440,10 +521,19 @@ function seedClients(db: SqlDriver): void {
   });
 }
 
-/** Сколько позиций и карточек в поставляемых данных — для сообщений и тестов. */
-export const SEED_PRODUCTS = (CATALOG as SeedProduct[]).length;
-export const SEED_CLIENTS = (CLIENTS as SeedClient[]).length;
-export const SEED_SALES = (SALES as SeedSale[]).length;
+/**
+ * Сколько позиций и карточек в поставляемых данных — для сообщений и тестов.
+ *
+ * Считается на ходу: у сборки для ссылки данные приезжают пожатым файлом
+ * рядом со страницей, и на момент загрузки модуля их ещё нет.
+ */
+export function seedCounts(): { products: number; clients: number; sales: number } {
+  return {
+    products: data.products.length,
+    clients: data.clients.length,
+    sales: data.sales.length,
+  };
+}
 
 /**
  * Подпись поставляемых данных: «590:3206:45765».
@@ -457,8 +547,14 @@ export const SEED_SALES = (SALES as SeedSale[]).length;
  *
  * Подпись меняется вместе с данными — по ней сборка со своими данными
  * понимает, что выгрузка другая, и заводит её заново.
+ *
+ * Считается на ходу, а не при загрузке модуля: у сборки для ссылки данные
+ * приезжают пожатым файлом рядом со страницей, и на момент загрузки модуля
+ * их ещё нет. Посчитанная заранее подпись была бы подписью пустышек.
  */
-export const SEED_STAMP = `${SEED_PRODUCTS}:${SEED_CLIENTS}:${SEED_SALES}`;
+export function seedStamp(): string {
+  return `${data.products.length}:${data.clients.length}:${data.sales.length}`;
+}
 
 /** Ключ, под которым подпись лежит в базе. */
 const STAMP_KEY = 'seed_stamp';
@@ -470,7 +566,7 @@ export function loadedSeedStamp(db: SqlDriver): string | null {
 }
 
 export function rememberSeedStamp(db: SqlDriver): void {
-  db.run('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)', [STAMP_KEY, SEED_STAMP]);
+  db.run('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)', [STAMP_KEY, seedStamp()]);
 }
 
 /**
@@ -563,7 +659,7 @@ function seedHistory(db: SqlDriver): void {
   const done = db.get<{ value: string }>('SELECT value FROM app_state WHERE key = ?', [DONE_KEY]);
   if (done) return;
 
-  const sales = SALES as SeedSale[];
+  const sales = data.sales;
   if (sales.length === 0) return;
 
   ensureCloudCustomers(db);

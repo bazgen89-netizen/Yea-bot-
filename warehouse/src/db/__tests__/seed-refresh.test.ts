@@ -4,11 +4,12 @@ import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
 import {
-  SEED_STAMP,
+  seedStamp,
   loadedSeedStamp,
   rememberSeedStamp,
   resetSeed,
   seedCatalog,
+  useSeedData,
 } from '../seed';
 
 /**
@@ -37,7 +38,7 @@ describe('обновление поставляемых данных', () => {
     seedCatalog(db);
     rememberSeedStamp(db);
 
-    expect(loadedSeedStamp(db)).toBe(SEED_STAMP);
+    expect(loadedSeedStamp(db)).toBe(seedStamp());
     expect(count('products')).toBeGreaterThan(0);
   });
 
@@ -63,13 +64,13 @@ describe('обновление поставляемых данных', () => {
     expect(products).toBeGreaterThan(0);
 
     // То, что делает сборка при запуске: подпись не совпала — заводим заново.
-    if (loadedSeedStamp(db) !== SEED_STAMP) resetSeed(db);
+    if (loadedSeedStamp(db) !== seedStamp()) resetSeed(db);
     seedCatalog(db);
     rememberSeedStamp(db);
 
     expect(count('products')).toBe(products);
     expect(count('sales')).toBe(sales);
-    expect(loadedSeedStamp(db)).toBe(SEED_STAMP);
+    expect(loadedSeedStamp(db)).toBe(seedStamp());
   });
 
   it('очистка не спотыкается о связи между таблицами', () => {
@@ -213,5 +214,68 @@ describe('нумерация новых чеков', () => {
     expect(
       db.get<{ number: number }>('SELECT number FROM sales WHERE id = ?', [id])?.number,
     ).toBe(1);
+  });
+});
+
+/**
+ * Данные для сборки приезжают не только файлами.
+ *
+ * У страницы по ссылке есть предел размера, и вся история — сорок пять
+ * тысяч чеков, четырнадцать мегабайт текстом — в него не помещалась:
+ * приходилось обрезать её до последних восемнадцати тысяч. Теперь набор
+ * кладётся рядом со страницей пожатым, а распаковав, его подставляют
+ * вместо файлов. Проверяем, что подстановка действительно работает: иначе
+ * сборка вышла бы с пустышками вместо данных и это заметил бы только он.
+ */
+describe('подстановка распакованного набора', () => {
+  it('наполняет базу подставленными данными, а не вшитыми файлами', () => {
+    const db = createTestDriver();
+
+    useSeedData({
+      products: [
+        {
+          n: 'Габа Алишань',
+          c: '00145',
+          s: '8883014',
+          u: 'гр',
+          p: 3299,
+          d: 0,
+          q: { 'Чайный бар': 10_000 },
+        },
+      ],
+      clients: [
+        {
+          n: 'Монтеро Антонио',
+          p: '+79990000001',
+          e: null,
+          b: null,
+          g: null,
+          d: null,
+          a: null,
+          by: null,
+          bo: 16_450,
+          lt: 'bonus',
+        },
+      ],
+      sales: [],
+      photos: {},
+      stores: [],
+    });
+
+    expect(seedStamp()).toBe('1:1:0');
+
+    seedCatalog(db);
+
+    expect(
+      db.get<{ n: string }>('SELECT name AS n FROM products WHERE code = ?', ['00145'])?.n,
+    ).toBe('Габа Алишань');
+
+    // Бонусный счёт клиента переносится вместе с карточкой: он приходит из
+    // CloudShop итогом, а не строками чеков, и без него карточка пустая.
+    expect(
+      db.get<{ b: number }>('SELECT bonus_balance AS b FROM counterparties WHERE name = ?', [
+        'Монтеро Антонио',
+      ])?.b,
+    ).toBe(16_450);
   });
 });

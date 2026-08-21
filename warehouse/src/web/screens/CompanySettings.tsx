@@ -12,7 +12,7 @@ import {
   saveSettings,
   type CompanySettings as Settings,
 } from '../../db/settings';
-import { SEED_CLIENTS, SEED_PRODUCTS } from '../../db/seed';
+import { seedCounts } from '../../db/seed';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { pickFile, saveFile } from '../../ui/download';
@@ -410,8 +410,8 @@ function DataTab() {
   return (
     <Block title="Данные">
       <View style={styles.counts}>
-        <Count label="Товаров" value={counts.products} of={SEED_PRODUCTS} />
-        <Count label="Контрагентов" value={counts.clients} of={SEED_CLIENTS} />
+        <Count label="Товаров" value={counts.products} of={seedCounts().products} />
+        <Count label="Контрагентов" value={counts.clients} of={seedCounts().clients} />
         <Count label="Чеков" value={counts.sales} />
         <Count label="Движений товара" value={counts.moves} />
       </View>

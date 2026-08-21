@@ -10,24 +10,35 @@
  * только переписав историю целиком.
  *
  * Собирает же программа то, что лежит в `src/db/seed/`. Поэтому здесь файлы
- * подменяются на время сборки и возвращаются на место сразу после — тем же
- * приёмом, что и в `build-demo.mjs`. Возврат идёт в `finally`: если сборка
- * упадёт на середине, личные данные всё равно не останутся лежать там,
- * откуда их случайно закоммитят.
+ * подменяются на время сборки и возвращаются на место сразу после. Возврат
+ * идёт в `finally`: если сборка упадёт на середине, личные данные всё равно
+ * не останутся лежать там, откуда их случайно закоммитят.
+ *
+ * Данные едут не внутри сборки, а рядом с ней — пожатыми gzip. Сорок пять
+ * тысяч чеков текстом весят четырнадцать мегабайт, и файл выходил под
+ * тридцать: на телефоне такой открывается долго, а по почте не отправляется
+ * вовсе. Пожатые — меньше трёх, и это те же самые данные до последнего чека.
  */
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const seed = `${root}/src/db/seed`;
 const mine = `${seed}/local`;
 
-/** Что подменяем. Остальное в папке — общее и подмены не требует. */
-const FILES = ['products.json', 'clients.json', 'sales.json', 'photos.json'];
+/** Что подменяем и чем оно становится в сборке: пустышкой того же вида. */
+const FILES = {
+  'products.json': '[]',
+  'clients.json': '[]',
+  'sales.json': '[]',
+  'photos.json': '{}',
+  'stores.json': '[]',
+};
 
-const present = FILES.filter((file) => existsSync(`${mine}/${file}`));
+const present = Object.keys(FILES).filter((file) => existsSync(`${mine}/${file}`));
 
 if (present.length === 0) {
   console.error(`Своей выгрузки нет: ${mine.replace(root + '/', '')} пуст.`);
@@ -35,12 +46,34 @@ if (present.length === 0) {
   process.exit(1);
 }
 
+/** Своё, если есть; иначе то, что лежит в сборочной папке. */
+const read = (file) => {
+  const own = `${mine}/${file}`;
+  const path = existsSync(own) ? own : `${seed}/${file}`;
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null;
+};
+
+const bundle = {
+  products: read('products.json') ?? [],
+  clients: read('clients.json') ?? [],
+  sales: read('sales.json') ?? [],
+  photos: read('photos.json') ?? {},
+  stores: read('stores.json') ?? [],
+};
+
+const packed = gzipSync(Buffer.from(JSON.stringify(bundle)), { level: 9 }).toString('base64');
+
+console.log(
+  `Своя выгрузка: ${bundle.products.length} товаров, ${bundle.clients.length} клиентов, ` +
+    `${bundle.sales.length} чеков — ${(packed.length / 1024 / 1024).toFixed(1)} МБ пожатыми.`,
+);
+
 // Что было в сборочной папке — откладываем целиком, а не «запоминаем имена»:
 // вернуть надо и содержимое, и его отсутствие.
 const stashed = [];
 
 try {
-  for (const file of present) {
+  for (const file of Object.keys(FILES)) {
     const target = `${seed}/${file}`;
 
     if (existsSync(target)) {
@@ -50,11 +83,25 @@ try {
       stashed.push({ target, kept: false });
     }
 
-    copyFileSync(`${mine}/${file}`, target);
+    // В сборку едет пустышка: те же данные внутри неё, разжатые, весили бы
+    // больше самой сборки, а нужны они только один раз — при наполнении.
+    writeFileSync(target, FILES[file]);
   }
 
-  console.log(`Своя выгрузка на месте: ${present.join(', ')}`);
   execSync('npm run web:build', { cwd: root, stdio: 'inherit', env: { ...process.env, SEED: '1' } });
+
+  const file = `${root}/dist/index.html`;
+  let page = readFileSync(file, 'utf8');
+  const head = page.indexOf('</head>');
+  if (head < 0) throw new Error('В сборке нет </head> — некуда положить данные.');
+
+  page =
+    page.slice(0, head) +
+    `<script>globalThis.__SEED_GZ__=${JSON.stringify(packed)}</script>` +
+    page.slice(head);
+  writeFileSync(file, page);
+
+  console.log(`\nГотово: dist/index.html — ${(Buffer.byteLength(page) / 1024 / 1024).toFixed(1)} МБ.`);
 } finally {
   for (const { target, kept } of stashed) {
     rmSync(target, { force: true });
@@ -64,6 +111,5 @@ try {
 }
 
 console.log(`
-Готово: dist/index.html — со своими товарами, клиентами и историей.
-Этот файл никуда не выкладывают: в нём настоящие телефоны. Для ссылки —
-node scripts/build-demo.mjs, там они подменены.`);
+В файле — свои товары, клиенты и вся история покупок. Его никуда не
+выкладывают: там настоящие телефоны. Для ссылки — node scripts/build-demo.mjs.`);

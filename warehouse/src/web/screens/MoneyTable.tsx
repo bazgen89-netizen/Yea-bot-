@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
+import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
@@ -20,15 +21,22 @@ import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
+/** Поле «тип» строки отбора — те же три слова, что в кабинете. */
+const TYPES = [
+  { value: 'income', label: 'Приход' },
+  { value: 'expense', label: 'Расход' },
+  { value: 'transfer', label: 'Перевод' },
+];
+
 const COLUMNS: Column[] = [
-  { key: 'order', title: 'Заказ', width: 230 },
-  { key: 'time', title: 'Время', width: 100 },
-  { key: 'income', title: 'Приход, руб', width: 160 },
-  { key: 'expense', title: 'Расход, руб', width: 160 },
-  { key: 'party', title: 'Контрагент', width: 230 },
-  { key: 'account', title: 'Счёт', width: 240 },
-  { key: 'category', title: 'Категория плате…', width: 220 },
-  { key: 'author', title: 'Автор', width: 170 },
+  { key: 'order', title: 'Заказ', width: 210 },
+  { key: 'time', title: 'Время', width: 90 },
+  { key: 'income', title: 'Приход, руб', width: 150 },
+  { key: 'expense', title: 'Расход, руб', width: 150 },
+  { key: 'party', title: 'Контрагент', width: 210 },
+  { key: 'account', title: 'Счёт', width: 210 },
+  { key: 'category', title: 'Категория плате…', width: 190 },
+  { key: 'author', title: 'Автор', width: 150 },
 ];
 
 /** «Движение денег» — журнал кабинета. */
@@ -94,6 +102,8 @@ export function MoneyTable() {
 
   const active = activeCount(values);
   const groups = groupMoneyByDay(entries);
+  const set = (key: string, value: FilterValue) =>
+    setValues((current) => ({ ...current, [key]: value }));
 
   return (
     <View style={styles.screen}>
@@ -104,6 +114,30 @@ export function MoneyTable() {
           placeholder="поиск по номеру или комментарию"
           width={306}
         />
+
+        {/* Строка отбора, как в кабинете: дата и тип. Поля «оплата» здесь
+            нет — его нет и у него. Поля «статус» тоже нет, хотя у него оно
+            есть: денежный документ у нас всегда проведён, отложенных не
+            бывает, и это поле не отбирало бы ничего. Рисовать кнопку,
+            которая ничего не делает, хуже, чем не рисовать её. */}
+        <DateBox
+          from={values.dateFrom as string | undefined}
+          to={values.dateTo as string | undefined}
+          onChange={(key, value) => set(key === 'from' ? 'dateFrom' : 'dateTo', value)}
+          onClear={() => {
+            set('dateFrom', undefined);
+            set('dateTo', undefined);
+          }}
+        />
+        <FilterBox
+          label="тип"
+          placeholder="Выберите"
+          value={TYPES.find((item) => item.value === (values.types as string[])?.[0])?.label}
+          options={TYPES}
+          onPick={(value) => set('types', value ? [value] : undefined)}
+          onClear={() => set('types', undefined)}
+        />
+
         <ToolButton
           label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
           tone={active > 0 ? 'blueOutline' : 'plain'}
@@ -123,7 +157,14 @@ export function MoneyTable() {
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
-          <HeadRow columns={COLUMNS} lead={<View style={styles.statusHead} />} />
+          <HeadRow
+            columns={COLUMNS}
+            lead={
+              <View style={styles.statusHead}>
+                <Text style={webText.column}>Статус</Text>
+              </View>
+            }
+          />
 
           <ScrollView>
             {groups.map((group) => (
@@ -189,8 +230,10 @@ function MoneyRow({ entry }: { entry: MoneyEntry }) {
           <Text style={[webText.cell, { width: category.width }]} numberOfLines={1}>
             {entry.category}
           </Text>
+          {/* Автор — тот, кто провёл документ. Раньше здесь стояло слово
+              «waystea» прямо в разметке, у всех строк одинаково. */}
           <Text style={[webText.link, { width: author.width }]} numberOfLines={1}>
-            waystea
+            {entry.author ?? ''}
           </Text>
         </Row>
       </View>
@@ -200,7 +243,7 @@ function MoneyRow({ entry }: { entry: MoneyEntry }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
-  statusHead: { width: 46 },
+  statusHead: { width: 46, justifyContent: 'center' },
   day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row' },
   stripe: { width: 4 },

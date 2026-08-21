@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
+import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
@@ -24,14 +25,17 @@ import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
 const COLUMNS: Column[] = [
-  { key: 'doc', title: 'Документ', width: 250 },
-  { key: 'time', title: 'Время', width: 100 },
-  { key: 'positions', title: 'Позиций', width: 110 },
-  { key: 'amount', title: 'Сумма', width: 160 },
-  { key: 'paid', title: 'Оплаченные', width: 160 },
-  { key: 'sender', title: 'Отправитель', width: 220 },
-  { key: 'receiver', title: 'Получатель', width: 220 },
-  { key: 'author', title: 'Автор', width: 180 },
+  { key: 'doc', title: 'Документ', width: 230 },
+  { key: 'time', title: 'Время', width: 90 },
+  { key: 'positions', title: 'Позиций', width: 100 },
+  { key: 'amount', title: 'Сумма', width: 130 },
+  // Узкая колонка со значком «%»: у него он стоит сразу за суммой и
+  // отмечает документы, где была скидка.
+  { key: 'discount', title: '', width: 40 },
+  { key: 'paid', title: 'Оплаченные', width: 150 },
+  { key: 'sender', title: 'Отправитель', width: 210 },
+  { key: 'receiver', title: 'Получатель', width: 210 },
+  { key: 'author', title: 'Автор', width: 160 },
 ];
 
 /**
@@ -54,6 +58,36 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
   inventory: DOC_TYPES.inventory.color,
   adjustment: DOC_TYPES.adjustment.color,
 };
+
+/** Что стоит в поле «статус» строки отбора. */
+const STATUS = [
+  { value: 'posted', label: 'Проведенные' },
+  { value: 'draft', label: 'Отложенные' },
+];
+
+/** Поле «оплата». */
+const PAID = [
+  { value: 'paid', label: 'Оплаченные' },
+  { value: 'unpaid', label: 'Неоплаченные' },
+];
+
+/** Поле «тип» — виды документов, как они названы в кабинете. */
+const KIND_OPTIONS = [
+  { value: 'sale', label: 'Продажа' },
+  { value: 'refund', label: 'Возврат продажи' },
+  ...(Object.keys(DOC_KIND_LABEL) as (keyof typeof DOC_KIND_LABEL)[]).map((kind) => ({
+    value: kind,
+    label: DOC_KIND_LABEL[kind],
+  })),
+];
+
+/** Подпись поля «тип»: один вид — его название, несколько — сколько их. */
+function typeLabel(kinds?: string[]): string | undefined {
+  if (!kinds || kinds.length === 0) return undefined;
+  if (kinds.length === 1) return KIND_OPTIONS.find((item) => item.value === kinds[0])?.label;
+
+  return `Выбрано: ${kinds.length}`;
+}
 
 /** «Движение товара» — журнал кабинета. */
 export function JournalTable() {
@@ -137,6 +171,8 @@ export function JournalTable() {
 
   const active = activeCount(values);
   const groups = groupByDay(entries);
+  const set = (key: string, value: FilterValue) =>
+    setValues((current) => ({ ...current, [key]: value }));
 
   return (
     <View style={styles.screen}>
@@ -147,6 +183,47 @@ export function JournalTable() {
           placeholder="поиск по номеру или комментарию"
           width={306}
         />
+
+        {/* Отбор стоит строкой над таблицей, как в кабинете: дата, статус,
+            оплата, тип. За кнопкой «Фильтр» остаётся то, чему в строке
+            места нет — отправитель, получатель, автор. */}
+        <DateBox
+          from={values.dateFrom as string | undefined}
+          to={values.dateTo as string | undefined}
+          onChange={(key, value) =>
+            set(key === 'from' ? 'dateFrom' : 'dateTo', value)
+          }
+          onClear={() => {
+            set('dateFrom', undefined);
+            set('dateTo', undefined);
+          }}
+        />
+        <FilterBox
+          label="статус"
+          placeholder="Выберите"
+          value={STATUS.find((item) => item.value === values.status)?.label}
+          options={STATUS}
+          onPick={(value) => set('status', value)}
+          onClear={() => set('status', undefined)}
+        />
+        <FilterBox
+          label="оплата"
+          placeholder="Выберите"
+          value={PAID.find((item) => item.value === values.paid)?.label}
+          options={PAID}
+          onPick={(value) => set('paid', value)}
+          onClear={() => set('paid', undefined)}
+        />
+        <FilterBox
+          label="тип"
+          placeholder="введите"
+          width={196}
+          value={typeLabel(values.kinds as string[] | undefined)}
+          options={KIND_OPTIONS}
+          onPick={(value) => set('kinds', value ? [value] : undefined)}
+          onClear={() => set('kinds', undefined)}
+        />
+
         <ToolButton
           label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
           tone={active > 0 ? 'blueOutline' : 'plain'}
@@ -166,7 +243,14 @@ export function JournalTable() {
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
-          <HeadRow columns={COLUMNS} lead={<View style={styles.statusHead} />} />
+          <HeadRow
+            columns={COLUMNS}
+            lead={
+              <View style={styles.statusHead}>
+                <Text style={webText.column}>Статус</Text>
+              </View>
+            }
+          />
 
           <ScrollView>
             {groups.map((group) => (
@@ -204,7 +288,7 @@ export function JournalTable() {
 }
 
 function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void }) {
-  const [doc, time, positions, amount, paid, sender, receiver, author] = COLUMNS;
+  const [doc, time, positions, amount, discount, paid, sender, receiver, author] = COLUMNS;
 
   return (
     <View style={styles.rowWrap}>
@@ -222,18 +306,46 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
             )}
           </View>
 
-          <Text style={[webText.link, { width: doc.width }]} numberOfLines={1}>
-            {entryTitle(entry)}
-          </Text>
+          {/* Название документа и, если есть комментарий, значок рядом —
+              как у него: по значку видно, что в документе есть заметка. */}
+          <View style={[styles.docCell, { width: doc.width }]}>
+            <Text style={webText.link} numberOfLines={1}>
+              {entryTitle(entry)}
+            </Text>
+            {entry.note ? <Text style={styles.note}>💬</Text> : null}
+          </View>
+
           <Text style={[webText.cellNumber, { width: time.width }]}>
             {formatTime(entry.created_at)}
           </Text>
           <Text style={[webText.cellNumber, { width: positions.width }]}>{entry.positions}</Text>
+          {/* Ноль — это ноль, а не прочерк: у него чек на 0.00 так и
+              подписан, и прочерк вместо суммы читался бы как «неизвестно». */}
           <Text style={[webText.cellNumber, { width: amount.width }]}>
-            {entry.amount ? formatMoneyWeb(entry.amount) : '-'}
+            {formatMoneyWeb(entry.amount)}
           </Text>
+
+          {/* Значок «%» — у чеков, как в кабинете: там он стоит в этой
+              колонке у каждой продажи. У складских документов скидки нет,
+              и колонка пустая. Сама скидка подписана рядом для чтения с
+              экрана: глазами её видно в самом документе. */}
+          <View style={[styles.discount, { width: discount.width }]}>
+            {entry.kind === 'sale' || entry.kind === 'refund' ? (
+              <Text
+                style={styles.percent}
+                accessibilityLabel={
+                  entry.discount ? `Скидка ${formatMoneyWeb(entry.discount)}` : 'Без скидки'
+                }
+              >
+                %
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Прочерк — только у складских документов: оплаты у них нет
+              вовсе, а ноль означал бы «не оплачено». */}
           <Text style={[webText.cellNumber, { width: paid.width }]}>
-            {entry.paid ? formatMoneyWeb(entry.paid) : '-'}
+            {entry.paid === null ? '-' : formatMoneyWeb(entry.paid)}
           </Text>
           <Text style={[webText.link, { width: sender.width }]} numberOfLines={1}>
             {entry.sender ?? ''}
@@ -241,8 +353,11 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
           <Text style={[webText.link, { width: receiver.width }]} numberOfLines={1}>
             {entry.receiver ?? ''}
           </Text>
+          {/* Автор — тот, кто пробил документ. Раньше здесь стояло слово
+              «waystea» прямо в разметке, и у чеков «Чайного бара» и
+              «Черёмушек» тоже значился владелец. */}
           <Text style={[webText.link, { width: author.width }]} numberOfLines={1}>
-            waystea
+            {entry.author ?? ''}
           </Text>
         </Row>
       </View>
@@ -253,7 +368,11 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
 const styles = StyleSheet.create({
 
   screen: { flex: 1, backgroundColor: web.bg },
-  statusHead: { width: 46 },
+  statusHead: { width: 46, justifyContent: 'center' },
+  docCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  note: { fontSize: 12 },
+  discount: { alignItems: 'center' },
+  percent: { fontFamily: WEB_FONT, fontSize: 14, fontWeight: '700', color: web.link },
   day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row' },
   stripe: { width: 4 },

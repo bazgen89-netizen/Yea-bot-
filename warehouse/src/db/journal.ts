@@ -43,6 +43,14 @@ export interface JournalEntry {
   author: string | null;
   /** Комментарий — по нему тоже ищут. */
   note: string | null;
+  /**
+   * Скидка по документу, копейки.
+   *
+   * Нужна журналу: в кабинете сразу за суммой стоит узкая колонка со
+   * значком «%», и он отмечает те документы, где скидка была. У складских
+   * документов скидки нет — там всегда ноль.
+   */
+  discount: Kopecks;
   /** 1 — проведён, 0 — отложен. У чеков всегда 1. */
   posted: number;
 }
@@ -129,7 +137,8 @@ export function listJournal(
                 (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
                 s.author
               )                                            AS author,
-              NULL                                         AS note,
+              s.note                                       AS note,
+              s.discount                                   AS discount,
               1                                            AS posted
        FROM sales s
 
@@ -166,6 +175,7 @@ export function listJournal(
                    ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END,
               (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
               d.note,
+              0,
               d.posted
        FROM docs d
      )

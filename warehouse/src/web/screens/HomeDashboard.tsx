@@ -6,6 +6,7 @@ import { Chart } from '../Chart';
 import { Dropdown, type Option } from '../Dropdown';
 import { listLocations } from '../../db/locations';
 import {
+  daysIn,
   documentTotals,
   periodFor,
   salesSummary,
@@ -14,6 +15,7 @@ import {
   type PeriodKind,
   type Scope,
 } from '../../db/reports';
+import { densify } from '../../domain/series';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQtyWeb } from '../../domain/qty';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -28,15 +30,6 @@ const PERIODS: Option<PeriodKind>[] = [
   { value: 'quarter', label: 'квартал' },
   { value: 'year', label: 'год' },
 ];
-
-/** Сколько столбиков рисует график — по длине выбранного периода. */
-const CHART_DAYS: Record<PeriodKind, number> = {
-  today: 1,
-  week: 7,
-  month: 31,
-  quarter: 90,
-  year: 365,
-};
 
 /** Главная кабинета: показатели за период, график, документы и оценка склада. */
 export function HomeDashboard() {
@@ -63,6 +56,13 @@ export function HomeDashboard() {
 
   const summary = useQuery((db) => salesSummary(db, period, scope), [period.from, scope]);
   const daily = useQuery((db) => dailySales(db, period, scope), [period.from, scope]);
+
+  // Ряд раскладывается по дням периода: база отдаёт только те дни, в которые
+  // торговали, и без раскладки день без продаж утащил бы весь график влево.
+  const chart = useMemo(
+    () => densify(daily.map((point) => ({ day: point.day, value: point.revenue })), period.from, daysIn(period)),
+    [daily, period.from, period.to],
+  );
   const documents = useQuery(
     (db) => documentTotals(db, docsPeriod, scope),
     [docsPeriod.from, scope],
@@ -105,7 +105,7 @@ export function HomeDashboard() {
           <View style={styles.chartLegend}>
             <Text style={styles.chartLegendText}>{t('Выручка')}</Text>
           </View>
-          <Chart points={daily.map((point) => point.revenue)} days={CHART_DAYS[kind]} />
+          <Chart points={chart} days={chart.length} />
         </View>
       </View>
 

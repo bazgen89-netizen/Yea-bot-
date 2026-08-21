@@ -303,20 +303,68 @@ export function hourlySales(
 /** Периоды выпадающего списка в кабинете: сегодня, неделю, месяц, квартал, год. */
 export type PeriodKind = 'today' | 'week' | 'month' | 'quarter' | 'year';
 
-/** Периоды для быстрых кнопок в отчётах. Границы — по локальному дню. */
+/**
+ * Периоды для быстрых кнопок в отчётах. Границы — по локальному дню.
+ *
+ * Периоды **календарные**, а не «последние N дней». Это не мелочь: за месяц
+ * у него выходило 440 043,23, а у нас 609 819,86 — потому что мы считали
+ * тридцать суток назад, а кабинет считает август с первого числа. Видно это
+ * и по его графику: ось подписана числами 1…31, а дни после сегодняшнего
+ * стоят на нуле — значит, период тянется до конца месяца, а не до сегодня.
+ *
+ * Неделя — с понедельника: так неделя размечена в его же календаре.
+ */
 export function periodFor(kind: PeriodKind, now = new Date()): Period {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
 
-  if (kind === 'week') start.setDate(start.getDate() - 6);
-  if (kind === 'month') start.setDate(start.getDate() - 29);
-  if (kind === 'quarter') start.setDate(start.getDate() - 89);
-  if (kind === 'year') start.setFullYear(start.getFullYear() - 1);
-
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
 
+  if (kind === 'week') {
+    // getDay(): воскресенье — 0. Сдвигаем так, чтобы неделя начиналась с
+    // понедельника, а не с воскресенья.
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    end.setTime(start.getTime());
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (kind === 'month') {
+    start.setDate(1);
+    end.setMonth(end.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (kind === 'quarter') {
+    start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1);
+    end.setMonth(Math.floor(end.getMonth() / 3) * 3 + 3, 0);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (kind === 'year') {
+    start.setMonth(0, 1);
+    end.setMonth(11, 31);
+    end.setHours(23, 59, 59, 999);
+  }
+
   return { from: start.toISOString(), to: end.toISOString() };
+}
+
+/**
+ * Сколько дней в периоде — столько точек рисует график.
+ *
+ * Считается по самому периоду, а не по «в месяце 31 день»: в феврале их 28,
+ * а в квартале — от 90 до 92. График, нарисованный на глазок, разъезжается
+ * с осью.
+ */
+export function daysIn(period: Period): number {
+  const from = new Date(period.from);
+  const to = new Date(period.to);
+  from.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+
+  return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
 }
 
 /** Строка таблицы «Документы» на главной кабинета. */

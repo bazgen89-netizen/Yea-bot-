@@ -10,7 +10,7 @@ import {
 } from '../products';
 import { adjustStock, getStock, listDocs, listMoves, postDoc } from '../stock';
 import { OutOfStockError, createSale, getSale, listSales, refundSale } from '../sales';
-import { dailySales, periodFor, salesSummary, stockValue, topProducts } from '../reports';
+import { dailySales, daysIn, periodFor, salesSummary, stockValue, topProducts } from '../reports';
 import type { CartLine, DocLine } from '../../domain/types';
 
 const ALL_TIME = { from: '1970-01-01T00:00:00.000Z', to: '2999-01-01T00:00:00.000Z' };
@@ -376,9 +376,48 @@ describe('периоды', () => {
     expect(new Date(period.to).getTime()).toBeGreaterThan(now.getTime());
   });
 
-  it('«неделя» покрывает 7 дней вместе с сегодняшним', () => {
-    const now = new Date('2026-08-03T12:00:00');
-    const period = periodFor('week', now);
-    expect(new Date(period.from).getDate()).toBe(28); // 3 августа минус 6 дней
+  /**
+   * Периоды календарные, а не «последние N дней».
+   *
+   * У него за месяц выходило 440 043,23, а у нас 609 819,86 — мы считали
+   * тридцать суток назад, а кабинет считает август с первого числа. Видно
+   * это и по его графику: ось подписана числами 1…31, а дни после
+   * сегодняшнего стоят на нуле.
+   */
+  it('«неделя» — с понедельника по воскресенье', () => {
+    // 3 августа 2026 — понедельник.
+    const period = periodFor('week', new Date('2026-08-05T12:00:00'));
+    expect(new Date(period.from).getDate()).toBe(3);
+    expect(new Date(period.to).getDate()).toBe(9);
+  });
+
+  it('«месяц» — с первого числа до последнего, а не тридцать суток назад', () => {
+    const period = periodFor('month', new Date('2026-08-21T14:35:00'));
+    const from = new Date(period.from);
+    const to = new Date(period.to);
+
+    expect(from.getDate()).toBe(1);
+    expect(from.getMonth()).toBe(7);
+    expect(to.getDate()).toBe(31);
+    expect(daysIn(period)).toBe(31);
+  });
+
+  it('«квартал» и «год» — тоже календарные', () => {
+    const quarter = periodFor('quarter', new Date('2026-08-21T14:35:00'));
+    expect(new Date(quarter.from).getMonth()).toBe(6); // июль
+    expect(new Date(quarter.to).getMonth()).toBe(8); // сентябрь
+    expect(new Date(quarter.to).getDate()).toBe(30);
+
+    const year = periodFor('year', new Date('2026-08-21T14:35:00'));
+    expect(new Date(year.from).getMonth()).toBe(0);
+    expect(new Date(year.from).getDate()).toBe(1);
+    expect(new Date(year.to).getMonth()).toBe(11);
+    expect(new Date(year.to).getDate()).toBe(31);
+    expect(daysIn(year)).toBe(365);
+  });
+
+  it('февраль короче: длина периода считается по самому периоду', () => {
+    expect(daysIn(periodFor('month', new Date('2027-02-10T12:00:00')))).toBe(28);
+    expect(daysIn(periodFor('month', new Date('2028-02-10T12:00:00')))).toBe(29);
   });
 });

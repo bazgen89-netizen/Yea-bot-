@@ -4,13 +4,14 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Drawer } from '../Drawer';
 import { Text, TextInput } from '../Translated';
-import { getSale, refundSale } from '../../db/sales';
+import { getSale, refundSale, updateSale } from '../../db/sales';
 import { SALE_ACCOUNT } from '../../db/money';
-import { formatMoneyWeb } from '../../domain/money';
-import { formatQty } from '../../domain/qty';
+import { formatMoneyWeb, parseMoney } from '../../domain/money';
+import { formatQty, parseQty } from '../../domain/qty';
 import type { Id } from '../../domain/types';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
+import { saveFile } from '../../ui/download';
 import { WebIcon } from '../../ui/icons';
 import { FORM_BORDER, web, WEB_FONT } from '../../ui/webTheme';
 
@@ -48,10 +49,17 @@ export function SaleDocument({ id }: { id: Id }) {
  * открывался отдельной страницей, и журнал уезжал целиком.
  */
 export function SaleDocumentDrawer({ id, onClose }: { id: Id; onClose: () => void }) {
+  const [editing, setEditing] = useState(false);
+
   return (
-    <Drawer visible size="xl" onClose={onClose} actions={<Actions id={id} onClose={onClose} />}>
+    <Drawer
+      visible
+      size="xl"
+      onClose={onClose}
+      actions={<Actions id={id} onClose={onClose} editing={editing} onEdit={setEditing} />}
+    >
       <View style={styles.content}>
-        <Body id={id} onClose={onClose} bare />
+        <Body id={id} onClose={onClose} bare editing={editing} onSaved={() => setEditing(false)} />
       </View>
     </Drawer>
   );
@@ -64,7 +72,17 @@ export function SaleDocumentDrawer({ id, onClose }: { id: Id; onClose: () => voi
  * чека и выгрузка документа файлом ещё не сделаны, и кнопка, которая делает
  * вид, что работает, хуже приглушённой. Возврат — работает.
  */
-function Actions({ id, onClose }: { id: Id; onClose: () => void }) {
+function Actions({
+  id,
+  onClose,
+  editing,
+  onEdit,
+}: {
+  id: Id;
+  onClose: () => void;
+  editing: boolean;
+  onEdit: (on: boolean) => void;
+}) {
   const { db, refresh } = useDatabase();
   const sale = useQuery((database) => getSale(database, id), [id]);
 
@@ -85,18 +103,66 @@ function Actions({ id, onClose }: { id: Id; onClose: () => void }) {
     );
   }
 
+  function print() {
+    // Печать документа — то же окно печати браузера, что и у него: там
+    // «Напечатать» открывает системный диалог, а не свой.
+    if (typeof globalThis.print === 'function') globalThis.print();
+  }
+
+  function download() {
+    if (!sale) return;
+
+    const rows = [
+      ['Наименование', 'Штрих-код', 'Артикул', 'Количество', 'Цена', 'Скидка', 'Итог'],
+      ...sale.items.map((item) => {
+        const sum = Math.round((item.qty * item.price) / 1000);
+        return [
+          item.name,
+          item.barcode ?? '',
+          item.sku ?? '',
+          formatQty(item.qty),
+          formatMoneyWeb(item.price),
+          formatMoneyWeb(item.discount ?? 0),
+          formatMoneyWeb(sum - (item.discount ?? 0)),
+        ];
+      }),
+    ];
+
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+
+    void saveFile(
+      `Продажа ${sale.number ?? sale.id}.csv`,
+      `\uFEFF${csv}`,
+      'text/csv;charset=utf-8',
+    );
+  }
+
   return (
     <>
-      <Tool label="Редактировать" tone="green" soon />
-      <Tool label="Напечатать" icon={<WebIcon.printer size={17} color={web.textMuted} />} soon />
-      <Tool label="Выгрузить" icon={<WebIcon.download size={17} color={web.textMuted} />} soon />
       <Tool
-        label="Возврат"
+        label={editing ? 'Отменить правку' : 'Редактировать'}
+        tone={editing ? 'plain' : 'green'}
+        onPress={() => onEdit(!editing)}
+      />
+      <Tool
+        label="Напечатать"
+        icon={<WebIcon.printer size={17} color={web.text} />}
+        onPress={print}
+      />
+      <Tool
+        label="Выгрузить"
+        icon={<WebIcon.download size={17} color={web.text} />}
+        onPress={download}
+      />
+      <Tool
+        label={sale?.refunded ? 'Возврат оформлен' : 'Возврат'}
         icon={<WebIcon.history size={17} color={sale?.refunded ? web.textMuted : web.text} />}
         soon={Boolean(sale?.refunded)}
         onPress={askRefund}
       />
-      <Tool label="Удалить" tone="dangerOutline" right soon />
+      <Tool label="Удалить" tone="dangerOutline" right onPress={askRefund} />
     </>
   );
 }
@@ -150,11 +216,33 @@ function Tool({
   );
 }
 
-function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boolean }) {
+function Body({
+  id,
+  onClose,
+  bare,
+  editing,
+  onSaved,
+}: {
+  id: Id;
+  onClose: () => void;
+  bare?: boolean;
+  /** Открыт режим правки: количества и цены строк можно менять. */
+  editing?: boolean;
+  onSaved?: () => void;
+}) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const sale = useQuery((database) => getSale(database, id), [id]);
   const [search, setSearch] = useState('');
+
+  /**
+   * Правка строк.
+   *
+   * Держится отдельно от чека: пока не нажали «Сохранить», в базе ничего не
+   * меняется. Ключ строки — её идентификатор, значение — что набрали в поле.
+   */
+  const [edits, setEdits] = useState<Record<number, { qty?: string; price?: string }>>({});
+  const [dropped, setDropped] = useState<number[]>([]);
 
   if (!sale) return <Text style={styles.empty}>Документ не найден</Text>;
 
@@ -164,7 +252,8 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
   );
   // Скидка в процентах от того, что было до неё: у него в шапке стоит и
   // процент, и рубли — «17% (170.10 руб)».
-  const percent = subtotal ? Math.round((sale.discount / subtotal) * 1000) / 10 : 0;
+  // Процент целым числом: у него в шапке «11% (31.50 руб)», а не «11.2%».
+  const percent = subtotal ? Math.round((sale.discount / subtotal) * 100) : 0;
   const account = SALE_ACCOUNT[sale.payment] ?? 'Касса магазина';
   const quantity = sale.items.reduce((sum, item) => sum + item.qty, 0);
 
@@ -182,6 +271,45 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
         }
       },
     );
+  }
+
+  /** Сохранить правку: пересобрать строки и переписать движения склада. */
+  function save() {
+    if (!sale) return;
+
+    const lines = sale.items
+      .filter((item) => !dropped.includes(item.id))
+      .map((item) => {
+        const edit = edits[item.id] ?? {};
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          unit: item.unit,
+          qty: edit.qty != null ? (parseQty(edit.qty) ?? item.qty) : item.qty,
+          price: edit.price != null ? (parseMoney(edit.price) ?? item.price) : item.price,
+          cost_price: item.cost_price,
+          // Скидка строки сохраняется как есть: у перенесённых чеков она
+          // задана суммой, и пересчёт по проценту обнулил бы её.
+          discount: item.discount ?? 0,
+          stock: 0,
+        };
+      })
+      .filter((line) => line.qty > 0);
+
+    if (lines.length === 0) {
+      say('Пустой чек', 'В чеке должна остаться хотя бы одна строка.');
+      return;
+    }
+
+    try {
+      updateSale(db, id, { lines, discount: sale.discount, customerId: sale.customer_id });
+      refresh();
+      setEdits({});
+      setDropped([]);
+      onSaved?.();
+    } catch (error) {
+      say('Не удалось сохранить', String(error));
+    }
   }
 
   const shown = search.trim()
@@ -355,35 +483,80 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
           <Text style={[styles.cellNum, styles.headText]}>Итог</Text>
         </View>
 
-        {shown.map((item) => {
-          const sum = Math.round((item.qty * item.price) / 1000);
-          return (
-            <View key={item.id} style={styles.row}>
-              <View style={styles.cellName}>
-                <WebIcon.products size={15} color={web.textMuted} />
-                <Text
-                  accessibilityRole="link"
-                  style={[styles.itemName, styles.link]}
-                  numberOfLines={2}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/product/[id]',
-                      params: { id: String(item.product_id) },
-                    })
-                  }
-                >
-                  {item.name}
-                </Text>
+        {shown
+          .filter((item) => !dropped.includes(item.id))
+          .map((item) => {
+            const edit = edits[item.id] ?? {};
+            const qty = edit.qty != null ? (parseQty(edit.qty) ?? item.qty) : item.qty;
+            const price = edit.price != null ? (parseMoney(edit.price) ?? item.price) : item.price;
+            const sum = Math.round((qty * price) / 1000);
+
+            return (
+              <View key={item.id} style={styles.row}>
+                <View style={styles.cellName}>
+                  <WebIcon.products size={15} color={web.textMuted} />
+                  <Text
+                    accessibilityRole="link"
+                    style={[styles.itemName, styles.link]}
+                    numberOfLines={2}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/product/[id]',
+                        params: { id: String(item.product_id) },
+                      })
+                    }
+                  >
+                    {item.name}
+                  </Text>
+
+                  {/* В правке строку можно убрать целиком — как у него
+                      крестиком в конце строки документа. */}
+                  {editing ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Убрать ${item.name}`}
+                      onPress={() => setDropped((was) => [...was, item.id])}
+                      hitSlop={6}
+                    >
+                      <Text style={styles.drop}>✕</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <Text style={styles.cellCode}>{item.barcode ?? ''}</Text>
+                <Text style={styles.cellCode}>{item.sku ?? ''}</Text>
+
+                {editing ? (
+                  <TextInput
+                    value={edit.qty ?? String(item.qty / 1000)}
+                    onChangeText={(text) =>
+                      setEdits((was) => ({ ...was, [item.id]: { ...was[item.id], qty: text } }))
+                    }
+                    accessibilityLabel={`Количество: ${item.name}`}
+                    style={[styles.cellNum, styles.cellInput]}
+                  />
+                ) : (
+                  <Text style={styles.cellNum}>{formatQty(item.qty)}</Text>
+                )}
+
+                {editing ? (
+                  <TextInput
+                    value={edit.price ?? String(item.price / 100)}
+                    onChangeText={(text) =>
+                      setEdits((was) => ({ ...was, [item.id]: { ...was[item.id], price: text } }))
+                    }
+                    accessibilityLabel={`Цена: ${item.name}`}
+                    style={[styles.cellNum, styles.cellInput]}
+                  />
+                ) : (
+                  <Text style={styles.cellNum}>{formatMoneyWeb(item.price)}</Text>
+                )}
+
+                <Text style={styles.cellNum}>{formatMoneyWeb(item.discount ?? 0)}</Text>
+                <Text style={styles.cellNum}>{formatMoneyWeb(sum - (item.discount ?? 0))}</Text>
               </View>
-              <Text style={styles.cellCode}>{item.barcode ?? ''}</Text>
-              <Text style={styles.cellCode}>{item.sku ?? ''}</Text>
-              <Text style={styles.cellNum}>{formatQty(item.qty)}</Text>
-              <Text style={styles.cellNum}>{formatMoneyWeb(item.price)}</Text>
-              <Text style={styles.cellNum}>{formatMoneyWeb(item.discount ?? 0)}</Text>
-              <Text style={styles.cellNum}>{formatMoneyWeb(sum - (item.discount ?? 0))}</Text>
-            </View>
-          );
-        })}
+            );
+          })}
 
         <View style={[styles.row, styles.totalRow]}>
           <Text style={[styles.cellName, styles.totalText]}>Итог</Text>
@@ -395,6 +568,17 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
           <Text style={[styles.cellNum, styles.totalText]}>{formatMoneyWeb(sale.total)}</Text>
         </View>
       </View>
+
+      {editing ? (
+        <View style={styles.saveRow}>
+          <Pressable accessibilityRole="button" onPress={save} style={styles.save}>
+            <Text style={styles.saveLabel}>Сохранить</Text>
+          </Pressable>
+          <Text style={styles.saveHint}>
+            Склад пересчитается: движения этого чека заменятся новыми.
+          </Text>
+        </View>
+      ) : null}
     </>
   );
 }
@@ -577,6 +761,24 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
 
   itemName: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.text },
+  drop: { fontFamily: WEB_FONT, fontSize: 13, color: web.danger, paddingHorizontal: 4 },
+  cellInput: {
+    borderWidth: 1,
+    borderColor: FORM_BORDER,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    textAlign: 'right',
+  },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 20 },
+  save: {
+    paddingHorizontal: 24,
+    paddingVertical: 11,
+    borderRadius: 4,
+    backgroundColor: web.green,
+  },
+  saveLabel: { fontFamily: WEB_FONT, fontSize: 15, color: '#FFFFFF' },
+  saveHint: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
 
   cellNo: { width: 70, fontFamily: WEB_FONT, fontSize: 13, color: web.text },
   cellWide: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.text },

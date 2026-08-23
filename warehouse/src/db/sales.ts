@@ -238,6 +238,93 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 }
 
 /**
+ * Правка проведённого чека.
+ *
+ * В его кабинете у каждого документа есть зелёная «Редактировать», и это не
+ * украшение: кассир пробил три пачки вместо двух, покупатель ушёл — чек надо
+ * исправить, а не выдумывать возврат.
+ *
+ * Правка переписывает строки и движения склада заново, одной транзакцией:
+ * старые движения этого чека убираются, новые встают на их место. Остаток
+ * при этом сходится сам — он и есть сумма движений, а не хранимое число.
+ *
+ * Чего правка **не** трогает: номер чека, время, смену, кассу и бонусы.
+ * Номер и время — то, по чему чек ищут и сверяют с кабинетом; бонусы уже
+ * записаны на счёт покупателя, и переписывать их задним числом значило бы
+ * тихо менять его баланс.
+ */
+export function updateSale(
+  db: SqlDriver,
+  saleId: Id,
+  input: {
+    /**
+     * Строки чека. `discount` — скидка строки в копейках; если её не
+     * передать, считается из собственной скидки товара. Перенесённая из
+     * CloudShop скидка строки живёт только числом, процента у неё нет, и
+     * пересчёт по проценту молча обнулил бы её при первой же правке.
+     */
+    lines: (CartLine & { discount?: Kopecks })[];
+    discount?: Kopecks;
+    note?: string | null;
+    customerId?: Id | null;
+  },
+): void {
+  if (input.lines.length === 0) throw new Error('Пустой чек сохранить нельзя');
+
+  const now = new Date().toISOString();
+
+  db.tx(() => {
+    const sale = db.get<{ location_id: Id | null; bonus_used: Kopecks }>(
+      'SELECT location_id, bonus_used FROM sales WHERE id = ?',
+      [saleId],
+    );
+    if (!sale) throw new Error('Чек не найден');
+
+    const totals = cartTotals(input.lines, input.discount ?? 0);
+
+    // Бонусы, списанные при продаже, остаются списанными: чек к оплате
+    // по-прежнему меньше на эту сумму.
+    const total = Math.max(0, totals.total - sale.bonus_used);
+
+    db.run(
+      `UPDATE sales SET discount = ?, total = ?, cost_total = ?, note = ?, customer_id = ?
+        WHERE id = ?`,
+      [
+        totals.discount,
+        total,
+        totals.costTotal,
+        input.note?.trim() || null,
+        input.customerId ?? null,
+        saleId,
+      ],
+    );
+
+    db.run('DELETE FROM sale_items WHERE sale_id = ?', [saleId]);
+    db.run("DELETE FROM stock_moves WHERE sale_id = ? AND reason = 'sale'", [saleId]);
+
+    for (const line of input.lines) {
+      db.run(
+        `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          saleId,
+          line.product_id,
+          line.qty,
+          line.price,
+          line.cost_price,
+          line.discount ?? lineDiscountOf(line),
+        ],
+      );
+      db.run(
+        `INSERT INTO stock_moves (product_id, qty_delta, reason, sale_id, price, location_id, created_at)
+         VALUES (?, ?, 'sale', ?, ?, ?, ?)`,
+        [line.product_id, -line.qty, saleId, line.price, sale.location_id, now],
+      );
+    }
+  });
+}
+
+/**
  * Возврат чека: возвращает товар на склад и помечает продажу отменённой,
  * удаляя её. Движения удалятся каскадом, поэтому вместо удаления пишем
  * компенсирующие движения — история должна остаться.

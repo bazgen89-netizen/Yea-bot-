@@ -22,7 +22,8 @@ import { CashierPanel, VIEW_TITLE, type CashierView } from './CashierViews';
 import { formatPhone } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
 import { listCategoryTiles, listProducts } from '../../db/products';
-import { createReturn, createSale, OutOfStockError } from '../../db/sales';
+import { bonusRates, createReturn, createSale, OutOfStockError } from '../../db/sales';
+import { maxBonusSpend } from '../../domain/bonus';
 import { recommendedFor } from '../../db/recommendations';
 import { getSettings } from '../../db/settings';
 import { openShiftAnywhere } from '../../db/shifts';
@@ -204,6 +205,23 @@ export function Cashier() {
   const [category, setCategory] = useState<{ id: Id; name: string } | null>(null);
   // Покупатель чека. null — розничный: у него нет карточки и нет скидки.
   const [customer, setCustomer] = useState<CounterpartyWithTotals | null>(null);
+
+  /**
+   * Сколько с этого чека можно закрыть бонусами.
+   *
+   * Считается здесь, а не в окне оплаты: ставки лежат в настройках компании,
+   * а счёт — в карточке покупателя, и окно про базу ничего не знает. Ноль —
+   * значит строки «Бонусами» в окне не будет вовсе: у розничного счёта нет,
+   * у покупателя на скидке — бонусов, а выключенная программа не списывает
+   * ничего.
+   */
+  const bonusMax = useQuery(
+    (database) =>
+      customer && customer.loyalty_type === 'bonus'
+        ? maxBonusSpend(cart.totals.total, customer.bonus_balance, bonusRates(database))
+        : 0,
+    [customer?.id, customer?.bonus_balance, customer?.loyalty_type, cart.totals.total],
+  );
 
   /**
    * Объяснение, почему касса открылась не своим окном.
@@ -484,6 +502,7 @@ export function Cashier() {
       card: 0,
       credit: 0,
     },
+    bonusUsed = 0,
   ): void => {
     try {
       // Возврат проводится своей операцией: товар возвращается на склад, а
@@ -498,6 +517,9 @@ export function Cashier() {
         debt: mode === 'sale' ? debt : 0,
         lines: cart.lines,
         locationId: locations[0]?.id ?? null,
+        // Бонусы уменьшают сумму чека; сколько именно — решили в окне оплаты,
+        // а пересчитает и проверит по счёту покупателя сама продажа.
+        bonusUsed: mode === 'sale' ? bonusUsed : 0,
         // «Разрешить продажу в минус» из настроек компании. Настройка
         // читается в тот миг, когда чек проводится, а не когда открыли кассу:
         // её могли включить только что, из-за этого самого чека.
@@ -1082,6 +1104,7 @@ export function Cashier() {
         visible={paying}
         mode={mode}
         total={cart.totals.total}
+        bonusMax={bonusMax}
         onClose={() => setPaying(false)}
         customer={customer}
         onPay={pay}

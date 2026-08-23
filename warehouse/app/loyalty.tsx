@@ -137,7 +137,10 @@ function BonusTab({
         label="Курс списания"
         value={redemption}
         onChange={(value) => set({ redemptionRateBp: Math.round(value * 100) })}
-        hint={`1 бонус = ${formatMoneyWeb(Math.round(redemption * 100))} скидки в чеке`}
+        // Один бонус — это рубль на счету. При курсе 100 % он даёт рубль
+        // скидки; раньше подпись обещала сотню — ошибка в сто раз, и
+        // заметить её можно было только начав списывать бонусы на кассе.
+        hint={`1 бонус = ${formatMoneyWeb(Math.round(draft.redemptionRateBp / 100))} скидки в чеке`}
       />
 
       <Percent

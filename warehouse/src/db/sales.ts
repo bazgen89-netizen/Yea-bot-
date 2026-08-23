@@ -2,6 +2,8 @@ import type { SqlDriver } from './driver';
 import { createMoneyDoc, SALE_ACCOUNT } from './money';
 import { openShiftAnywhere } from './shifts';
 import { currentStaffId } from './staff';
+import { getSettings } from './settings';
+import { bonusEarned, bonusForDiscount, maxBonusSpend, type BonusRates } from '../domain/bonus';
 import { cartTotals, findStockIssues, lineDiscountOf } from '../domain/cart';
 import { formatQty, lineTotal } from '../domain/qty';
 import type { Kopecks } from '../domain/money';
@@ -83,6 +85,27 @@ export interface SaleInput {
    * а прихода на него нет.
    */
   allowNegative?: boolean;
+  /**
+   * Сколько чека оплатили бонусами, копейки.
+   *
+   * Это скидка, а не способ оплаты: бонусы уменьшают сумму к оплате, деньгами
+   * приходит остаток. Больше, чем разрешают счёт покупателя и предел
+   * компании, списать нельзя — касса и не даст, но проверяется это здесь:
+   * счёт покупателя между открытием окна оплаты и проведением чека мог
+   * измениться в соседнем окне.
+   */
+  bonusUsed?: Kopecks;
+}
+
+/** Ставки бонусной программы компании — одним местом для кассы и отчётов. */
+export function bonusRates(db: SqlDriver): BonusRates {
+  const settings = getSettings(db);
+  return {
+    on: settings.bonusOn,
+    cashbackRateBp: settings.cashbackRateBp,
+    redemptionRateBp: settings.redemptionRateBp,
+    limitBp: settings.bonusLimitBp,
+  };
 }
 
 /**
@@ -121,17 +144,51 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
     // спрашивать его о том же второй раз незачем.
     const locationId = input.locationId ?? shiftLocation(db, shift?.id ?? null);
 
+    /**
+     * Бонусы: сколько списали с чека и сколько начислили за него.
+     *
+     * Списание — это скидка: сумма чека уменьшается, деньгами приходит
+     * остаток. Начисляется процент с того, что заплатили **деньгами**: за
+     * часть, закрытую бонусами, бонусы не идут — иначе счёт рос бы сам из
+     * себя.
+     *
+     * Предел проверяется здесь ещё раз, а не только на кассе: между
+     * открытием окна оплаты и проведением чека счёт мог измениться в
+     * соседнем окне — касса открывается вторым окном, и это не редкость.
+     */
+    const rates = bonusRates(db);
+    const client = input.customerId
+      ? db.get<{ bonus_balance: number; cashback_bp: number; loyalty_type: string | null }>(
+          'SELECT bonus_balance, cashback_bp, loyalty_type FROM counterparties WHERE id = ?',
+          [input.customerId],
+        )
+      : null;
+
+    const onBonus = client?.loyalty_type === 'bonus';
+    const bonusUsed = onBonus
+      ? Math.min(
+          Math.max(0, input.bonusUsed ?? 0),
+          maxBonusSpend(totals.total, client?.bonus_balance ?? 0, rates),
+        )
+      : 0;
+
+    const total = totals.total - bonusUsed;
+
     // Долг без покупателя записать некуда, поэтому его и не бывает: розничный
-    // ушёл — спросить не с кого.
-    const debt = input.customerId ? Math.min(Math.max(0, input.debt ?? 0), totals.total) : 0;
+    // ушёл — спросить не с кого. Считается он от суммы **после** бонусов:
+    // часть, закрытая бонусами, уже не долг.
+    const debt = input.customerId ? Math.min(Math.max(0, input.debt ?? 0), total) : 0;
+
+    const earned = onBonus ? bonusEarned(total - debt, rates, client?.cashback_bp) : 0;
 
     db.run(
       `INSERT INTO sales (discount, total, cost_total, payment, shift_id, location_id,
-                          customer_id, note, debt, staff_id, created_at, number)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          customer_id, note, debt, staff_id, created_at, number,
+                          bonus_earned, bonus_used)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         totals.discount,
-        totals.total,
+        total,
         totals.costTotal,
         input.payment ?? 'cash',
         shift?.id ?? null,
@@ -144,9 +201,24 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
         currentStaffId(db),
         now,
         nextNumber(db),
+        earned,
+        bonusUsed,
       ],
     );
     const saleId = db.lastInsertId();
+
+    // Счёт покупателя двигается вместе с чеком, одной транзакцией: чек с
+    // начислением и счёт, на котором его нет, — расхождение, которое потом
+    // не свести.
+    if (input.customerId && (earned || bonusUsed)) {
+      db.run(
+        `UPDATE counterparties
+            SET bonus_balance = MAX(0, bonus_balance - ? + ?),
+                bonus_spent   = bonus_spent + ?
+          WHERE id = ?`,
+        [bonusForDiscount(bonusUsed, rates), earned, bonusForDiscount(bonusUsed, rates), input.customerId],
+      );
+    }
 
     for (const line of verified) {
       db.run(

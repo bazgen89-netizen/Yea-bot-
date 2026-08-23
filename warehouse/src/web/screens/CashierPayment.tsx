@@ -45,6 +45,7 @@ export function CashierPayment({
   visible,
   total,
   customer,
+  bonusMax = 0,
   onClose,
   onPay,
   mode = 'sale',
@@ -53,6 +54,14 @@ export function CashierPayment({
   total: Kopecks;
   /** Покупатель чека; null — розничный. */
   customer?: CounterpartyWithTotals | null;
+  /**
+   * Сколько с этого чека можно закрыть бонусами, копейки.
+   *
+   * Считает касса: у неё есть и ставки компании, и счёт покупателя. Ноль —
+   * бонусов нет, программа выключена или покупатель на скидке; тогда строки
+   * «Бонусами» в окне не видно вовсе.
+   */
+  bonusMax?: Kopecks;
   onClose: () => void;
   /**
    * Чек проведён. `payment` — способ, которым принято больше живых денег: чек
@@ -72,6 +81,8 @@ export function CashierPayment({
     debt: Kopecks,
     /** Сколько чем приняли — для окна «Продажа прошла успешно». */
     taken: { cash: Kopecks; card: Kopecks; credit: Kopecks },
+    /** Сколько закрыли бонусами — это скидка, а не деньги. */
+    bonusUsed: Kopecks,
   ) => void;
   /**
    * Продажа или возврат. У возврата деньги идут в обратную сторону: сдачи не
@@ -97,9 +108,18 @@ export function CashierPayment({
    * ещё прикладывают, и до ответа терминала чек проводить нельзя.
    */
   const [terminal, setTerminal] = useState(false);
+  /**
+   * Сколько закрыли бонусами.
+   *
+   * Это не способ оплаты, а скидка: сумма чека уменьшается, деньгами
+   * приходит остаток. Поэтому дальше всё считается от `payable`, а не от
+   * `total` — иначе касса требовала бы денег и за списанное.
+   */
+  const [bonusUsed, setBonusUsed] = useState(0);
 
+  const payable = Math.max(0, total - bonusUsed);
   const accepted = taken.cash + taken.card + taken.credit;
-  const left = Math.max(0, total - accepted);
+  const left = Math.max(0, payable - accepted);
 
   // Окно открылось — начинаем с чистого листа и с суммы, которой не хватает.
   useEffect(() => {
@@ -109,6 +129,7 @@ export function CashierPayment({
     setNote('');
     setTerminal(false);
     setPrintReceipt(printDefault);
+    setBonusUsed(0);
     setAmount(String(total / 100));
   }, [visible, total, printDefault]);
 
@@ -137,12 +158,12 @@ export function CashierPayment({
     const next: Taken = { ...taken, [method]: taken[method] + applied };
     const total_ = next.cash + next.card + next.credit;
 
-    if (total_ >= total) {
+    if (total_ >= payable) {
       // Чек хранит один способ оплаты — тот, которым приняли больше живых
       // денег. Отсрочка способом оплаты быть не может: по ней не приняли
       // ничего, она уходит отдельно, долгом покупателя.
       const winner: PaymentMethod = next.card > next.cash ? 'card' : 'cash';
-      onPay(winner, rest, note, next.credit, next);
+      onPay(winner, rest, note, next.credit, next, bonusUsed);
       return;
     }
 
@@ -198,6 +219,29 @@ export function CashierPayment({
             <Text style={styles.title}>Платежи</Text>
 
             <Line label="Итог" value={formatMoney(total)} strong />
+
+            {/* Бонусы — над деньгами: сперва решают, сколько закрыть со
+                счёта, и только потом принимают остаток. */}
+            {bonusMax > 0 && !returning ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  bonusUsed ? 'Не списывать бонусы' : `Списать бонусами ${formatMoney(bonusMax)}`
+                }
+                onPress={() => setBonusUsed((used) => (used ? 0 : bonusMax))}
+                style={[styles.bonusRow, bonusUsed ? styles.bonusRowOn : null]}
+              >
+                <Text style={[styles.bonusLabel, bonusUsed ? styles.bonusLabelOn : null]}>
+                  {bonusUsed ? 'Бонусами' : `Списать бонусы (до ${formatMoney(bonusMax)})`}
+                </Text>
+                <Text style={[styles.bonusValue, bonusUsed ? styles.bonusLabelOn : null]}>
+                  {bonusUsed ? `− ${formatMoney(bonusUsed)}` : formatMoney(0)}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {bonusUsed ? <Line label="К оплате" value={formatMoney(payable)} strong /> : null}
+
             <Line label="Наличные" value={formatMoney(taken.cash)} />
             <Line label="Безналичные" value={formatMoney(taken.card)} />
             <Line label="Отсрочка" value={formatMoney(taken.credit)} />
@@ -442,6 +486,23 @@ const styles = StyleSheet.create({
     color: pos.text,
     textAlignVertical: 'top',
   },
+  bonusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: pos.border,
+    marginVertical: 6,
+  },
+  bonusRowOn: { backgroundColor: pos.select, borderColor: pos.accent },
+  bonusLabel: { flex: 1, fontFamily: pos.font, fontSize: 15, color: pos.text },
+  bonusValue: { fontFamily: pos.font, fontSize: 15, color: pos.text, fontVariant: ['tabular-nums'] },
+  bonusLabelOn: { color: pos.accent, fontWeight: '600' },
+
   printRow: {
     flexDirection: 'row',
     alignItems: 'center',

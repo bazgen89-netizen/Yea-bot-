@@ -300,6 +300,36 @@ const realStores = shops
 writeFileSync(`${out}/stores.json`, JSON.stringify(realStores, null, 1));
 console.log(`  ${shops.length}, из них магазинов: ${realStores.length}`);
 
+/**
+ * Названия касс.
+ *
+ * Запроса `/registers` в Connect API нет вовсе, а в документе лежит только
+ * внутренний номер кассы. Но у CloudShop касса и её «магазин» заводятся
+ * одной парой, и их идентификаторы отличаются последним знаком: касса
+ * `…7596` — магазин `…7597` с названием «№1». Проверено по его документу:
+ * там, где он видит «Касса: №1», в чеке стоит именно `…7596`.
+ *
+ * Поэтому названия достаём соседом: для каждого номера кассы спрашиваем
+ * магазин с номером на единицу больше. Не нашлось — строка останется
+ * пустой, выдумывать название не станем.
+ */
+async function registerNames(ids) {
+  const names = new Map();
+
+  for (const id of ids) {
+    const next = id.slice(0, -1) + ((parseInt(id.slice(-1), 16) + 1) % 16).toString(16);
+    try {
+      const answer = await get(`/stores/${next}`);
+      const name = (answer.shop?.name ?? '').trim();
+      if (name) names.set(id, name);
+    } catch {
+      // Соседа нет — касса останется без названия.
+    }
+  }
+
+  return names;
+}
+
 // --- товары ---------------------------------------------------------------
 
 console.log('Товары…');
@@ -593,6 +623,10 @@ if (!flag('no-history')) {
     // Кто пробил чек: учётная запись кассы или хозяина — «Чайный бар»,
     // «Черёмушки», «waystea». Именно её показывает колонка «Автор».
     au: (doc.actor?.name ?? '').trim() || null,
+    // Касса и смена — внутренними номерами; названия и порядковый номер
+    // проставляются ниже, когда собрана вся история.
+    rg: doc.references?.register_id ?? null,
+    sh: doc.references?.shift_id ?? null,
     // Номер документа — тот, под которым чек живёт в CloudShop: «Продажа
     // #45658». Внутренний номер здесь никому не нужен, по нему он свой чек
     // не найдёт.
@@ -679,6 +713,33 @@ if (!flag('no-history')) {
     process.stdout.write(`\r  дозагружено: ${got}\n`);
     writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
   }
+
+  /**
+   * Касса — названием, смена — порядковым номером.
+   *
+   * Смены в CloudShop пронумерованы подряд: в его документе от 23 августа
+   * стоит «Смена #3430». Ключ отдаёт только внутренний номер, поэтому
+   * нумеруем сами — по времени первого чека смены, от самой старой к самой
+   * свежей. Если счёт сойдётся с его номером, значит это те же смены.
+   */
+  const registers = await registerNames(new Set(sales.map((sale) => sale.rg).filter(Boolean)));
+
+  const firstSeen = new Map();
+  for (const sale of sales) {
+    if (!sale.sh || !sale.at) continue;
+    const seen = firstSeen.get(sale.sh);
+    if (!seen || sale.at < seen) firstSeen.set(sale.sh, sale.at);
+  }
+
+  const order = [...firstSeen.entries()].sort((a, b) => (a[1] < b[1] ? -1 : 1));
+  const shiftNo = new Map(order.map(([id], index) => [id, index + 1]));
+
+  for (const sale of sales) {
+    sale.rg = sale.rg ? (registers.get(sale.rg) ?? null) : null;
+    sale.sh = sale.sh ? (shiftNo.get(sale.sh) ?? null) : null;
+  }
+
+  console.log(`  касс: ${registers.size}, смен: ${shiftNo.size}`);
 
   const fresh = sales.length;
   sales = mergeHistory(sales);

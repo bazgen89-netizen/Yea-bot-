@@ -266,6 +266,13 @@ export interface Sale {
   /** Бонусы по чеку: начислено и списано, копейки. */
   bonus_earned: Kopecks;
   bonus_used: Kopecks;
+  /**
+   * Покупатель чека; `null` — розничный.
+   *
+   * Нужен просмотру документа: у него имя клиента — ссылка в его карточку,
+   * а по имени карточку не найти, тёзок в базе на три тысячи человек хватает.
+   */
+  customer_id: Id | null;
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer';

@@ -151,6 +151,7 @@ function Tool({
 }
 
 function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boolean }) {
+  const router = useRouter();
   const { db, refresh } = useDatabase();
   const sale = useQuery((database) => getSale(database, id), [id]);
   const [search, setSearch] = useState('');
@@ -237,11 +238,29 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
 
       <View style={styles.head}>
         <View style={styles.headColumn}>
-          <Field label="Магазин" value={sale.store} link />
-          <Field label="Клиент" value={sale.customer ?? 'Розничный покупатель'} link />
-          <Field label="Автор" value={sale.author} link />
-          <Field label="Касса" value={sale.register} link />
-          <Field label="Смена" value={sale.shift_number ? `#${sale.shift_number}` : null} link />
+          <Field label="Магазин" value={sale.store} link onPress={() => router.push('/stores')} />
+          <Field
+            label="Клиент"
+            value={sale.customer ?? 'Розничный покупатель'}
+            link
+            onPress={
+              sale.customer_id
+                ? () =>
+                    router.push({
+                      pathname: '/counterparties',
+                      params: { open: String(sale.customer_id) },
+                    })
+                : undefined
+            }
+          />
+          <Field label="Автор" value={sale.author} link onPress={() => router.push('/staff')} />
+          <Field label="Касса" value={sale.register} link onPress={() => router.push('/registers')} />
+          <Field
+            label="Смена"
+            value={sale.shift_number ? `#${sale.shift_number}` : null}
+            link
+            onPress={() => router.push('/shifts')}
+          />
         </View>
 
         <View style={styles.headColumn}>
@@ -275,9 +294,32 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
           <View style={styles.cellDot}>
             <View style={styles.dot} />
           </View>
-          <Text style={[styles.cellNo, styles.link]}>{sale.money_number ?? sale.id}</Text>
-          <Text style={[styles.cellWide, styles.link]}>{account}</Text>
-          <Text style={[styles.cellWide, styles.link]}>
+          <Text
+            accessibilityRole="link"
+            style={[styles.cellNo, styles.link]}
+            onPress={() => router.push('/money')}
+          >
+            {sale.money_number ?? sale.id}
+          </Text>
+          <Text
+            accessibilityRole="link"
+            style={[styles.cellWide, styles.link]}
+            onPress={() => router.push('/accounts')}
+          >
+            {account}
+          </Text>
+          <Text
+            accessibilityRole="link"
+            style={[styles.cellWide, styles.link]}
+            onPress={() =>
+              sale.customer_id
+                ? router.push({
+                    pathname: '/counterparties',
+                    params: { open: String(sale.customer_id) },
+                  })
+                : router.push('/counterparties')
+            }
+          >
             {sale.customer ?? 'Розничный покупатель'}
           </Text>
           <Text style={styles.cellDate}>{longDate(sale.created_at)}</Text>
@@ -319,7 +361,17 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
             <View key={item.id} style={styles.row}>
               <View style={styles.cellName}>
                 <WebIcon.products size={15} color={web.textMuted} />
-                <Text style={[styles.itemName, styles.link]} numberOfLines={2}>
+                <Text
+                  accessibilityRole="link"
+                  style={[styles.itemName, styles.link]}
+                  numberOfLines={2}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/product/[id]',
+                      params: { id: String(item.product_id) },
+                    })
+                  }
+                >
                   {item.name}
                 </Text>
               </View>
@@ -347,21 +399,44 @@ function Body({ id, onClose, bare }: { id: Id; onClose: () => void; bare?: boole
   );
 }
 
+/**
+ * Строка шапки документа.
+ *
+ * В его кабинете **всё синее — ссылка**: магазин ведёт в карточку магазина,
+ * клиент в карточку клиента, автор в профиль сотрудника, касса в кассу,
+ * смена в смену. Это видно прямо в разметке их экрана
+ * (`js/pages/journal/page/index.html`): `ui-sref="…card.profile"`,
+ * `…card.register.showBox`, `…card.register.showShift`. Поэтому здесь не
+ * «синий текст», а нажимаемая строка — иначе цвет обещает переход, которого
+ * нет.
+ */
 function Field({
   label,
   value,
   link,
+  onPress,
 }: {
   label: string;
   value: string | null;
   link?: boolean;
+  onPress?: () => void;
 }) {
+  const text = (
+    <Text style={[styles.fieldValue, link && value ? styles.link : null]} numberOfLines={1}>
+      {value ?? '—'}
+    </Text>
+  );
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={[styles.fieldValue, link && styles.link]} numberOfLines={1}>
-        {value ?? '—'}
-      </Text>
+      {onPress && value ? (
+        <Pressable accessibilityRole="link" onPress={onPress} style={styles.fieldPress}>
+          {text}
+        </Pressable>
+      ) : (
+        text
+      )}
     </View>
   );
 }
@@ -459,6 +534,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', gap: 60 },
   headColumn: { flex: 1, gap: 10 },
   field: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
+  fieldPress: { flex: 1 },
   fieldLabel: { width: 130, fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
   fieldValue: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   link: { color: web.link },

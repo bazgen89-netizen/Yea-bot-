@@ -302,9 +302,15 @@ export function getSale(db: SqlDriver, saleId: Id): SaleWithItems | null {
     `SELECT s.*,
             (SELECT l.name FROM locations l WHERE l.id = s.location_id)      AS store,
             (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id) AS customer,
-            (SELECT r.name FROM registers r
-               JOIN shifts h ON h.register_id = r.id WHERE h.id = s.shift_id) AS register,
-            s.shift_id                                                        AS shift_number
+            -- Своя касса, если чек пробит здесь; иначе название из
+            -- CloudShop. То же со сменой: свои нумеруются сами, у
+            -- перенесённых номер приехал вместе с историей.
+            COALESCE(
+              (SELECT r.name FROM registers r
+                 JOIN shifts h ON h.register_id = r.id WHERE h.id = s.shift_id),
+              s.register_name
+            )                                                                 AS register,
+            COALESCE(s.shift_id, s.shift_no)                                  AS shift_number
        FROM sales s
       WHERE s.id = ?`,
     [saleId],

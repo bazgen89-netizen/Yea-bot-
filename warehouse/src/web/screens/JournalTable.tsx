@@ -18,6 +18,7 @@ import {
   type JournalFilter as JournalFilterInput,
   type JournalKind,
 } from '../../db/journal';
+import { listLocations } from '../../db/locations';
 import { DOC_TYPES } from '../../domain/docTypes';
 import { DOC_KIND_LABEL } from '../../domain/types';
 import { formatMoneyWeb } from '../../domain/money';
@@ -59,6 +60,22 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
   inventory: DOC_TYPES.inventory.color,
   adjustment: DOC_TYPES.adjustment.color,
 };
+
+/** Неделя, в которой мы сейчас: с понедельника по воскресенье. */
+function thisWeek(): { from: string; to: string } {
+  const day = (date: Date) => {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
+  const from = new Date();
+  from.setDate(from.getDate() - ((from.getDay() + 6) % 7));
+
+  const to = new Date(from);
+  to.setDate(to.getDate() + 6);
+
+  return { from: day(from), to: day(to) };
+}
 
 /** Что стоит в поле «статус» строки отбора. */
 const STATUS = [
@@ -103,7 +120,16 @@ export function JournalTable() {
    * пропадал целиком вместе с отбором и местом прокрутки.
    */
   const [openSale, setOpenSale] = useState<number | null>(null);
-  const [values, setValues] = useState<Record<string, FilterValue>>({});
+  /**
+   * Отбор. Дата с самого начала стоит неделей — как в его журнале: там в
+   * поле «дата» написано «17 авг — 23 авг», и список открывается уже
+   * отобранным. Иначе журнал на сорок пять тысяч документов открывается
+   * всей историей сразу, и найти вчерашний чек тяжелее, чем нужно.
+   */
+  const [values, setValues] = useState<Record<string, FilterValue>>(() => {
+    const { from, to } = thisWeek();
+    return { dateFrom: from, dateTo: to };
+  });
 
   // Отбор делает база, а не память: журнал бывает длинным, и фильтровать уже
   // отданные пятьсот строк значит показывать не то, что просили.
@@ -123,6 +149,7 @@ export function JournalTable() {
   );
 
   const entries = useQuery((db) => listJournal(db, 500, filter), [filter]);
+  const stores = useQuery((db) => listLocations(db));
   const options = useQuery((db) => journalOptions(db));
 
   const fields: FilterField[] = [
@@ -182,6 +209,35 @@ export function JournalTable() {
   const groups = groupByDay(entries);
   const set = (key: string, value: FilterValue) =>
     setValues((current) => ({ ...current, [key]: value }));
+
+  /**
+   * Куда ведут синие строки таблицы.
+   *
+   * Магазин — в список магазинов, покупатель — в справочник клиентов с
+   * открытой карточкой, автор — в сотрудников. Это его переходы: в разметке
+   * их журнала у тех же полей стоят `ui-sref` на карточку магазина, клиента
+   * и профиль сотрудника.
+   */
+  const open = (what: 'sender' | 'receiver' | 'author', entry: JournalEntry) => {
+    if (what === 'author') {
+      router.push('/staff');
+      return;
+    }
+
+    const name = what === 'sender' ? entry.sender : entry.receiver;
+    if (!name) return;
+
+    // Отправитель у чека — магазин, у прихода — поставщик. Отличаем по тому,
+    // есть ли такой магазин: искать по названию здесь честнее, чем гадать по
+    // виду документа, — у перемещения магазины с обеих сторон.
+    const store = stores.find((location: { name: string }) => location.name === name);
+    if (store) {
+      router.push('/stores');
+      return;
+    }
+
+    router.push({ pathname: '/counterparties', params: { search: name } });
+  };
 
   return (
     <View style={styles.screen}>
@@ -270,6 +326,7 @@ export function JournalTable() {
                   <EntryRow
                     key={`${entry.kind}${entry.id}`}
                     entry={entry}
+                    onOpen={open}
                     onPress={() => {
                       // Чек открывается панелью поверх журнала, складской
                       // документ — своей страницей: у него там контрагент,
@@ -302,7 +359,15 @@ export function JournalTable() {
   );
 }
 
-function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void }) {
+function EntryRow({
+  entry,
+  onPress,
+  onOpen,
+}: {
+  entry: JournalEntry;
+  onPress: () => void;
+  onOpen: (what: 'sender' | 'receiver' | 'author', entry: JournalEntry) => void;
+}) {
   const [doc, time, positions, amount, discount, paid, sender, receiver, author] = COLUMNS;
 
   return (
@@ -362,16 +427,36 @@ function EntryRow({ entry, onPress }: { entry: JournalEntry; onPress: () => void
           <Text style={[webText.cellNumber, { width: paid.width }]}>
             {entry.paid === null ? '-' : formatMoneyWeb(entry.paid)}
           </Text>
-          <Text style={[webText.link, { width: sender.width }]} numberOfLines={1}>
+          {/* Синее — значит нажимаемое. В его кабинете отправитель ведёт в
+              карточку магазина, получатель — в карточку клиента, автор — в
+              профиль сотрудника; это прямо в разметке их экрана
+              (`ui-sref="…card.profile"`). Синий текст, который никуда не
+              ведёт, обещает переход, которого нет. */}
+          <Text
+            accessibilityRole="link"
+            style={[webText.link, { width: sender.width }]}
+            numberOfLines={1}
+            onPress={() => onOpen('sender', entry)}
+          >
             {entry.sender ?? ''}
           </Text>
-          <Text style={[webText.link, { width: receiver.width }]} numberOfLines={1}>
+          <Text
+            accessibilityRole="link"
+            style={[webText.link, { width: receiver.width }]}
+            numberOfLines={1}
+            onPress={() => onOpen('receiver', entry)}
+          >
             {entry.receiver ?? ''}
           </Text>
           {/* Автор — тот, кто пробил документ. Раньше здесь стояло слово
               «waystea» прямо в разметке, и у чеков «Чайного бара» и
               «Черёмушек» тоже значился владелец. */}
-          <Text style={[webText.link, { width: author.width }]} numberOfLines={1}>
+          <Text
+            accessibilityRole="link"
+            style={[webText.link, { width: author.width }]}
+            numberOfLines={1}
+            onPress={() => onOpen('author', entry)}
+          >
             {entry.author ?? ''}
           </Text>
         </Row>

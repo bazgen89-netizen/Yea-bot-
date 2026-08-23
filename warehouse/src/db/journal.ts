@@ -118,7 +118,10 @@ export function listJournal(
     `SELECT * FROM (
        SELECT s.id                                        AS id,
               s.number                                     AS number,
-              CASE WHEN EXISTS (
+              -- Свой возврат узнаётся по движению склада, перенесённый —
+              -- по признаку в самом чеке: у перенесённой истории движений
+              -- нет вовсе, она склад не трогает.
+              CASE WHEN s.is_return = 1 OR EXISTS (
                 SELECT 1 FROM stock_moves m
                 WHERE m.sale_id = s.id AND m.reason = 'return'
               ) THEN 'refund' ELSE 'sale' END              AS kind,

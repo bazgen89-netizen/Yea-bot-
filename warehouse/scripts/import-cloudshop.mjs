@@ -198,8 +198,31 @@ const SINCE = '2019-01-01';
  * восемьсот, а за раз отдают сто.
  */
 async function history(since, cap) {
+  return walk('/documents/sales', since, cap, 'чеков');
+}
+
+/**
+ * Возвраты продаж — отдельным запросом, их в переносе не было вовсе.
+ *
+ * У них свой раздел (`/documents/return?type=sales`) и своя нумерация:
+ * «Возврат продажи #11». В журнале они стоят рядом с чеками и отличаются
+ * цветом полоски, а в выручке уменьшают её — потому и нужны.
+ */
+async function returns(since) {
+  return walk('/documents/return?type=sales', since, Infinity, 'возвратов');
+}
+
+/**
+ * Обойти раздел документов помесячно, от свежих к старым.
+ *
+ * Окно не длиннее месяца — CloudShop не отдаёт промежутки больше 31 дня, а
+ * без дат возвращает последние семь суток. На это я однажды напоролся и
+ * решил, что глубже недели истории нет.
+ */
+async function walk(path, since, cap, label) {
   const documents = [];
   const start = new Date(`${since}T00:00:00Z`);
+  const join = path.includes('?') ? '&' : '?';
 
   // Идём от сегодняшнего дня назад, отступая по месяцу.
   let to = new Date();
@@ -214,11 +237,11 @@ async function history(since, cap) {
       `&time_end=${encodeURIComponent(stamp(to))}`;
 
     for (let offset = 0; documents.length < cap; offset += 100) {
-      const page = await get(`/documents/sales?${window}&limit=100&offset=${offset}`);
+      const page = await get(`${path}${join}${window}&limit=100&offset=${offset}`);
       const list = Array.isArray(page) ? page : (page.data ?? page.items ?? []);
 
       documents.push(...list);
-      process.stdout.write(`\r  чеков: ${documents.length}  (${stamp(from).slice(0, 7)})   `);
+      process.stdout.write(`\r  ${label}: ${documents.length}  (${stamp(from).slice(0, 7)})   `);
       if (list.length < 100) break;
     }
 
@@ -353,7 +376,26 @@ async function costPrices(since) {
   return { cost, purchase };
 }
 
-const products = rawProducts.map((item) => {
+/**
+ * Снятые с продажи товары.
+ *
+ * Их 689 — против 591 живого, — и без них история покупок наполовину
+ * безымянная: чек трёхлетней давности ссылается на товар, которого в
+ * справочнике уже нет, и раньше вместо карточки заводилась заглушка с одним
+ * названием из строки чека. Теперь приезжает настоящая карточка: код,
+ * артикул, штрихкод, цена, категория.
+ *
+ * В программе они заводятся архивными: в справочнике и на витрине их не
+ * видно, продать нельзя, а история цела. Так же и в кабинете.
+ */
+console.log('Снятые с продажи…');
+const deleted = await get(
+  `/product/deleted?start_time=${encodeURIComponent(`${value('since', SINCE)} 00:00:00`)}`,
+);
+const rawDeleted = deleted.data ?? deleted.products ?? deleted;
+console.log(`  ${Array.isArray(rawDeleted) ? rawDeleted.length : 0}`);
+
+const card = (item, archived) => {
   const options = item.options ?? {};
   const size = item.dimensions ?? {};
 
@@ -389,8 +431,17 @@ const products = rawProducts.map((item) => {
     dm: size.depth ? Math.round(Number(size.depth) * 10) : null,
     // Ссылка на фотографию — по ней качается картинка ниже.
     img: item.img?.[0] ?? null,
+    // Снят с продажи: заводится архивным, в справочнике не показывается.
+    del: archived ? 1 : undefined,
   };
-});
+};
+
+const products = [
+  ...rawProducts.map((item) => card(item, false)),
+  // Снятые идут после живых: если код повторяется, в справочнике останется
+  // живая карточка, а не архивная.
+  ...(Array.isArray(rawDeleted) ? rawDeleted.map((item) => card(item, true)) : []),
+];
 
 writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
 
@@ -461,6 +512,13 @@ if (!flag('no-history')) {
   const cap = Number(value('history', '')) || Infinity;
   const documents = await history(value('since', SINCE), cap);
 
+  /** Товары из чеков, которых нет в справочнике: идентификатор → код. */
+  const lost = new Map();
+
+  // Возвраты продаж — свой раздел CloudShop. В журнале они стоят рядом с
+  // чеками, а из выручки вычитаются.
+  const refunds = cap === Infinity ? await returns(value('since', SINCE)) : [];
+
   /**
    * Чем строка чека опознаётся в справочнике.
    *
@@ -469,13 +527,17 @@ if (!flag('no-history')) {
    * собираем несколько подходов к одному и тому же товару и пробуем их по
    * очереди, от самого надёжного к самому приблизительному.
    */
-  const known = new Set(rawProducts.map((item) => item.code).filter(Boolean));
+  // Снятые с продажи тоже считаются известными: их карточки теперь
+  // переносятся, и строка чека трёхлетней давности находит настоящий товар,
+  // а не заглушку с одним названием.
+  const catalog = [...rawProducts, ...(Array.isArray(rawDeleted) ? rawDeleted : [])];
+  const known = new Set(catalog.map((item) => item.code).filter(Boolean));
   const codeById = new Map();
   const codeBySku = new Map();
   const codeByBarcode = new Map();
   const codeByName = new Map();
 
-  for (const item of rawProducts) {
+  for (const item of catalog) {
     if (!item.code) continue;
     codeById.set(item.id, item.code);
     if (item.sku) codeBySku.set(String(item.sku).trim(), item.code);
@@ -506,7 +568,14 @@ if (!flag('no-history')) {
     );
   };
 
-  sales = documents.map((doc) => ({
+  // Чеки и возвраты идут одним списком: в журнале они стоят рядом, и
+  // раскладывать их по двум файлам значило бы дважды писать одно и то же.
+  sales = [
+    ...documents.map((doc) => ({ doc, ret: 0 })),
+    ...refunds.map((doc) => ({ doc, ret: 1 })),
+  ].map(({ doc, ret }) => ({
+    /** Возврат продажи: товар едет назад, деньги — из кассы. */
+    ret: ret || undefined,
     // Дата чека — та, что стоит в документе, а не время выгрузки.
     at: doc.processed_at ?? doc.created_at ?? null,
     // Клиент лежит в `customer`, а не в `client_id`: `client_id` — это
@@ -557,6 +626,14 @@ if (!flag('no-history')) {
 
       const code = resolve(product, line, name);
 
+      // Товара нет ни среди живых, ни среди снятых — запомним его
+      // идентификатор: карточку можно попросить поштучно, `/product/{id}`
+      // отдаёт и наборы, которых нет в общем списке.
+      if (!known.has(code)) {
+        const id = line.id ?? inner._id ?? line.product_id;
+        if (id) lost.set(String(id), code);
+      }
+
       return {
         code,
         // Название нужно только тогда, когда товара в справочнике уже нет:
@@ -571,6 +648,37 @@ if (!flag('no-history')) {
       };
     }),
   }));
+
+  /**
+   * Дозагрузить карточки товаров, которых не было в общих списках.
+   *
+   * Так приезжают наборы — «В зале Габа Алишань» и прочие позиции с
+   * составом: в `/product` их 88, но в `/product/deleted` снятых наборов
+   * нет вовсе, а в истории они встречаются пятнадцатью тысячами строк.
+   * Поштучный запрос `/product/{id}` отдаёт их без разговоров.
+   */
+  if (lost.size) {
+    console.log(`Дозагрузка карточек из истории: ${lost.size}…`);
+    let got = 0;
+
+    for (const id of lost.keys()) {
+      try {
+        const one = await get(`/product/${id}`);
+        const item = one.product ?? one.data ?? one;
+        if (item && item.id) {
+          products.push(card(item, true));
+          got++;
+        }
+      } catch {
+        // Карточки нет — строка останется с именем из чека, как раньше.
+      }
+
+      if (got % 25 === 0 && got) process.stdout.write(`\r  дозагружено: ${got}   `);
+    }
+
+    process.stdout.write(`\r  дозагружено: ${got}\n`);
+    writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
+  }
 
   const fresh = sales.length;
   sales = mergeHistory(sales);
@@ -791,10 +899,10 @@ const size = (file) => {
 };
 
 console.log(`
-  товаров          ${products.length}   (${size('products.json')})
+  товаров          ${products.length}   из них снятых с продажи ${products.filter((item) => item.del).length}   (${size('products.json')})
   с фотографией    ${flag('no-photos') ? 'пропущено' : Object.keys(JSON.parse(readFileSync(`${out}/photos.json`, 'utf8'))).length}
   клиентов         ${customers.length}   (${size('clients.json')})
-  чеков в истории  ${flag('no-history') ? 'пропущено' : sales.length}   (${size('sales.json')})
+  чеков в истории  ${flag('no-history') ? 'пропущено' : sales.length}   из них возвратов ${flag('no-history') ? 0 : sales.filter((item) => item.ret).length}   (${size('sales.json')})
 
 Записано в ${out.replace(root + '/', '')} — эта папка не попадает в git.
 Дальше: node scripts/build-mine.mjs — и всё это окажется в программе.`);

@@ -52,6 +52,15 @@ interface SeedProduct {
   // необязательные: старая выгрузка их не знает, и падать из-за этого
   // программа не должна.
 
+  /**
+   * Снят с продажи.
+   *
+   * Таких карточек в CloudShop больше, чем живых: 689 против 591. Без них
+   * история наполовину безымянная — чек трёхлетней давности ссылается на
+   * товар, которого в справочнике уже нет. Заводятся архивными: в
+   * справочнике и на витрине их не видно, продать нельзя, история цела.
+   */
+  del?: number | null;
   /** Штрихкод — по нему товар находит сканер. */
   bc?: string | null;
   /** Код весов, PLU. */
@@ -102,6 +111,8 @@ interface SeedClient {
 
 /** Чек из истории покупок CloudShop. */
 interface SeedSale {
+  /** Возврат продажи, а не продажа. */
+  ret?: number;
   /** Когда пробит. */
   at: string | null;
   /** Клиент — идентификатором CloudShop. */
@@ -408,8 +419,8 @@ function seedProducts(db: SqlDriver): void {
         `INSERT INTO products
            (name, sku, code, barcode, category_id, unit, cost_price, purchase_price,
             sale_price, min_qty, discount_bp, photo_uri, created_at, search_text,
-            plu_code, description, weight_g, height_mm, width_mm, depth_mm)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            plu_code, description, weight_g, height_mm, width_mm, depth_mm, archived)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.n,
           item.s,
@@ -430,6 +441,7 @@ function seedProducts(db: SqlDriver): void {
           item.hm ?? null,
           item.wm ?? null,
           item.dm ?? null,
+          item.del ? 1 : 0,
         ],
       );
       const productId = db.lastInsertId();
@@ -758,8 +770,8 @@ function seedHistory(db: SqlDriver): void {
       const note = customerId === null && sale.cn ? sale.cn : null;
 
       db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used, author)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used, author, is_return)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sale.disc ?? 0,
           sale.t ?? 0,
@@ -774,6 +786,7 @@ function seedHistory(db: SqlDriver): void {
           sale.be ?? 0,
           sale.bu ?? 0,
           sale.au ?? null,
+          sale.ret ? 1 : 0,
         ],
       );
       const saleId = db.lastInsertId();

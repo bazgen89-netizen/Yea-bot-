@@ -2,6 +2,7 @@ import { createTestDriver } from '../testDriver';
 import type { SqlDriver } from '../driver';
 import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
+import { listJournal } from '../journal';
 import { createSale } from '../sales';
 import {
   seedStamp,
@@ -288,5 +289,57 @@ describe('подстановка распакованного набора', () 
         'Монтеро Антонио',
       ])?.b,
     ).toBe(16_450);
+  });
+});
+
+/**
+ * Возврат продажи среди перенесённых документов.
+ *
+ * У возвратов в CloudShop свой раздел, и в переносе их не было вовсе —
+ * девять документов просто отсутствовали. Свои возвраты мы узнаём по
+ * движению склада, но у перенесённой истории движений нет: она склад не
+ * трогает. Поэтому признак хранится в самом чеке, и журнал обязан по нему
+ * называть документ возвратом, а не продажей.
+ */
+describe('перенесённые возвраты', () => {
+  it('журнал называет их возвратом продажи', () => {
+    const db = createTestDriver();
+
+    useSeedData({
+      products: [
+        { n: 'Габа Алишань', c: '00145', s: null, u: 'гр', p: 3299, d: 0, q: { 'Чайный бар': 10_000 } },
+      ],
+      clients: [],
+      sales: [
+        {
+          at: '2026-08-16T11:43:45.000Z',
+          c: null,
+          ret: 1,
+          no: 11,
+          t: 65_000,
+          st: 'Чайный бар',
+          ln: [{ code: '00145', q: 1_000, p: 65_000 }],
+        },
+        {
+          at: '2026-08-16T12:00:00.000Z',
+          c: null,
+          no: 12,
+          t: 9_920,
+          st: 'Чайный бар',
+          ln: [{ code: '00145', q: 1_000, p: 9_920 }],
+        },
+      ],
+      photos: {},
+      stores: [],
+    });
+
+    seedCatalog(db);
+
+    const kinds = new Map(
+      listJournal(db, 10).map((entry) => [entry.number, entry.kind] as const),
+    );
+
+    expect(kinds.get(11)).toBe('refund');
+    expect(kinds.get(12)).toBe('sale');
   });
 });

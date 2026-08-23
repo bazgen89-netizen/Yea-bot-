@@ -7,12 +7,12 @@ import { ActionsMenu } from '../ActionsMenu';
 import { PricesDialog, CategoryDialog } from '../BulkDialogs';
 import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
 import { ColumnPicker } from '../ColumnPicker';
-import { FilterPanel } from '../FilterPanel';
+import { CatalogFilter, activeParts } from '../CatalogFilter';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { archiveProducts } from '../../db/bulk';
 import { catalogCsv, stockCsv } from '../../db/export';
 import { listLocations, stockByLocation } from '../../db/locations';
-import { listProducts } from '../../db/products';
+import { listProducts, type CatalogQuery } from '../../db/products';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import { pluralize } from '../../domain/plural';
@@ -55,13 +55,25 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
 
   const filters = useCatalogFilters();
 
+  /**
+   * Условие из окна «Фильтр».
+   *
+   * Живёт рядом с готовыми наборами, а не вместо них: наборы остались
+   * «пресетами» сверху окна, а это — то, что он собрал руками.
+   */
+  const [query, setQuery] = useState<CatalogQuery>({});
+
+  // Кнопка «Фильтр» подсвечена, когда что-то отобрано: и готовыми наборами,
+  // и собранным условием.
+  const active = filters.active + activeParts(query);
+
   // Какие колонки показывать. Выбор запоминается: у него он тоже переживает
   // перезагрузку, иначе настраивать таблицу пришлось бы каждое утро.
   const [shown, setShown] = useState<string[]>(() => readColumns());
 
   const products = useQuery(
-    (db) => listProducts(db, { search, presets: filters.presets }),
-    [search, filters.presets],
+    (db) => listProducts(db, { search, presets: filters.presets, query }),
+    [search, filters.presets, query],
   );
   const locations = useQuery((db) => listLocations(db));
   const stock = useQuery((db) => stockByLocation(db));
@@ -109,9 +121,9 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
           placeholder="Поиск по наименованию,"
         />
         <ToolButton
-          label={filters.active > 0 ? `Фильтр: ${filters.active}` : 'Фильтр'}
-          tone={filters.active > 0 ? 'blueOutline' : 'plain'}
-          icon={<WebIcon.funnel color={filters.active > 0 ? web.link : web.text} />}
+          label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
+          tone={active > 0 ? 'blueOutline' : 'plain'}
+          icon={<WebIcon.funnel color={active > 0 ? web.link : web.text} />}
           onPress={() => {
             setFilterOpen(true);
             setPage(1);
@@ -274,10 +286,18 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
         onClose={() => setBulk(null)}
       />
 
-      <FilterPanel
+      <CatalogFilter
         visible={filterOpen}
+        value={query}
         onClose={() => setFilterOpen(false)}
-        filters={filters}
+        onApply={(next) => {
+          setQuery(next);
+          setPage(1);
+        }}
+        saved={filters.saved
+          .filter((item) => item.query)
+          .map((item) => ({ name: item.name, query: item.query as CatalogQuery }))}
+        onSave={(name, next) => filters.saveQuery(name, next)}
       />
 
       <ColumnPicker

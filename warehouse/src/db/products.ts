@@ -59,6 +59,8 @@ export interface ProductFilter {
   lowStockOnly?: boolean;
   /** Готовые фильтры. Несколько складываются по «и», как в исходнике. */
   presets?: ProductPreset[];
+  /** Собранный в окне «Фильтр» отбор: цена, остаток, сроки, продаваемость. */
+  query?: CatalogQuery;
   /**
    * Чем сортировать и в какую сторону — настройка кассы «Сортировка товара по».
    *
@@ -126,6 +128,113 @@ function presetSql(
   }
 }
 
+/**
+ * Условие фильтра «больше / меньше / равно».
+ *
+ * Ровно три, как в его окне: третьего варианта там нет, и придумывать
+ * «не равно» — значит показать кнопку, которой у него не бывает.
+ */
+export type Compare = 'gt' | 'lt' | 'eq';
+
+const COMPARE_SQL: Record<Compare, string> = { gt: '>', lt: '<', eq: '=' };
+
+/**
+ * Отбор каталога так, как он собран в его окне «Фильтр».
+ *
+ * Восемь готовых наборов, которые стояли у нас раньше, отвечали на восемь
+ * вопросов — а он собирает свой: «базовая цена больше 500 и остаток общий
+ * меньше 10». Поэтому здесь не список галочек, а части условия, каждая из
+ * которых может быть пустой.
+ */
+export interface CatalogQuery {
+  /** Что показывать: товар, услуга, комплект. Пусто — всё. */
+  kinds?: ('product' | 'service' | 'set')[];
+  categoryId?: number | null;
+  /** Цена: базовая или закупочная, знак и значение в копейках. */
+  price?: { field: 'sale' | 'purchase'; op: Compare; value: number };
+  /** Остаток: общий или по магазину, знак и значение в тысячных. */
+  stock?: { locationId?: number | null; op: Compare; value: number };
+  /** Срок годности истекает в течение N дней. */
+  expiresInDays?: number;
+  /** Товар менялся в течение N дней. */
+  changedInDays?: number;
+  /** Товар продавался — или не продавался — в течение N дней. */
+  sold?: { within: boolean; days: number };
+}
+
+/** Собрать части условия из окна «Фильтр» в куски SQL. */
+export function catalogSql(
+  query: CatalogQuery,
+  now: string,
+): { where: string[]; whereParams: SqlParam[]; having: string[]; havingParams: SqlParam[] } {
+  const where: string[] = [];
+  const whereParams: SqlParam[] = [];
+  const having: string[] = [];
+  const havingParams: SqlParam[] = [];
+
+  if (query.kinds?.length) {
+    // «Комплект» — не вид в колонке `kind`, а товар с составом: у него это
+    // отдельная галочка, и различить их можно только по составу.
+    const parts: string[] = [];
+    for (const kind of query.kinds) {
+      if (kind === 'set') {
+        parts.push('EXISTS (SELECT 1 FROM product_set_items i WHERE i.set_id = p.id)');
+      } else {
+        parts.push('(p.kind = ? AND NOT EXISTS (SELECT 1 FROM product_set_items i WHERE i.set_id = p.id))');
+        whereParams.push(kind);
+      }
+    }
+    where.push(`(${parts.join(' OR ')})`);
+  }
+
+  if (query.categoryId != null) {
+    where.push('p.category_id = ?');
+    whereParams.push(query.categoryId);
+  }
+
+  if (query.price) {
+    const column = query.price.field === 'purchase' ? 'p.purchase_price' : 'p.sale_price';
+    where.push(`${column} ${COMPARE_SQL[query.price.op]} ?`);
+    whereParams.push(query.price.value);
+  }
+
+  if (query.stock) {
+    // Остаток — сумма движений, то есть агрегат: в WHERE его нет, только в
+    // HAVING. По магазину считается своей суммой: общий остаток на вопрос
+    // «сколько лежит в Черёмушках» не отвечает.
+    const sum =
+      query.stock.locationId == null
+        ? 'stock'
+        : `(SELECT COALESCE(SUM(m.qty_delta), 0) FROM stock_moves m
+             WHERE m.product_id = p.id AND m.location_id = ${Number(query.stock.locationId)})`;
+
+    having.push(`${sum} ${COMPARE_SQL[query.stock.op]} ?`);
+    havingParams.push(query.stock.value);
+  }
+
+  if (query.expiresInDays != null) {
+    where.push('p.expires_at IS NOT NULL AND p.expires_at >= ? AND p.expires_at <= ?');
+    whereParams.push(now, dayShift(query.expiresInDays, now));
+  }
+
+  if (query.changedInDays != null) {
+    where.push('p.updated_at IS NOT NULL AND p.updated_at >= ?');
+    whereParams.push(`${dayShift(-query.changedInDays, now)}T00:00:00.000Z`);
+  }
+
+  if (query.sold) {
+    const inner = `EXISTS (
+      SELECT 1 FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE si.product_id = p.id AND s.created_at >= ?
+    )`;
+    where.push(query.sold.within ? inner : `NOT ${inner}`);
+    whereParams.push(`${dayShift(-query.sold.days, now)}T00:00:00.000Z`);
+  }
+
+  return { where, whereParams, having, havingParams };
+}
+
 export function listProducts(db: SqlDriver, filter: ProductFilter = {}): ProductWithStock[] {
   const where: string[] = [];
   const having: string[] = [];
@@ -163,6 +272,15 @@ export function listProducts(db: SqlDriver, filter: ProductFilter = {}): Product
   }
 
   const now = filter.today ?? today();
+
+  if (filter.query) {
+    const part = catalogSql(filter.query, now);
+    where.push(...part.where);
+    whereParams.push(...part.whereParams);
+    having.push(...part.having);
+    havingParams.push(...part.havingParams);
+  }
+
   for (const preset of filter.presets ?? []) {
     const part = presetSql(preset, now);
     if (part.where) {
@@ -318,9 +436,13 @@ export function createProduct(db: SqlDriver, input: ProductInput): Id {
 }
 
 export function updateProduct(db: SqlDriver, id: Id, input: ProductInput): void {
+  // Дата правки нужна окну «Фильтр»: там есть «изменялся в течение N дней».
+  // Проставляется здесь, а не триггером: правка карточки — единственное
+  // место, где она меняется, и держать её рядом понятнее.
   db.run(
-    `UPDATE products SET ${COLUMN_NAMES.map((name) => `${name} = ?`).join(', ')} WHERE id = ?`,
-    [...columns(input), id],
+    `UPDATE products SET ${COLUMN_NAMES.map((name) => `${name} = ?`).join(', ')}, updated_at = ?
+      WHERE id = ?`,
+    [...columns(input), new Date().toISOString(), id],
   );
 }
 
@@ -370,6 +492,14 @@ export interface SavedFilter {
   presets: ProductPreset[];
   categoryId?: Id | null;
   kind?: ProductKind;
+  /**
+   * Условие, собранное в окне «Фильтр».
+   *
+   * Это и есть «пресет» из его окна: набор полей, сохранённый под именем.
+   * Поле необязательное — прежние сохранённые наборы состояли из готовых
+   * фильтров и про него не знают.
+   */
+  query?: CatalogQuery;
 }
 
 const FILTERS_KEY = 'catalog_filters';

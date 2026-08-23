@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   PRESETS,
   PRESET_LABEL,
+  type CatalogQuery,
   deleteFilter,
   listSavedFilters,
   presetCounts,
@@ -32,6 +33,8 @@ export interface CatalogFilters {
   saved: SavedFilter[];
   apply: (filter: SavedFilter) => void;
   save: (name: string) => void;
+  /** Сохранить условие из окна «Фильтр» под именем — его «пресет». */
+  saveQuery: (name: string, query: CatalogQuery) => void;
   remove: (name: string) => void;
   /** Названия выбранных фильтров — для строки под панелью. */
   labels: string[];
@@ -67,6 +70,11 @@ export function useCatalogFilters(): CatalogFilters {
       save: (name: string) => {
         if (!name.trim() || presets.length === 0) return;
         saveFilter(db, { name: name.trim(), presets });
+        refresh();
+      },
+      saveQuery: (name: string, query: CatalogQuery) => {
+        if (!name.trim()) return;
+        saveFilter(db, { name: name.trim(), presets: [], query });
         refresh();
       },
       remove: (name: string) => {

@@ -367,6 +367,7 @@ export interface SaleWithItems extends Sale {
     unit: string;
     sku: string | null;
     barcode: string | null;
+    code: string | null;
   })[];
   refunded: boolean;
   /** Чем чек подписан в просмотре документа. */
@@ -404,8 +405,17 @@ export function getSale(db: SqlDriver, saleId: Id): SaleWithItems | null {
   );
   if (!sale) return null;
 
-  const items = db.all<SaleItem & { name: string; unit: string; sku: string | null; barcode: string | null }>(
-    `SELECT i.*, p.name, p.unit, p.sku, p.barcode
+  const items = db.all<
+    SaleItem & {
+      name: string;
+      unit: string;
+      sku: string | null;
+      barcode: string | null;
+      /** Код товара — в его таблице правки это отдельная колонка. */
+      code: string | null;
+    }
+  >(
+    `SELECT i.*, p.name, p.unit, p.sku, p.barcode, p.code
      FROM sale_items i
      JOIN products p ON p.id = i.product_id
      WHERE i.sale_id = ?`,

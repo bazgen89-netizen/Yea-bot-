@@ -151,6 +151,9 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   }
   if (pathname.startsWith('/new')) return 'Создать документ';
   if (pathname.startsWith('/sale/new')) return 'Продажа';
+  // Правка чека — свой заголовок: у него эта страница называется
+  // «Документы / редактирование документа», а не «Продажа».
+  if (pathname.startsWith('/sale/edit')) return 'Документы / редактирование документа';
 
   if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
   if (pathname.startsWith('/journal')) return 'Движение товара';

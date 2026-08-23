@@ -49,17 +49,10 @@ export function SaleDocument({ id }: { id: Id }) {
  * открывался отдельной страницей, и журнал уезжал целиком.
  */
 export function SaleDocumentDrawer({ id, onClose }: { id: Id; onClose: () => void }) {
-  const [editing, setEditing] = useState(false);
-
   return (
-    <Drawer
-      visible
-      size="xl"
-      onClose={onClose}
-      actions={<Actions id={id} onClose={onClose} editing={editing} onEdit={setEditing} />}
-    >
+    <Drawer visible size="xl" onClose={onClose} actions={<Actions id={id} onClose={onClose} />}>
       <View style={styles.content}>
-        <Body id={id} onClose={onClose} bare editing={editing} onSaved={() => setEditing(false)} />
+        <Body id={id} onClose={onClose} bare />
       </View>
     </Drawer>
   );
@@ -72,17 +65,8 @@ export function SaleDocumentDrawer({ id, onClose }: { id: Id; onClose: () => voi
  * чека и выгрузка документа файлом ещё не сделаны, и кнопка, которая делает
  * вид, что работает, хуже приглушённой. Возврат — работает.
  */
-function Actions({
-  id,
-  onClose,
-  editing,
-  onEdit,
-}: {
-  id: Id;
-  onClose: () => void;
-  editing: boolean;
-  onEdit: (on: boolean) => void;
-}) {
+function Actions({ id, onClose }: { id: Id; onClose: () => void }) {
+  const router = useRouter();
   const { db, refresh } = useDatabase();
   const sale = useQuery((database) => getSale(database, id), [id]);
 
@@ -141,10 +125,16 @@ function Actions({
 
   return (
     <>
+      {/* Правка — отдельной страницей, как у него: `card/doc/show/<id>`,
+          «Документы / редактирование документа». Внутри просмотра её делать
+          нельзя: там другой экран целиком. */}
       <Tool
-        label={editing ? 'Отменить правку' : 'Редактировать'}
-        tone={editing ? 'plain' : 'green'}
-        onPress={() => onEdit(!editing)}
+        label="Редактировать"
+        tone="green"
+        onPress={() => {
+          onClose();
+          router.push({ pathname: '/sale/edit/[id]', params: { id: String(id) } });
+        }}
       />
       <Tool
         label="Напечатать"

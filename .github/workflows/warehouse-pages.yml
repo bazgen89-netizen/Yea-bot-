@@ -3,8 +3,15 @@ name: Warehouse web
 # Собирает веб-версию склада и выкладывает её на GitHub Pages —
 # постоянный публичный адрес, который можно открыть с любого телефона.
 #
-# Один раз включите Pages: Settings → Pages → Build and deployment →
-# Source: GitHub Actions. После этого адрес появляется здесь же.
+# ВАЖНО, ОДИН РАЗ РУКАМИ: Settings → Pages → Build and deployment →
+# Source: GitHub Actions. Пока это не сделано, сборка падает на шаге
+# configure-pages с «Get Pages site failed ... Not Found», а deploy
+# отменяется — хотя сама страница собирается нормально.
+#
+# Автоматически включить Pages из workflow нельзя: enablement: true у
+# configure-pages создаёт сайт только под токеном с правами администратора,
+# а штатный GITHUB_TOKEN отвечает «Resource not accessible by integration».
+# Проверено запуском 32487660408.
 
 on:
   push:

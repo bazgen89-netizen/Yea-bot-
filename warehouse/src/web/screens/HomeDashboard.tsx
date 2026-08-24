@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
@@ -33,6 +34,7 @@ const PERIODS: Option<PeriodKind>[] = [
 
 /** Главная кабинета: показатели за период, график, документы и оценка склада. */
 export function HomeDashboard() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [kind, setKind] = useState<PeriodKind>('month');
   // «Документы» живут своим периодом: в оригинале там по умолчанию неделя,
@@ -158,10 +160,17 @@ export function HomeDashboard() {
           {stock.zeroCost > 0 || stock.negative > 0 ? (
             <View style={styles.warning}>
               <Text style={styles.warningTitle}>{t('Внимание')}</Text>
+              {/* Ссылки открывают именно эти позиции в справочнике, а не
+                  справочник вообще: синее, что никуда не ведёт, обещает
+                  переход, которого нет. */}
               {stock.zeroCost > 0 ? (
                 <Text style={styles.warningLine}>
                   •{' '}
-                  <Text style={styles.warningLink}>
+                  <Text
+                    accessibilityRole="link"
+                    style={styles.warningLink}
+                    onPress={() => router.push('/catalog?preset=zero-cost')}
+                  >
                     {stock.zeroCost} {t('поз. с себестоимостью равной 0 руб')}
                   </Text>
                 </Text>
@@ -169,7 +178,11 @@ export function HomeDashboard() {
               {stock.negative > 0 ? (
                 <Text style={styles.warningLine}>
                   •{' '}
-                  <Text style={styles.warningLink}>
+                  <Text
+                    accessibilityRole="link"
+                    style={styles.warningLink}
+                    onPress={() => router.push('/catalog?preset=negative-stock')}
+                  >
                     {stock.negative} {t('поз. с остатком меньше 0')}
                   </Text>
                 </Text>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutChangeEvent, Platform, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './Translated';
 
 import { scaleFor, smooth, spaced } from '../domain/chart';
@@ -64,18 +64,30 @@ export function Chart({ points, days }: { points: number[]; days: number }) {
           )}
         </View>
 
+        {/* Числа под графиком нажимаются: нажал день — на графике встала
+            его выручка, как по самой линии. Раньше они были синими и
+            молчали, а синее, что не нажимается, обещает переход, которого
+            нет. Синим отмечена каждая седьмая метка — это его разметка
+            недель, а не ссылки. */}
         <View style={styles.days}>
           {values.map((_, index) => (
-            <Text
+            <Pressable
               key={index}
-              style={[
-                styles.day,
-                isMarked(index + 1) && styles.dayMarked,
-                active === index && styles.dayActive,
-              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`День ${index + 1}`}
+              style={styles.dayCell}
+              onPress={() => setPinned((was) => (was === index ? null : index))}
             >
-              {index % labelStep === 0 ? index + 1 : ''}
-            </Text>
+              <Text
+                style={[
+                  styles.day,
+                  isMarked(index + 1) && styles.dayMarked,
+                  active === index && styles.dayActive,
+                ]}
+              >
+                {index % labelStep === 0 ? index + 1 : ''}
+              </Text>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -258,7 +270,8 @@ const styles = StyleSheet.create({
   barSlot: { flex: 1, maxWidth: 60, height: '100%', justifyContent: 'flex-end' },
   bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
-  day: { flex: 1, fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted, textAlign: 'center' },
+  dayCell: { flex: 1 },
+  day: { fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted, textAlign: 'center' },
   dayMarked: { color: web.link },
   dayActive: { color: web.text, fontWeight: '700' },
 });

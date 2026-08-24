@@ -150,8 +150,13 @@ export interface CatalogQuery {
   /** Что показывать: товар, услуга, комплект. Пусто — всё. */
   kinds?: ('product' | 'service' | 'set')[];
   categoryId?: number | null;
-  /** Цена: базовая или закупочная, знак и значение в копейках. */
-  price?: { field: 'sale' | 'purchase'; op: Compare; value: number };
+  /**
+   * Цена: базовая, закупочная или себестоимость — знак и значение в
+   * копейках. Себестоимость нужна главной: там в «Оценке склада» стоит
+   * ссылка «417 поз. с себестоимостью равной 0 руб», и она обязана
+   * открывать именно эти позиции.
+   */
+  price?: { field: 'sale' | 'purchase' | 'cost'; op: Compare; value: number };
   /** Остаток: общий или по магазину, знак и значение в тысячных. */
   stock?: { locationId?: number | null; op: Compare; value: number };
   /** Срок годности истекает в течение N дней. */
@@ -193,7 +198,12 @@ export function catalogSql(
   }
 
   if (query.price) {
-    const column = query.price.field === 'purchase' ? 'p.purchase_price' : 'p.sale_price';
+    const column =
+      query.price.field === 'purchase'
+        ? 'p.purchase_price'
+        : query.price.field === 'cost'
+          ? 'p.cost_price'
+          : 'p.sale_price';
     where.push(`${column} ${COMPARE_SQL[query.price.op]} ?`);
     whereParams.push(query.price.value);
   }

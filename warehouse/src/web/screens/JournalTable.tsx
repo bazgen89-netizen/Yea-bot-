@@ -317,8 +317,16 @@ export function JournalTable() {
         onReset={() => setValues({})}
       />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.table}
+        // Без `flexGrow` содержимое горизонтальной прокрутки не получает
+        // высоты, и вложенная вертикальная прокрутка растёт по содержимому —
+        // тогда последние строки уезжают под подвал.
+        contentContainerStyle={styles.tableContent}
+      >
+        <View style={styles.tableInner}>
           <HeadRow
             columns={COLUMNS}
             lead={
@@ -328,7 +336,7 @@ export function JournalTable() {
             }
           />
 
-          <ScrollView>
+          <ScrollView style={styles.body}>
             {groups.map((group) => (
               <View key={group.day}>
                 <Text style={styles.day}>{formatDay(group.day)}</Text>
@@ -480,6 +488,11 @@ function EntryRow({
 const styles = StyleSheet.create({
 
   screen: { flex: 1, backgroundColor: web.bg },
+  /** Лента кончается над подвалом, а не уходит под него. */
+  table: { flex: 1 },
+  tableContent: { flexGrow: 1 },
+  tableInner: { flex: 1 },
+  body: { flex: 1 },
   statusHead: { width: 60, justifyContent: 'center' },
   docCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   note: { fontSize: 12 },

@@ -203,8 +203,16 @@ export function MoneyTable() {
         <PartyCard id={partyOpen} kind="customer" onClose={() => setPartyOpen(null)} />
       ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.table}
+        // Без `flexGrow` содержимое горизонтальной прокрутки не получает
+        // высоты, и вложенная вертикальная прокрутка растёт по содержимому —
+        // тогда последние строки уезжают под подвал.
+        contentContainerStyle={styles.tableContent}
+      >
+        <View style={styles.tableInner}>
           <HeadRow
             columns={COLUMNS}
             lead={
@@ -214,7 +222,7 @@ export function MoneyTable() {
             }
           />
 
-          <ScrollView>
+          <ScrollView style={styles.body}>
             {groups.map((group) => (
               <View key={group.day}>
                 <Text style={styles.day}>{formatDay(group.day)}</Text>
@@ -347,6 +355,11 @@ function MoneyRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  /** Лента кончается над подвалом, а не уходит под него. */
+  table: { flex: 1 },
+  tableContent: { flexGrow: 1 },
+  tableInner: { flex: 1 },
+  body: { flex: 1 },
   statusHead: { width: 60, justifyContent: 'center' },
   day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row', position: 'relative' },

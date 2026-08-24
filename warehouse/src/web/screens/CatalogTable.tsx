@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
 import { ActionsMenu } from '../ActionsMenu';
@@ -38,6 +38,15 @@ const PAGE_SIZE = 100;
  */
 export function CatalogTable({ openId }: { openId?: string } = {}) {
   const router = useRouter();
+  /**
+   * Готовый отбор из адреса.
+   *
+   * На главной, в «Оценке склада», стоят его ссылки: «417 поз. с
+   * себестоимостью равной 0 руб» и «151 поз. с остатком меньше 0». Они
+   * обязаны открывать именно эти позиции, а не просто справочник, — иначе
+   * это синий текст, который никуда не ведёт.
+   */
+  const asked = useLocalSearchParams<{ preset?: string }>();
   const [search, setSearch] = useState('');
   // Какой товар открыт в панели справа. Не переход по адресу: у него список
   // остаётся виден слева, а страница не перезагружается — иначе после
@@ -61,7 +70,11 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
    * Живёт рядом с готовыми наборами, а не вместо них: наборы остались
    * «пресетами» сверху окна, а это — то, что он собрал руками.
    */
-  const [query, setQuery] = useState<CatalogQuery>({});
+  const [query, setQuery] = useState<CatalogQuery>(() => {
+    if (asked.preset === 'zero-cost') return { price: { field: 'cost', op: 'eq', value: 0 } };
+    if (asked.preset === 'negative-stock') return { stock: { op: 'lt', value: 0 } };
+    return {};
+  });
 
   // Кнопка «Фильтр» подсвечена, когда что-то отобрано: и готовыми наборами,
   // и собранным условием.
@@ -252,8 +265,16 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
         />
       </Toolbar>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.table}
+        // Без `flexGrow` содержимое горизонтальной прокрутки не получает
+        // высоты, и вложенная вертикальная прокрутка растёт по содержимому —
+        // тогда последние строки уезжают под подвал.
+        contentContainerStyle={styles.tableContent}
+      >
+        <View style={styles.tableInner}>
           <HeadRow columns={columns} lead={<Checkbox />} />
 
           <ScrollView style={styles.body}>
@@ -337,13 +358,18 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
       <Pager page={current} pages={pages} onPage={setPage} />
 
       <View style={styles.createRow}>
-        <Text style={styles.createSign}>⊞</Text>
-        <Text
-          style={styles.createLabel}
+        {/* Значок и подпись — одна кнопка. Раньше нажималась только подпись,
+            а синий плюсик рядом молчал: синее, что не нажимается, обещает
+            переход, которого нет. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Создать новый товар или услугу"
           onPress={() => setOpen('new')}
+          style={styles.createButton}
         >
-          Создать новый товар или услугу
-        </Text>
+          <Text style={styles.createSign}>⊞</Text>
+          <Text style={styles.createLabel}>Создать новый товар или услугу</Text>
+        </Pressable>
         <Text style={styles.total}>
           {pluralize(products.length, 'позиция', 'позиции', 'позиций')}
         </Text>
@@ -462,7 +488,19 @@ function codeOf(product: ProductWithStock): string {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
-  body: { maxHeight: 10000 },
+  /**
+   * Таблица занимает то, что осталось между строкой отбора и подвалом.
+   *
+   * Раньше у неё стоял `maxHeight: 10000` — то есть высота по содержимому, —
+   * и последние строки списка уходили **под** подвал «Создать новый товар».
+   * Товар там был виден краем, но не нажимался: сверху лежал подвал. У них
+   * такого нет, потому что высота таблицы задана прямо:
+   * `.fixed-title div.table { height: calc(100vh - 129px - 46px) }`.
+   */
+  table: { flex: 1 },
+  tableContent: { flexGrow: 1 },
+  tableInner: { flex: 1 },
+  body: { flex: 1 },
   nameCell: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   thumb: {
     width: 40,
@@ -478,6 +516,7 @@ const styles = StyleSheet.create({
   link: { flex: 1, fontFamily: WEB_FONT, fontSize: 15, color: web.link, lineHeight: 19 },
   right: { textAlign: 'right' },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
+  createButton: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   createRow: {
     flexDirection: 'row',
     alignItems: 'center',

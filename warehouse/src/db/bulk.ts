@@ -60,3 +60,52 @@ export function archiveProducts(db: SqlDriver, ids: Id[]): void {
     }
   });
 }
+
+/**
+ * Поля, которые он правит списком, а не по одному.
+ *
+ * В его меню это пункт «Другое»: срок годности, НДС и признаки — то, что в
+ * карточке лежит по одному полю, а в жизни меняется у целой полки сразу.
+ * Пустое поле означает «не трогать»: окно правит то, что заполнено, и
+ * ничего больше.
+ */
+export interface BulkFields {
+  /** Срок годности, «ГГГГ-ММ-ДД». */
+  expiresAt?: string | null;
+  /** Ставка НДС в сотых долях процента: 20 % — это 2000. */
+  vatBp?: number | null;
+  /** Весовой товар. */
+  weighted?: boolean;
+  /** Подакцизный. */
+  excisable?: boolean;
+  /** Свободная цена: кассир вводит её сам. */
+  freePrice?: boolean;
+}
+
+export function setFieldsFor(db: SqlDriver, ids: Id[], fields: BulkFields): void {
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  const put = (column: string, value: string | number | null) => {
+    sets.push(`${column} = ?`);
+    values.push(value);
+  };
+
+  if (fields.expiresAt !== undefined) put('expires_at', fields.expiresAt);
+  if (fields.vatBp !== undefined) put('vat_bp', fields.vatBp);
+  if (fields.weighted !== undefined) put('weighted', fields.weighted ? 1 : 0);
+  if (fields.excisable !== undefined) put('excisable', fields.excisable ? 1 : 0);
+  if (fields.freePrice !== undefined) put('free_price', fields.freePrice ? 1 : 0);
+
+  if (sets.length === 0) return;
+
+  db.tx(() => {
+    for (const id of ids) {
+      db.run(`UPDATE products SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`, [
+        ...values,
+        new Date().toISOString(),
+        id,
+      ]);
+    }
+  });
+}

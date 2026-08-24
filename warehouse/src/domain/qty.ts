@@ -1,3 +1,5 @@
+import { parseDecimal } from './money';
+
 /**
  * Количество хранится в тысячных долях единицы (целые числа).
  * 1000 = 1 шт / 1 кг. Это позволяет продавать чай на вес (0,05 кг = 50)
@@ -10,12 +12,10 @@ export const QTY_SCALE = 1000;
 
 /** "1,5" | "0.05" | "2" -> тысячные. Возвращает null, если не число. */
 export function parseQty(input: string): Milli | null {
-  const cleaned = input.replace(/[\s ]/g, '').replace(',', '.');
-  if (cleaned === '') return null;
-  if (!/^-?\d*\.?\d*$/.test(cleaned)) return null;
-
-  const value = Number(cleaned);
-  if (!Number.isFinite(value)) return null;
+  // Разбор общий с деньгами: «692,599.300» — это и в количествах то же
+  // самое число, что показывает экран, и читаться оно обязано одинаково.
+  const value = parseDecimal(input);
+  if (value === null) return null;
 
   return Math.round(value * QTY_SCALE);
 }

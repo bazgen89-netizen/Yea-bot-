@@ -1,4 +1,4 @@
-import { formatMoney, formatMoneyWithSign, parseMoney } from '../money';
+import { formatMoney, formatMoneyWeb, formatMoneyWithSign, parseMoney } from '../money';
 import { formatQty, formatQtyWeb, lineTotal, parseQty } from '../qty';
 
 describe('parseMoney', () => {
@@ -22,6 +22,32 @@ describe('parseMoney', () => {
     expect(parseMoney('')).toBeNull();
     expect(parseMoney('абв')).toBeNull();
     expect(parseMoney('1..2')).toBeNull();
+  });
+
+  /**
+   * Цена, записанная так, как её показывает кабинет.
+   *
+   * Экраны пишут суммы по-английски — «1,250.00» — и эта же строка стоит в
+   * поле ввода цены. Пока запятая читалась как дробная часть, выходило
+   * «1.250.00»: открыть карточку товара за 1 250 ₽ и нажать «Сохранить»,
+   * ничего не меняя, значило потерять цену. На товарах дешевле тысячи это
+   * не проявлялось, поэтому и жило долго.
+   */
+  it('читает сумму в том же виде, в каком её показывает', () => {
+    expect(parseMoney(formatMoneyWeb(125_000))).toBe(125_000);
+    expect(parseMoney(formatMoneyWeb(452_588_510))).toBe(452_588_510);
+    expect(parseMoney(formatMoney(125_000))).toBe(125_000);
+
+    expect(parseMoney('1,250.00')).toBe(125_000);
+    expect(parseMoney('4,525,885.10')).toBe(452_588_510);
+    expect(parseMoney('-1,250.00')).toBe(-125_000);
+  });
+
+  it('разделитель тысяч узнаёт только там, где он не спутается с копейками', () => {
+    // Две группы подряд бывают только у тысяч.
+    expect(parseMoney('1.250.000')).toBe(125_000_000);
+    // А одна — это дробная часть: «12.345» так и остаётся 12 руб. 35 коп.
+    expect(parseMoney('12.345')).toBe(1235);
   });
 });
 
@@ -88,5 +114,24 @@ describe('formatQtyWeb', () => {
     expect(formatQtyWeb(2000)).toBe('2.000');
     expect(formatQtyWeb(50)).toBe('0.050');
     expect(formatQtyWeb(0)).toBe('0.000');
+  });
+});
+
+describe('parseQty', () => {
+  /**
+   * Количество ломалось ровно так же, как цена: экран пишет
+   * «692,599.300», а разбор читал запятую как дробную часть. На складе,
+   * где остаток шестизначный, это значило «не число».
+   */
+  it('читает количество в том же виде, в каком его показывает', () => {
+    expect(parseQty(formatQtyWeb(692_599_300))).toBe(692_599_300);
+    expect(parseQty('692,599.300')).toBe(692_599_300);
+    expect(parseQty('1 234,5')).toBe(1_234_500);
+  });
+
+  it('и по-прежнему не принимает мусор', () => {
+    expect(parseQty('')).toBeNull();
+    expect(parseQty('две пачки')).toBeNull();
+    expect(parseQty('1..2')).toBeNull();
   });
 });

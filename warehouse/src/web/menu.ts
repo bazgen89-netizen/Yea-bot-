@@ -162,6 +162,9 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   // А просмотр чека — `card.journal.item`, `VIEW_DOCUMENT`.
   if (pathname.startsWith('/sale/')) return 'Просмотр документа';
 
+  // Редактор цен — свой экран, а не справочник: у них это отдельное
+  // состояние `card.catalog.price_editor`.
+  if (pathname.startsWith('/catalog/prices')) return 'Товары и услуги / редактор цен';
   if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
   if (pathname.startsWith('/journal')) return 'Движение товара';
   if (pathname.startsWith('/money')) return 'Движение денег';

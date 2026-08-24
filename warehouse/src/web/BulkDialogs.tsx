@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text, TextInput } from './Translated';
-import { applyPrices, setCategoryFor } from '../db/bulk';
+import { applyPrices, setCategoryFor, setFieldsFor, type BulkFields } from '../db/bulk';
 import { listCategoryViews } from '../db/categories';
 import { formatMoneyWeb, parseMoney } from '../domain/money';
 import { repricedTo } from '../domain/pricing';
+import { SCALE_TITLE, scaleFile, scaleSelect, type ScaleModel } from '../domain/scales';
+import { saveFile } from '../ui/download';
 import type { Id } from '../domain/types';
 import type { ProductWithStock } from '../domain/types';
 import { useDatabase, useQuery } from '../state/DatabaseProvider';
@@ -162,6 +164,240 @@ export function CategoryDialog({
   );
 }
 
+/**
+ * «Другое» — то, что в карточке лежит по одному полю, а меняется полкой.
+ *
+ * У него за этим пунктом сроки годности, НДС и признаки товара. Пустое
+ * поле здесь значит «не трогать»: окно правит только заполненное, иначе
+ * одно нажатие обнулило бы НДС у шестисот позиций.
+ */
+export function OtherDialog({
+  visible,
+  products,
+  onClose,
+}: {
+  visible: boolean;
+  products: ProductWithStock[];
+  onClose: () => void;
+}) {
+  const { db, refresh } = useDatabase();
+
+  const [expires, setExpires] = useState('');
+  const [vat, setVat] = useState('');
+  const [weighted, setWeighted] = useState<boolean | null>(null);
+  const [excisable, setExcisable] = useState<boolean | null>(null);
+  const [freePrice, setFreePrice] = useState<boolean | null>(null);
+
+  const fields: BulkFields = {};
+  if (expires.trim()) fields.expiresAt = expires.trim();
+  const vatBp = vatFrom(vat);
+  if (vatBp !== undefined) fields.vatBp = vatBp;
+  if (weighted !== null) fields.weighted = weighted;
+  if (excisable !== null) fields.excisable = excisable;
+  if (freePrice !== null) fields.freePrice = freePrice;
+
+  const nothing = Object.keys(fields).length === 0;
+
+  return (
+    <Sheet visible={visible} title="Другое" onClose={onClose}>
+      <Text style={styles.note}>Изменится {products.length} поз.</Text>
+
+      <Text style={styles.label}>Срок годности</Text>
+      <TextInput
+        value={expires}
+        onChangeText={setExpires}
+        placeholder="2026-12-31 — пусто, чтобы не трогать"
+        placeholderTextColor={web.textMuted}
+        style={styles.input}
+      />
+
+      <Text style={styles.label}>НДС</Text>
+      <TextInput
+        value={vat}
+        onChangeText={setVat}
+        placeholder="20, 10, 0 или «без» — пусто, чтобы не трогать"
+        placeholderTextColor={web.textMuted}
+        style={styles.input}
+      />
+
+      <Text style={styles.label}>Признаки</Text>
+      <Triple label="Весовой товар" value={weighted} onChange={setWeighted} />
+      <Triple label="Подакцизный" value={excisable} onChange={setExcisable} />
+      <Triple label="Свободная цена" value={freePrice} onChange={setFreePrice} />
+
+      <View style={styles.buttons}>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.plain}>
+          <Text style={styles.plainLabel}>Отмена</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={nothing}
+          onPress={() => {
+            if (nothing) return;
+
+            setFieldsFor(
+              db,
+              products.map((product) => product.id),
+              fields,
+            );
+            refresh();
+            onClose();
+            say('Готово', `Поля изменились у ${products.length} поз.`);
+          }}
+          style={[styles.green, nothing && styles.greenOff]}
+        >
+          <Text style={styles.greenLabel}>Применить</Text>
+        </Pressable>
+      </View>
+    </Sheet>
+  );
+}
+
+/**
+ * «Файл для весов».
+ *
+ * В списке у меня стояло «нужны марка и модель весов» — и это была
+ * отговорка: кабинет ничего не выясняет, он даёт выбрать модель из трёх и
+ * отдаёт таблицу с нужными колонками. Наборы колонок лежат в их же
+ * собранной странице, разбор — в `domain/scales.ts`.
+ */
+export function ScalesDialog({
+  visible,
+  products,
+  onClose,
+}: {
+  visible: boolean;
+  products: ProductWithStock[];
+  onClose: () => void;
+}) {
+  const [model, setModel] = useState<ScaleModel>('massak');
+  const [weightedOnly, setWeightedOnly] = useState(false);
+  const [pluOnly, setPluOnly] = useState(false);
+
+  const forScales = products.map((product) => ({
+    name: product.name,
+    code: product.code ?? null,
+    plu: product.plu_code ?? null,
+    price: product.sale_price,
+    weighted: product.weighted === 1,
+    expiresAt: product.expires_at ?? null,
+  }));
+  const count = scaleSelect(forScales, { weightedOnly, pluOnly }).length;
+
+  return (
+    <Sheet visible={visible} title="Выгрузка файла для весов" onClose={onClose}>
+      <Text style={styles.label}>Выберите вашу модель весов</Text>
+      <View style={styles.list}>
+        {(['massak', 'mertech', 'rongta'] as ScaleModel[]).map((one) => (
+          <Pressable
+            key={one}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: model === one }}
+            onPress={() => setModel(one)}
+            style={[styles.row, model === one && styles.rowOn]}
+          >
+            <Text style={styles.rowLabel}>{SCALE_TITLE[one]}</Text>
+            <Text style={styles.rowCount}>{one === 'rongta' ? 'scale.txp' : 'scale.csv'}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Здесь выбор из двух, а не из трёх: это отбор перед выгрузкой, а
+          не правка поля, и «не трогать» тут значило бы ровно то же, что
+          «все». */}
+      <View style={styles.triple}>
+        <Text style={styles.tripleLabel}>Какие товары выгружать</Text>
+        <View style={styles.tabs}>
+          <Tab label="Все" on={!weightedOnly} onPress={() => setWeightedOnly(false)} />
+          <Tab
+            label="Только весовые"
+            on={weightedOnly}
+            onPress={() => setWeightedOnly(true)}
+          />
+        </View>
+      </View>
+
+      <View style={styles.triple}>
+        <Text style={styles.tripleLabel}>Товары без PLU</Text>
+        <View style={styles.tabs}>
+          <Tab label="Выгружать" on={!pluOnly} onPress={() => setPluOnly(false)} />
+          <Tab label="Пропустить" on={pluOnly} onPress={() => setPluOnly(true)} />
+        </View>
+      </View>
+
+      <Text style={styles.note}>
+        В файл попадёт {count} поз. из {products.length}.
+      </Text>
+
+      <View style={styles.buttons}>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.plain}>
+          <Text style={styles.plainLabel}>Отмена</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={count === 0}
+          onPress={() => {
+            const file = scaleFile(model, forScales, { weightedOnly, pluOnly });
+            void saveFile(file.name, file.text, file.mime);
+            onClose();
+          }}
+          style={[styles.green, count === 0 && styles.greenOff]}
+        >
+          <Text style={styles.greenLabel}>Скачать файл</Text>
+        </Pressable>
+      </View>
+    </Sheet>
+  );
+}
+
+/**
+ * Переключатель на три положения: «да», «нет» и «не трогать».
+ *
+ * Обычная галочка здесь врёт: снятая означала бы «сделать всё штучным», а
+ * человек просто не собирался трогать признак.
+ */
+function Triple({
+  label,
+  value,
+  onChange,
+  yes = 'Да',
+  no = 'Нет',
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+  yes?: string;
+  no?: string;
+}) {
+  return (
+    <View style={styles.triple}>
+      <Text style={styles.tripleLabel}>{label}</Text>
+      <View style={styles.tabs}>
+        <Tab label="Не трогать" on={value === null} onPress={() => onChange(null)} />
+        <Tab label={yes} on={value === true} onPress={() => onChange(true)} />
+        <Tab label={no} on={value === false} onPress={() => onChange(false)} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * «20» → 2000, «без» → пусто в базе, пустая строка → не трогать вовсе.
+ *
+ * Возвращает `undefined` именно для «не трогать»: `null` здесь занят —
+ * это «НДС не задан».
+ */
+function vatFrom(input: string): number | null | undefined {
+  const text = input.trim().toLowerCase();
+  if (!text) return undefined;
+  if (text.startsWith('без') || text === '-') return null;
+
+  const percent = Number(text.replace(',', '.').replace('%', ''));
+  if (!Number.isFinite(percent) || percent < 0) return undefined;
+
+  return Math.round(percent * 100);
+}
+
 /** Разбор введённого: проценты и рубли — со знаком, цена — без. */
 function parseValue(mode: 'set' | 'percent' | 'amount', input: string): number | null {
   const text = input.trim().replace(',', '.');
@@ -300,4 +536,7 @@ const styles = StyleSheet.create({
   },
   greenOff: { opacity: 0.5 },
   greenLabel: { fontFamily: WEB_FONT, fontSize: 14, color: '#FFFFFF' },
+
+  triple: { gap: 6, marginTop: 12 },
+  tripleLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
 });

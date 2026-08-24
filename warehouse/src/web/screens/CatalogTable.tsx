@@ -4,7 +4,7 @@ import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
 import { ActionsMenu } from '../ActionsMenu';
-import { PricesDialog, CategoryDialog } from '../BulkDialogs';
+import { PricesDialog, CategoryDialog, OtherDialog, ScalesDialog } from '../BulkDialogs';
 import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
 import { ColumnPicker } from '../ColumnPicker';
 import { CatalogFilter, activeParts } from '../CatalogFilter';
@@ -48,7 +48,7 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
   const { db, refresh } = useDatabase();
 
   /** Какое окно из меню «Действия» открыто. */
-  const [bulk, setBulk] = useState<'prices' | 'category' | null>(null);
+  const [bulk, setBulk] = useState<'prices' | 'category' | 'other' | 'scales' | null>(null);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -157,15 +157,14 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
               items: [
                 { label: 'Цены и скидки', onPress: () => setBulk('prices') },
                 { label: 'Категории и группы', onPress: () => setBulk('category') },
-                // «Другое» у него — сроки годности, НДС, признаки. По одному
-                // они есть в карточке; списком — ещё нет.
-                { label: 'Другое', soon: true },
+                // «Другое» у него — сроки годности, НДС и признаки товара.
+                { label: 'Другое', onPress: () => setBulk('other') },
               ],
             },
             {
               items: [
-                { label: 'Ценники', soon: true },
-                { label: 'Редактор цен', soon: true },
+                { label: 'Ценники', onPress: () => router.push('/print-forms') },
+                { label: 'Редактор цен', onPress: () => router.push('/catalog/prices') },
               ],
             },
             {
@@ -175,9 +174,13 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
                   icon: <WebIcon.products size={18} color={web.text} />,
                   onPress: () => router.push('/reports'),
                 },
-                // Файл для весов — выгрузка в формате конкретных весов;
-                // какого именно, знает только тот, у кого они стоят.
-                { label: 'Файл для весов', icon: <WebIcon.tag size={18} color={web.text} />, soon: true },
+                // Файл для весов: модель выбирается в окне — их же три,
+                // с их же наборами колонок.
+                {
+                  label: 'Файл для весов',
+                  icon: <WebIcon.tag size={18} color={web.text} />,
+                  onPress: () => setBulk('scales'),
+                },
                 {
                   label: 'Скачать в Excel',
                   icon: <WebIcon.download size={18} color={web.text} />,
@@ -282,6 +285,16 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
       />
       <CategoryDialog
         visible={bulk === 'category'}
+        products={products}
+        onClose={() => setBulk(null)}
+      />
+      <OtherDialog
+        visible={bulk === 'other'}
+        products={products}
+        onClose={() => setBulk(null)}
+      />
+      <ScalesDialog
+        visible={bulk === 'scales'}
         products={products}
         onClose={() => setBulk(null)}
       />

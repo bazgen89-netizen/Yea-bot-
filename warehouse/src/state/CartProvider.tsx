@@ -46,6 +46,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         // «Скидка 10 %» в карточке ни на что не влияла.
         discount_bp: product.discount_bp,
         stock: product.stock,
+        photo_uri: product.photo_uri,
       }),
     );
   }, []);

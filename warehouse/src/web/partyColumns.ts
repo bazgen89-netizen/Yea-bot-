@@ -69,32 +69,26 @@ export const SET_LABEL: Record<PartySet, string> = {
 
 /** Первые три колонки общие у всех наборов — у него они тоже общие. */
 const START: PartyColumn[] = [
-  { key: 'name', title: 'Наименование', width: 320, value: (p) => p.name },
+  // Первый столбец у него подписан «Клиент» (`CLIENT` в их словаре), а не
+  // «Наименование»: наименование бывает у товара, у человека — имя.
+  { key: 'name', title: 'Клиент', width: 320, value: (p) => p.name },
   { key: 'phone', title: 'Телефон', width: 170, value: (p) => p.phone ?? '' },
   { key: 'email', title: 'Email', width: 210, value: (p) => p.email ?? '' },
 ];
 
 const dash = (value: string | null) => value ?? '—';
 
+/**
+ * «Информация» — его набор и его порядок.
+ *
+ * Взят из их же `columnSettings.basic` в `main-*.js`: телефон, почта, день
+ * рождения, пол, описание, адрес, добавил, создан. Скидку и бонусы я
+ * когда-то вставил сюда «чтобы главное было видно сразу» — у него они
+ * живут в «Лояльности», и от моей самодеятельности сбивался весь порядок
+ * колонок.
+ */
 const BASIC_CUSTOMER: PartyColumn[] = [
   ...START,
-  // Скидка и бонусы стоят здесь, а не только в «Лояльности». Открывая
-  // клиентов, первым делом смотрят, сколько человеку положено, — держать
-  // это в другом наборе колонок значит прятать главное.
-  {
-    key: 'discount',
-    title: 'Скидка',
-    width: 110,
-    numeric: true,
-    value: (p) => (p.discount_bp ? formatPercent(p.discount_bp) : '—'),
-  },
-  {
-    key: 'bonus',
-    title: 'Бонусов',
-    width: 130,
-    numeric: true,
-    value: (p) => (p.bonus_balance ? formatMoneyWeb(p.bonus_balance) : '—'),
-  },
   { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
   { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender) },
   { key: 'note', title: 'Описание', width: 240, value: (p) => p.note ?? '' },
@@ -195,6 +189,30 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.credit_sum),
+  },
+  // Три последних столбца у него замыкают «Статистику», а у меня их не было
+  // вовсе — набор обрывался на расходах.
+  {
+    key: 'debt',
+    title: 'Долг по продажам',
+    width: 180,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.debt_sales),
+  },
+  {
+    key: 'rdebt',
+    title: 'Долг по возвратам',
+    width: 180,
+    numeric: true,
+    // Долгов по возвратам мы не заводим: возврат отдаёт деньги сразу.
+    value: () => formatMoneyWeb(0),
+  },
+  {
+    key: 'balance',
+    title: 'Баланс',
+    width: 160,
+    numeric: true,
+    value: (p) => formatMoneyWeb(p.debit_sum - p.credit_sum),
   },
 ];
 

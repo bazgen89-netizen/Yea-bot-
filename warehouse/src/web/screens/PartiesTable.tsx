@@ -48,12 +48,18 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
     [kind, search],
   );
 
-  // Колонки считаем по всему справочнику, а не по видимой странице: иначе
-  // они появлялись бы и пропадали при перелистывании.
-  const columns = useMemo(() => {
-    const all = sets.find((item) => item.key === set)?.columns ?? sets[0].columns;
-    return usefulColumns(all, parties);
-  }, [sets, set, parties]);
+  /**
+   * Колонки — все, что есть в наборе, а не только заполненные.
+   *
+   * Раньше пустые прятались (`usefulColumns`), и шапка отличалась от его:
+   * пропадали «Описание», «Адрес», «Добавил». Он попросил сверить верхнюю
+   * строку и её последовательность — значит, столбец стоит на месте, даже
+   * когда его ещё не заполнили.
+   */
+  const columns = useMemo(
+    () => sets.find((item) => item.key === set)?.columns ?? sets[0].columns,
+    [sets, set],
+  );
 
   const pages = Math.max(1, Math.ceil(parties.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -89,8 +95,14 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
           width={190}
           label="Набор колонок"
         />
+        {/* Кнопка открывает раздел лояльности, а не стоит приглушённой:
+            приглушённая выглядит сделанной работой и ею не является. */}
         {customers ? (
-          <ToolButton label="Настройка системы лояльности" tone="orangeOutline" soon />
+          <ToolButton
+            label="Настройка системы лояльности"
+            tone="orangeOutline"
+            onPress={() => router.push('/loyalty')}
+          />
         ) : null}
         <Text style={styles.total}>Итог {parties.length}</Text>
         <ToolButton

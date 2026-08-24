@@ -883,6 +883,21 @@ export function Cashier() {
 
                   return (
                     <View key={line.product_id} style={styles.receiptRow}>
+                      {/* Снимок товара — он и в чеке справа, а не только в
+                          плитке: кассир выбирает глазами, и два «чая с
+                          собой» различаются одним словом. */}
+                      <View style={styles.receiptPhoto}>
+                        {line.photo_uri ? (
+                          <Image
+                            source={{ uri: line.photo_uri }}
+                            resizeMode="cover"
+                            style={styles.receiptPhotoImage}
+                          />
+                        ) : (
+                          <Text style={styles.receiptPhotoBlank}>◫</Text>
+                        )}
+                      </View>
+
                       <View style={styles.receiptBody}>
                         <Text style={styles.receiptName} numberOfLines={2}>
                           {line.name}
@@ -1611,6 +1626,18 @@ const styles = StyleSheet.create({
   openShiftLabel: { fontFamily: pos.font, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.6 },
 
   receipt: { flex: 1 },
+  /** Снимок товара в строке чека — квадратик 44×44, как плитка в миниатюре. */
+  receiptPhoto: {
+    width: 44,
+    height: 44,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: pos.raise,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptPhotoImage: { width: '100%', height: '100%' },
+  receiptPhotoBlank: { fontSize: 18, color: pos.muted },
   receiptRow: {
     flexDirection: 'row',
     alignItems: 'center',

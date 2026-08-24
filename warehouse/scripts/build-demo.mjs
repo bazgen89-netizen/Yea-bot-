@@ -69,6 +69,10 @@ const REAL = process.argv.includes('--real');
  *   node scripts/build-demo.mjs --real --photos=photos-link.json
  *
  * В файл, который открывается с диска, идут крупные: там предела нет.
+ * Порядок сборки обоих — в `docs/сборка.md`: сперва файл без ключа, потом
+ * ссылка с `--photos=photos-mixed.json`. Забыть про это легко, а стоит
+ * дорого: он получает файл с мелкими снимками и справедливо говорит, что
+ * качество плохое.
  */
 const PHOTOS =
   process.argv.find((one) => one.startsWith('--photos='))?.slice('--photos='.length) ??

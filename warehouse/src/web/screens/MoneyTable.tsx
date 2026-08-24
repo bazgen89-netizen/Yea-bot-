@@ -6,6 +6,7 @@ import { Text } from '../Translated';
 import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { MoneyDocumentDrawer } from './MoneyDocument';
 import {
   formatDay,
   formatTime,
@@ -17,7 +18,7 @@ import {
   type MoneyEntry,
   type MoneyFilter as MoneyFilterInput,
 } from '../../db/journal';
-import type { MoneyType } from '../../db/money';
+import type { MoneySource, MoneyType } from '../../db/money';
 import { weekEndingAt } from '../../domain/calendar';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -52,6 +53,8 @@ export function MoneyTable() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  /** Открытый ордер — панелью поверх списка. */
+  const [openDoc, setOpenDoc] = useState<{ id: number; source: MoneySource } | null>(null);
 
   const last = useQuery((db) => lastMoneyDay(db));
   const [values, setValues] = useState<Record<string, FilterValue>>(() => {
@@ -120,19 +123,18 @@ export function MoneyTable() {
     setValues((current) => ({ ...current, [key]: value }));
 
   /**
-   * Куда ведёт строка.
+   * Что открывает строка.
    *
    * В их таблице (`js/components/money-table/_view.html`) на
    * `card.money_show({orderId})` ведёт **каждая** строка, а не только
-   * заведённая руками: приход по чеку у них тоже документ, просто с
-   * «привязкой к документу» вместо правки. Поэтому и здесь строка из чека
-   * открывает такой же документ, а не сам чек.
+   * заведённая руками: приход по чеку у них тоже ордер.
+   *
+   * И открывается он панелью поверх списка, а не отдельной страницей — в
+   * присланном им адресе стоит `card/money/m/money/show/…`, и кусок `/m/`
+   * это их «панель». Список остаётся слева: закрыл — и ты там же, где был,
+   * с тем же отбором и тем же местом прокрутки.
    */
-  const open = (entry: MoneyEntry) =>
-    router.push({
-      pathname: '/money/show/[id]',
-      params: { id: String(entry.id), source: entry.source },
-    });
+  const open = (entry: MoneyEntry) => setOpenDoc({ id: entry.id, source: entry.source });
 
   return (
     <View style={styles.screen}>
@@ -183,6 +185,14 @@ export function MoneyTable() {
         onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
         onReset={() => setValues({})}
       />
+
+      {openDoc ? (
+        <MoneyDocumentDrawer
+          id={openDoc.id}
+          source={openDoc.source}
+          onClose={() => setOpenDoc(null)}
+        />
+      ) : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>

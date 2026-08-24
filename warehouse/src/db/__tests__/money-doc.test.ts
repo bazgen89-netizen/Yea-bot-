@@ -2,7 +2,7 @@ import { createTestDriver } from '../testDriver';
 import type { SqlDriver } from '../driver';
 import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
-import { createSale } from '../sales';
+import { createSale, updateSalePayment } from '../sales';
 import { createMoneyDoc, deleteMoneyDoc, getMoneyDoc, updateMoneyDoc } from '../money';
 import { listMoney } from '../journal';
 
@@ -140,6 +140,22 @@ describe('денежный документ', () => {
       expect(one?.counterparty).toBe('Розничный покупатель');
       // «Привязка к документу» — то самое поле, что стоит у него.
       expect(one?.sale_id).toBe(saleId);
+    });
+
+    it('правится то, что лежит в чеке: контрагент и комментарий', () => {
+      const buyer = db.run(
+        `INSERT INTO counterparties (name, kind, created_at) VALUES ('Андрей', 'customer', '2026-08-01')`,
+      );
+      void buyer;
+      const id = db.get<{ id: number }>('SELECT id FROM counterparties WHERE name = ?', ['Андрей'])!.id;
+
+      updateSalePayment(db, saleId, { customerId: id, note: 'наличными без сдачи' });
+
+      const one = getMoneyDoc(db, saleId, 'sale');
+      expect(one?.counterparty).toBe('Андрей');
+      expect(one?.note).toBe('наличными без сдачи');
+      // Сумма прихода — итог чека, и правка её не трогает.
+      expect(one?.amount).toBe(20_000);
     });
 
     it('в ленте у строки есть и источник, и то, чем её открыть', () => {

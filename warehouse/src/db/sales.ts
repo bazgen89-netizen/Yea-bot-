@@ -238,6 +238,28 @@ export function createSale(db: SqlDriver, input: SaleInput): Id {
 }
 
 /**
+ * Правка прихода по чеку — того, что он видит в движении денег.
+ *
+ * В его кабинете ордер по продаже открывается такой же формой, как
+ * заведённый руками, и часть полей там правится: контрагент и комментарий.
+ * У нас этот приход отдельной записью не лежит — он и есть чек, — поэтому
+ * правка ложится в сам чек. Сумму и счёт здесь не трогаем: сумма держится
+ * проданным товаром, а счёт у него в этой форме тоже недоступен
+ * (`disabled="id && account.type == 'register'"`).
+ */
+export function updateSalePayment(
+  db: SqlDriver,
+  saleId: Id,
+  input: { customerId?: Id | null; note?: string | null },
+): void {
+  db.run('UPDATE sales SET customer_id = ?, note = ? WHERE id = ?', [
+    input.customerId ?? null,
+    input.note?.trim() || null,
+    saleId,
+  ]);
+}
+
+/**
  * Правка проведённого чека.
  *
  * В его кабинете у каждого документа есть зелёная «Редактировать», и это не

@@ -83,6 +83,27 @@ export function listCounterparties(
   return db.all<CounterpartyWithTotals>(query.sql, query.params);
 }
 
+/**
+ * Найти контрагента по имени — для перехода из журнала.
+ *
+ * В ленте лежит только имя: «Получатель» у чека — это `customer_id`,
+ * а у складского документа контрагент записан строкой. Чтобы синее имя
+ * открывало карточку, а не список с подставленным поиском, нужен
+ * идентификатор.
+ *
+ * Совпадение точное и без учёта регистра. Тёзок берём первого по номеру:
+ * гадать, какой из двух «Ивановых» имелся в виду, всё равно нельзя, а
+ * список вместо карточки — это то, на что он жалуется.
+ */
+export function findCounterpartyByName(db: SqlDriver, name: string): Id | null {
+  const row = db.get<{ id: Id }>(
+    'SELECT id FROM counterparties WHERE LOWER(name) = LOWER(?) ORDER BY id LIMIT 1',
+    [name.trim()],
+  );
+
+  return row?.id ?? null;
+}
+
 export function countCounterparties(db: SqlDriver, kind: PartyKind): number {
   const row = db.get<{ n: number }>(
     `SELECT COUNT(*) AS n FROM counterparties

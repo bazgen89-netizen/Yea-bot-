@@ -41,14 +41,15 @@ export function MoneyDocumentDrawer({
   id,
   source = 'doc',
   onClose,
+  nested,
 }: {
   id: Id;
   source?: MoneySource;
   onClose: () => void;
+  /** Открыт поверх другой панели — например, из чека по номеру оплаты. */
+  nested?: boolean;
 }) {
-  return (
-    <Body id={id} source={source} onClose={onClose} />
-  );
+  return <Body id={id} source={source} onClose={onClose} nested={nested} />;
 }
 
 /** Тот же ордер отдельной страницей — для прямой ссылки на документ. */
@@ -68,10 +69,12 @@ function Body({
   id,
   source,
   onClose,
+  nested,
 }: {
   id: Id;
   source: MoneySource;
   onClose: () => void;
+  nested?: boolean;
 }) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
@@ -88,7 +91,7 @@ function Body({
 
   if (!doc) {
     return (
-      <Drawer visible size="m" onClose={onClose}>
+      <Drawer visible size="m" nested={nested} onClose={onClose}>
         <Text style={styles.empty}>Документ не найден</Text>
       </Drawer>
     );
@@ -192,6 +195,7 @@ function Body({
       // Ширина — по его снимку: панель занимает примерно 840 точек, список
       // слева остаётся читаемым до колонки «Приход, руб».
       size="m"
+      nested={nested}
       onClose={onClose}
       actions={
         <>

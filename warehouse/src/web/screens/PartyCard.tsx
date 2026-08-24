@@ -232,11 +232,18 @@ export function PartyCard({
   id,
   kind,
   onClose,
+  nested,
 }: {
   /** null — заводим нового. */
   id: Id | null;
   kind: PartyKind;
   onClose: () => void;
+  /**
+   * Открыта поверх другой панели — например, из чека по нажатию «Клиент».
+   * Тогда слева стрелка «назад», а не крестик: у него так же, и это честно —
+   * закроется не всё, а только карточка, и ты вернёшься в чек.
+   */
+  nested?: boolean;
 }) {
   const { db, refresh } = useDatabase();
   const party = useQuery((database) => (id ? getCounterparty(database, id) : null), [id]);
@@ -278,6 +285,7 @@ export function PartyCard({
     <Drawer
       visible
       size="l"
+      nested={nested}
       onClose={onClose}
       actions={
         <>
@@ -1278,5 +1286,12 @@ const styles = StyleSheet.create({
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
   dividerLine: { flex: 1, height: 1, backgroundColor: web.border },
-  dividerText: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted },
+  /** Подпись раздела — заглавными, как у него: «КОНТАКТЫ», «СТАТИСТИКА». */
+  dividerText: {
+    fontFamily: WEB_FONT,
+    fontSize: 12,
+    color: web.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.4,
+  },
 });

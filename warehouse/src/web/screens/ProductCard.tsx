@@ -82,7 +82,16 @@ interface PackDraft {
   qty: string;
 }
 
-export function ProductCard({ id, onClose }: { id: string; onClose: () => void }) {
+export function ProductCard({
+  id,
+  onClose,
+  nested,
+}: {
+  id: string;
+  onClose: () => void;
+  /** Открыта поверх другой панели — например, из строки чека. */
+  nested?: boolean;
+}) {
   const { db, refresh } = useDatabase();
 
   const isNew = id === 'new';
@@ -366,6 +375,7 @@ export function ProductCard({ id, onClose }: { id: string; onClose: () => void }
     return (
       <Drawer
         visible
+        nested={nested}
         onClose={onClose}
         // Кнопки — его: «Редактировать» зелёная, рядом копия, «Удалить»
         // красная и прижата вправо.

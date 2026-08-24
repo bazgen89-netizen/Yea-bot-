@@ -5,6 +5,7 @@ import { Text } from '../Translated';
 
 import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
+import { PartyCard } from './PartyCard';
 import { SaleDocumentDrawer } from './SaleDocument';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
@@ -19,12 +20,13 @@ import {
   type JournalFilter as JournalFilterInput,
   type JournalKind,
 } from '../../db/journal';
+import { findCounterpartyByName } from '../../db/counterparties';
 import { listLocations } from '../../db/locations';
 import { DOC_TYPES } from '../../domain/docTypes';
 import { weekEndingAt } from '../../domain/calendar';
 import { DOC_KIND_LABEL } from '../../domain/types';
 import { formatMoneyWeb } from '../../domain/money';
-import { useQuery } from '../../state/DatabaseProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
@@ -104,6 +106,7 @@ function typeLabel(kinds?: string[]): string | undefined {
 /** «Движение товара» — журнал кабинета. */
 export function JournalTable() {
   const router = useRouter();
+  const { db } = useDatabase();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   /**
@@ -114,6 +117,8 @@ export function JournalTable() {
    * пропадал целиком вместе с отбором и местом прокрутки.
    */
   const [openSale, setOpenSale] = useState<number | null>(null);
+  /** Открытая карточка контрагента — панелью поверх журнала. */
+  const [partyOpen, setPartyOpen] = useState<number | null>(null);
   /**
    * Отбор. Дата с самого начала стоит неделей — как в его журнале: там в
    * поле «дата» написано «14 авг — 20 авг», и список открывается уже
@@ -231,6 +236,14 @@ export function JournalTable() {
     const store = stores.find((location: { name: string }) => location.name === name);
     if (store) {
       router.push('/stores');
+      return;
+    }
+
+    // Карточка, а не список с подставленным поиском: он сказал прямо —
+    // «на контрагента кликаешь, его карточка должна открыться».
+    const party = findCounterpartyByName(db, name);
+    if (party) {
+      setPartyOpen(party);
       return;
     }
 
@@ -352,6 +365,12 @@ export function JournalTable() {
 
       {openSale !== null ? (
         <SaleDocumentDrawer id={openSale} onClose={() => setOpenSale(null)} />
+      ) : null}
+
+      {/* Карточка контрагента прямо из строки журнала — так же, как из
+          самого документа: имя синее, значит нажимается и открывает карточку. */}
+      {partyOpen !== null ? (
+        <PartyCard id={partyOpen} kind="customer" onClose={() => setPartyOpen(null)} />
       ) : null}
     </View>
   );

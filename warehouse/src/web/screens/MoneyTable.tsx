@@ -7,6 +7,7 @@ import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { MoneyDocumentDrawer } from './MoneyDocument';
+import { PartyCard } from './PartyCard';
 import {
   formatDay,
   formatTime,
@@ -18,10 +19,11 @@ import {
   type MoneyEntry,
   type MoneyFilter as MoneyFilterInput,
 } from '../../db/journal';
+import { findCounterpartyByName } from '../../db/counterparties';
 import type { MoneySource, MoneyType } from '../../db/money';
 import { weekEndingAt } from '../../domain/calendar';
 import { formatMoneyWeb } from '../../domain/money';
-import { useQuery } from '../../state/DatabaseProvider';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
@@ -51,10 +53,13 @@ const COLUMNS: Column[] = [
 /** «Движение денег» — журнал кабинета. */
 export function MoneyTable() {
   const router = useRouter();
+  const { db } = useDatabase();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   /** Открытый ордер — панелью поверх списка. */
   const [openDoc, setOpenDoc] = useState<{ id: number; source: MoneySource } | null>(null);
+  /** Открытая карточка контрагента — панелью поверх списка. */
+  const [partyOpen, setPartyOpen] = useState<number | null>(null);
 
   const last = useQuery((db) => lastMoneyDay(db));
   const [values, setValues] = useState<Record<string, FilterValue>>(() => {
@@ -194,6 +199,10 @@ export function MoneyTable() {
         />
       ) : null}
 
+      {partyOpen !== null ? (
+        <PartyCard id={partyOpen} kind="customer" onClose={() => setPartyOpen(null)} />
+      ) : null}
+
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
           <HeadRow
@@ -214,14 +223,16 @@ export function MoneyTable() {
                     key={`${entry.source}${entry.id}`}
                     entry={entry}
                     onOpen={() => open(entry)}
-                    onParty={() =>
-                      entry.counterparty_id
-                        ? router.push({
-                            pathname: '/counterparty/[id]',
-                            params: { id: String(entry.counterparty_id) },
-                          })
-                        : router.push('/counterparties')
-                    }
+                    onParty={() => {
+                      // Карточка панелью, а не список и не телефонный экран:
+                      // синее имя должно открывать именно карточку.
+                      const party =
+                        entry.counterparty_id ??
+                        (entry.counterparty ? findCounterpartyByName(db, entry.counterparty) : null);
+
+                      if (party) setPartyOpen(party);
+                      else router.push('/counterparties');
+                    }}
                     onAccount={() => router.push('/accounts')}
                     onAuthor={() => router.push('/staff')}
                   />

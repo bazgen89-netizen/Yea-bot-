@@ -6,6 +6,9 @@ import { Drawer } from '../Drawer';
 import { Text, TextInput } from '../Translated';
 import { getSale, refundSale, updateSale } from '../../db/sales';
 import { SALE_ACCOUNT } from '../../db/money';
+import { MoneyDocumentDrawer } from './MoneyDocument';
+import { PartyCard } from './PartyCard';
+import { ProductCard } from './ProductCard';
 import { formatMoneyWeb, parseMoney } from '../../domain/money';
 import { formatQty, parseQty } from '../../domain/qty';
 import type { Id } from '../../domain/types';
@@ -234,6 +237,20 @@ function Body({
   const [edits, setEdits] = useState<Record<number, { qty?: string; price?: string }>>({});
   const [dropped, setDropped] = useState<number[]>([]);
 
+  /**
+   * Что открыто поверх документа.
+   *
+   * Он сказал прямо: «кликаю на продажу, дальше всё внутри должно быть
+   * кликабельно, например на контрагента кликаешь — его карточка должна
+   * открыться». У него так и есть: адрес становится
+   * `card/journal/m/clients/show/…`, карточка ложится панелью **поверх**
+   * документа, а слева стрелка «назад». Я уводил из документа на список
+   * контрагентов — документ при этом закрывался.
+   */
+  const [partyOpen, setPartyOpen] = useState<Id | null>(null);
+  const [productOpen, setProductOpen] = useState<string | null>(null);
+  const [orderOpen, setOrderOpen] = useState(false);
+
   if (!sale) return <Text style={styles.empty}>Документ не найден</Text>;
 
   const subtotal = sale.items.reduce(
@@ -308,6 +325,18 @@ function Body({
 
   return (
     <>
+      {/* Карточка контрагента и карточка товара — поверх документа, со
+          стрелкой «назад»: закрывается карточка, а не весь чек. */}
+      {partyOpen != null ? (
+        <PartyCard id={partyOpen} kind="customer" nested onClose={() => setPartyOpen(null)} />
+      ) : null}
+      {productOpen != null ? (
+        <ProductCard id={productOpen} nested onClose={() => setProductOpen(null)} />
+      ) : null}
+      {orderOpen ? (
+        <MoneyDocumentDrawer id={id} source="sale" nested onClose={() => setOrderOpen(false)} />
+      ) : null}
+
       {bare ? null : (
         <View style={styles.bar}>
           <Pressable accessibilityRole="button" onPress={onClose} style={styles.close}>
@@ -361,15 +390,7 @@ function Body({
             label="Клиент"
             value={sale.customer ?? 'Розничный покупатель'}
             link
-            onPress={
-              sale.customer_id
-                ? () =>
-                    router.push({
-                      pathname: '/counterparties',
-                      params: { open: String(sale.customer_id) },
-                    })
-                : undefined
-            }
+            onPress={sale.customer_id ? () => setPartyOpen(sale.customer_id) : undefined}
           />
           <Field label="Автор" value={sale.author} link onPress={() => router.push('/staff')} />
           <Field label="Касса" value={sale.register} link onPress={() => router.push('/registers')} />
@@ -412,10 +433,12 @@ function Body({
           <View style={styles.cellDot}>
             <View style={styles.dot} />
           </View>
+          {/* Номер оплаты ведёт в сам ордер, как у него
+              (`card.money_show({orderId})`), а не в общий список денег. */}
           <Text
             accessibilityRole="link"
             style={[styles.cellNo, styles.link]}
-            onPress={() => router.push('/money')}
+            onPress={() => setOrderOpen(true)}
           >
             {sale.money_number ?? sale.id}
           </Text>
@@ -430,12 +453,7 @@ function Body({
             accessibilityRole="link"
             style={[styles.cellWide, styles.link]}
             onPress={() =>
-              sale.customer_id
-                ? router.push({
-                    pathname: '/counterparties',
-                    params: { open: String(sale.customer_id) },
-                  })
-                : router.push('/counterparties')
+              sale.customer_id ? setPartyOpen(sale.customer_id) : router.push('/counterparties')
             }
           >
             {sale.customer ?? 'Розничный покупатель'}
@@ -489,12 +507,7 @@ function Body({
                     accessibilityRole="link"
                     style={[styles.itemName, styles.link]}
                     numberOfLines={2}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/product/[id]',
-                        params: { id: String(item.product_id) },
-                      })
-                    }
+                    onPress={() => setProductOpen(String(item.product_id))}
                   >
                     {item.name}
                   </Text>

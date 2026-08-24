@@ -65,6 +65,16 @@ describe('заголовок раздела', () => {
     expect(titleFor('/money/new', undefined, 'transfer')).toBe('Движение денег / Перевод');
     expect(titleFor('/money')).toBe('Движение денег');
   });
+
+  // Названия — их же: `card.money_show` подписан VIEW_ORDER,
+  // `card.journal.item` — VIEW_DOCUMENT, а в их словаре это «Просмотр
+  // ордера» и «Просмотр документа».
+  it('называет страницы документов так же, как кабинет', () => {
+    expect(titleFor('/money/show/46148')).toBe('Просмотр ордера');
+    expect(titleFor('/sale/45967')).toBe('Просмотр документа');
+    expect(titleFor('/sale/edit/45967')).toBe('Документы / редактирование документа');
+    expect(titleFor('/sale/new')).toBe('Продажа');
+  });
 });
 
 describe('журнал движения товара', () => {

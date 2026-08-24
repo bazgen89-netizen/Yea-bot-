@@ -135,6 +135,155 @@ export function accountBalances(db: SqlDriver): AccountBalance[] {
   return result;
 }
 
+/** Откуда взялся приход: заведён руками или пришёл вместе с чеком. */
+export type MoneySource = 'doc' | 'sale';
+
+/** Денежный документ со всем, чем он подписан на своей странице. */
+export interface MoneyDoc {
+  id: Id;
+  source: MoneySource;
+  /** Свой номер прихода: у перенесённых — тот, что был в CloudShop. */
+  number: number | null;
+  type: MoneyType;
+  amount: Kopecks;
+  account: string;
+  account_to: string | null;
+  counterparty_id: Id | null;
+  counterparty: string | null;
+  category: string | null;
+  note: string | null;
+  created_at: string;
+  /** Касса и смена — как в его документе: «Касса №1», «Смена #3430». */
+  register: string | null;
+  shift_number: number | null;
+  /** «Привязка к документу»: чек, которым рождён этот приход. */
+  sale_id: Id | null;
+  sale_number: number | null;
+}
+
+/**
+ * Документ движения денег.
+ *
+ * Их таблица ведёт на `card.money_show({orderId})` **каждую** строку, а не
+ * только заведённые руками: приход по чеку у них тоже документ, просто
+ * нередактируемый — на нём стоит «привязка к документу», и правится он в
+ * самом чеке. Поэтому и здесь по строке из чека собирается такой же
+ * документ, а не открывается чек вместо него.
+ */
+export function getMoneyDoc(db: SqlDriver, id: Id, source: MoneySource = 'doc'): MoneyDoc | null {
+  if (source === 'sale') {
+    const sale = db.get<{
+      id: Id;
+      number: number | null;
+      money_number: number | null;
+      total: Kopecks;
+      payment: string | null;
+      customer_id: Id | null;
+      counterparty: string | null;
+      note: string | null;
+      created_at: string;
+      register: string | null;
+      shift_number: number | null;
+    }>(
+      `SELECT s.id, s.number, s.money_number, s.total, s.payment, s.customer_id,
+              (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id) AS counterparty,
+              s.note, s.created_at,
+              COALESCE(
+                (SELECT r.name FROM registers r
+                   JOIN shifts h ON h.register_id = r.id WHERE h.id = s.shift_id),
+                s.register_name
+              )                                                                AS register,
+              COALESCE(s.shift_id, s.shift_no)                                 AS shift_number
+         FROM sales s
+        WHERE s.id = ?`,
+      [id],
+    );
+    if (!sale) return null;
+
+    return {
+      id: sale.id,
+      source: 'sale',
+      number: sale.money_number,
+      type: 'income',
+      amount: sale.total,
+      account: SALE_ACCOUNT[sale.payment ?? ''] ?? sale.payment ?? '',
+      account_to: null,
+      counterparty_id: sale.customer_id,
+      counterparty: sale.counterparty ?? 'Розничный покупатель',
+      category: 'Оплата от клиента',
+      note: sale.note,
+      created_at: sale.created_at,
+      register: sale.register,
+      shift_number: sale.shift_number,
+      sale_id: sale.id,
+      sale_number: sale.number,
+    };
+  }
+
+  return db.get<MoneyDoc>(
+    `SELECT m.*,
+            'doc'                                                             AS source,
+            NULL                                                              AS number,
+            (SELECT r.name FROM registers r
+               JOIN shifts h ON h.register_id = r.id WHERE h.id = m.shift_id) AS register,
+            m.shift_id                                                        AS shift_number,
+            NULL                                                              AS sale_id,
+            NULL                                                              AS sale_number
+       FROM money_docs m
+      WHERE m.id = ?`,
+    [id],
+  );
+}
+
+/**
+ * Правка денежного документа.
+ *
+ * У него страница документа — она же и форма: открыл «Приход #46148» и
+ * правишь счёт, контрагента, категорию платежа, сумму и комментарий. Отдельного
+ * «просмотра» нет вовсе, поэтому и у нас его нет.
+ *
+ * Тип документа не меняется: приход, ставший расходом, — это другая
+ * операция, и в отчётах за прошлый период она перевернула бы итоги задним
+ * числом.
+ */
+export function updateMoneyDoc(
+  db: SqlDriver,
+  id: Id,
+  input: Omit<MoneyDocInput, 'type'> & { createdAt?: string },
+): void {
+  if (input.amount <= 0) throw new Error('Сумма должна быть больше нуля');
+  if (!input.account.trim()) throw new Error('Не выбран счёт');
+
+  const when = input.createdAt?.trim();
+  if (when != null && when !== '' && Number.isNaN(new Date(when).getTime())) {
+    throw new Error('Не разобрать дату документа');
+  }
+
+  db.run(
+    `UPDATE money_docs
+        SET amount = ?, account = ?, account_to = ?, counterparty_id = ?,
+            counterparty = ?, category = ?, note = ?,
+            created_at = COALESCE(?, created_at)
+      WHERE id = ?`,
+    [
+      input.amount,
+      input.account.trim(),
+      input.accountTo?.trim() || null,
+      input.counterpartyId ?? null,
+      input.counterparty?.trim() || null,
+      input.category?.trim() || null,
+      input.note?.trim() || null,
+      when ? new Date(when).toISOString() : null,
+      id,
+    ],
+  );
+}
+
+/** Удалить денежный документ. Деньги по нему перестают учитываться. */
+export function deleteMoneyDoc(db: SqlDriver, id: Id): void {
+  db.run('DELETE FROM money_docs WHERE id = ?', [id]);
+}
+
 export function createMoneyDoc(db: SqlDriver, input: MoneyDocInput): Id {
   if (input.amount <= 0) throw new Error('Сумма должна быть больше нуля');
   if (!input.account.trim()) throw new Error('Не выбран счёт');

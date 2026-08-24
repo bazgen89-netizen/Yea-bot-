@@ -149,11 +149,18 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   if (pathname.startsWith('/doc')) {
     return `Движение товара / ${DOC_TITLE[kind ?? 'purchase'] ?? 'создание'}`;
   }
+  // Страница денежного документа. Название — их же: состояние
+  // `card.money_show` подписано `VIEW_ORDER`, а это в их словаре
+  // (`languages/ru.json`) «Просмотр ордера».
+  if (pathname.startsWith('/money/show')) return 'Просмотр ордера';
+
   if (pathname.startsWith('/new')) return 'Создать документ';
   if (pathname.startsWith('/sale/new')) return 'Продажа';
   // Правка чека — свой заголовок: у него эта страница называется
   // «Документы / редактирование документа», а не «Продажа».
   if (pathname.startsWith('/sale/edit')) return 'Документы / редактирование документа';
+  // А просмотр чека — `card.journal.item`, `VIEW_DOCUMENT`.
+  if (pathname.startsWith('/sale/')) return 'Просмотр документа';
 
   if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
   if (pathname.startsWith('/journal')) return 'Движение товара';

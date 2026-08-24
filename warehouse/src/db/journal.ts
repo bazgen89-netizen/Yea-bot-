@@ -293,6 +293,8 @@ export interface MoneyEntry {
   /** Списано, копейки. */
   expense: Kopecks;
   counterparty: string;
+  /** Кто он в справочнике — чтобы имя в столбце открывало его карточку. */
+  counterparty_id: Id | null;
   /** Куда легли деньги: касса магазина, терминал, счёт в банке. */
   account: string;
   category: string;
@@ -403,6 +405,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
                 (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
                 'Розничный покупатель'
               )                       AS counterparty,
+              s.customer_id           AS counterparty_id,
               s.payment               AS payment,
               ''                      AS account,
               'Оплата от клиента'     AS category,
@@ -430,6 +433,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
                 (SELECT c.name FROM counterparties c WHERE c.id = d.counterparty_id),
                 ''
               ),
+              d.counterparty_id,
               NULL,
               -- Перевод показывается одной строкой «откуда → куда»: две строки
               -- об одном переводе выглядели бы как два разных движения.

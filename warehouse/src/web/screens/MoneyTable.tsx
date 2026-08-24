@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
@@ -41,6 +42,7 @@ const COLUMNS: Column[] = [
 
 /** «Движение денег» — журнал кабинета. */
 export function MoneyTable() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [values, setValues] = useState<Record<string, FilterValue>>({});
@@ -104,6 +106,21 @@ export function MoneyTable() {
   const groups = groupMoneyByDay(entries);
   const set = (key: string, value: FilterValue) =>
     setValues((current) => ({ ...current, [key]: value }));
+
+  /**
+   * Куда ведёт строка.
+   *
+   * В их таблице (`js/components/money-table/_view.html`) на
+   * `card.money_show({orderId})` ведёт **каждая** строка, а не только
+   * заведённая руками: приход по чеку у них тоже документ, просто с
+   * «привязкой к документу» вместо правки. Поэтому и здесь строка из чека
+   * открывает такой же документ, а не сам чек.
+   */
+  const open = (entry: MoneyEntry) =>
+    router.push({
+      pathname: '/money/show/[id]',
+      params: { id: String(entry.id), source: entry.source },
+    });
 
   return (
     <View style={styles.screen}>
@@ -171,7 +188,21 @@ export function MoneyTable() {
               <View key={group.day}>
                 <Text style={styles.day}>{formatDay(group.day)}</Text>
                 {group.entries.map((entry) => (
-                  <MoneyRow key={entry.id} entry={entry} />
+                  <MoneyRow
+                    key={`${entry.source}${entry.id}`}
+                    entry={entry}
+                    onOpen={() => open(entry)}
+                    onParty={() =>
+                      entry.counterparty_id
+                        ? router.push({
+                            pathname: '/counterparty/[id]',
+                            params: { id: String(entry.counterparty_id) },
+                          })
+                        : router.push('/counterparties')
+                    }
+                    onAccount={() => router.push('/accounts')}
+                    onAuthor={() => router.push('/staff')}
+                  />
                 ))}
               </View>
             ))}
@@ -195,7 +226,27 @@ const STRIPE: Record<MoneyEntry['type'], string> = {
   transfer: web.link,
 };
 
-function MoneyRow({ entry }: { entry: MoneyEntry }) {
+/**
+ * Строка движения денег.
+ *
+ * Синие столбцы ведут ровно туда же, куда у него: контрагент — в его
+ * карточку (`item.contragent.go()`), счёт — на счета
+ * (`card.account_show`), автор — в сотрудников (`card.profile`). Сама
+ * строка открывает документ.
+ */
+function MoneyRow({
+  entry,
+  onOpen,
+  onParty,
+  onAccount,
+  onAuthor,
+}: {
+  entry: MoneyEntry;
+  onOpen: () => void;
+  onParty: () => void;
+  onAccount: () => void;
+  onAuthor: () => void;
+}) {
   const [order, time, income, expense, party, account, category, author] = COLUMNS;
   const stripe = STRIPE[entry.type];
 
@@ -204,7 +255,7 @@ function MoneyRow({ entry }: { entry: MoneyEntry }) {
       <View style={[styles.stripe, { backgroundColor: stripe }]} />
 
       <View style={styles.rowInner}>
-        <Row>
+        <Row onPress={onOpen}>
           <View style={styles.status}>
             <WebIcon.done color={stripe} />
           </View>
@@ -221,10 +272,20 @@ function MoneyRow({ entry }: { entry: MoneyEntry }) {
           <Text style={[webText.cellNumber, { width: expense.width }]}>
             {entry.expense ? formatMoneyWeb(entry.expense) : ''}
           </Text>
-          <Text style={[webText.link, { width: party.width }]} numberOfLines={1}>
+          <Text
+            accessibilityRole="link"
+            style={[webText.link, { width: party.width }]}
+            numberOfLines={1}
+            onPress={onParty}
+          >
             {entry.counterparty}
           </Text>
-          <Text style={[webText.link, { width: account.width }]} numberOfLines={1}>
+          <Text
+            accessibilityRole="link"
+            style={[webText.link, { width: account.width }]}
+            numberOfLines={1}
+            onPress={onAccount}
+          >
             {entry.account}
           </Text>
           <Text style={[webText.cell, { width: category.width }]} numberOfLines={1}>
@@ -232,7 +293,12 @@ function MoneyRow({ entry }: { entry: MoneyEntry }) {
           </Text>
           {/* Автор — тот, кто провёл документ. Раньше здесь стояло слово
               «waystea» прямо в разметке, у всех строк одинаково. */}
-          <Text style={[webText.link, { width: author.width }]} numberOfLines={1}>
+          <Text
+            accessibilityRole={entry.author ? 'link' : 'text'}
+            style={[webText.link, { width: author.width }]}
+            numberOfLines={1}
+            onPress={entry.author ? onAuthor : undefined}
+          >
             {entry.author ?? ''}
           </Text>
         </Row>

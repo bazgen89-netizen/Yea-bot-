@@ -443,7 +443,7 @@ function ProductRow({
           <Text
             key={column.key}
             style={[
-              column.numeric ? webText.cellNumber : webText.cell,
+              column.numeric ? webText.rowNumber : webText.rowCell,
               { width: column.width },
               column.numeric && styles.right,
             ]}
@@ -460,7 +460,7 @@ function ProductRow({
           <Text
             key={id}
             style={[
-              webText.cellNumber,
+              webText.rowNumber,
               styles.right,
               { width: widths[picked.length + index]?.width ?? 168 },
               qty < 0 && { color: web.danger },

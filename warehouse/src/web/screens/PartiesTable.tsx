@@ -212,7 +212,7 @@ function PartyRow({
           return (
             <View key={column.key} style={[styles.nameCell, { width: column.width }]}>
               <WebIcon.parties size={15} color={web.link} />
-              <Text style={webText.link} numberOfLines={2}>
+              <Text style={webText.rowLink} numberOfLines={2}>
                 {column.value(party)}
               </Text>
             </View>
@@ -226,7 +226,7 @@ function PartyRow({
           <Text
             key={column.key}
             style={[
-              link ? webText.link : column.numeric ? webText.cellNumber : webText.cell,
+              link ? webText.rowLink : column.numeric ? webText.rowNumber : webText.rowCell,
               { width: column.width },
               column.numeric && styles.right,
             ]}

@@ -19,6 +19,21 @@ import type { CounterpartyWithTotals, PartyKind } from '../domain/types';
  * и «Баланс» — мы не ведём долги, и три колонки нулей ничего не сказали бы.
  */
 
+/**
+ * Ширины столбцов.
+ *
+ * Из их же таблицы стилей: клиенты лежат в
+ * `.content.full-width.fixed-title` таблицей `ui small celled table scroll
+ * main-table`, и там `.fixed-title .ui.table tr td { min-width: 75px }`, а
+ * заголовок обрезан по `max-width: 130px`. Отдельные виды столбцов у них
+ * жёстко заданы: цена — 100, штрихкод, артикул и страна — 140.
+ *
+ * Практически это значит: все столбцы одной ширины, кроме имени. У меня
+ * они были подобраны на глаз, от 110 до 320, и таблица выходила заметно
+ * шире его. Он это и назвал «толщина столбов».
+ */
+const W = { name: 260, cell: 140 };
+
 export interface PartyColumn {
   key: string;
   title: string;
@@ -129,13 +144,13 @@ const START: PartyColumn[] = [
   {
     key: 'name',
     title: 'Клиент',
-    width: 320,
+    width: W.name,
     value: (p) => p.name,
     sort: (p) => p.name.toLowerCase(),
   },
   // Телефон и почта у него не сортируются — `sorting: false`.
-  { key: 'phone', title: 'Телефон', width: 170, value: (p) => p.phone ?? '' },
-  { key: 'email', title: 'Email', width: 210, value: (p) => p.email ?? '' },
+  { key: 'phone', title: 'Телефон', width: W.cell, value: (p) => p.phone ?? '' },
+  { key: 'email', title: 'Email', width: W.cell, value: (p) => p.email ?? '' },
 ];
 
 const dash = (value: string | null) => value ?? '—';
@@ -154,26 +169,26 @@ const BASIC_CUSTOMER: PartyColumn[] = [
   {
     key: 'bday',
     title: 'День рождения',
-    width: 160,
+    width: W.cell,
     value: (p) => dash(p.birthday),
     // Дата в выгрузке лежит как «13/07/2006»: строкой такое сортируется по
     // дню, а не по году.
     sort: (p) => birthdayKey(p.birthday),
   },
-  { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender), sort: (p) => p.gender ?? '' },
-  { key: 'note', title: 'Описание', width: 240, value: (p) => p.note ?? '' },
-  { key: 'address', title: 'Адрес', width: 200, value: (p) => p.address ?? '' },
+  { key: 'sex', title: 'Пол', width: W.cell, value: (p) => dash(p.gender), sort: (p) => p.gender ?? '' },
+  { key: 'note', title: 'Описание', width: W.cell, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: W.cell, value: (p) => p.address ?? '' },
   {
     key: 'by',
     title: 'Добавил',
-    width: 160,
+    width: W.cell,
     value: (p) => p.created_by ?? '',
     sort: (p) => p.created_by ?? '',
   },
   {
     key: 'created',
     title: 'Создан',
-    width: 150,
+    width: W.cell,
     value: (p) => day(p.created_at),
     sort: (p) => p.created_at,
   },
@@ -190,26 +205,26 @@ function birthdayKey(birthday: string | null): string {
 
 const BASIC_SUPPLIER: PartyColumn[] = [
   ...START,
-  { key: 'note', title: 'Описание', width: 260, value: (p) => p.note ?? '' },
-  { key: 'address', title: 'Адрес', width: 220, value: (p) => p.address ?? '' },
-  { key: 'by', title: 'Добавил', width: 170, value: (p) => p.created_by ?? '' },
-  { key: 'created', title: 'Создан', width: 150, value: (p) => day(p.created_at) },
+  { key: 'note', title: 'Описание', width: W.cell, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: W.cell, value: (p) => p.address ?? '' },
+  { key: 'by', title: 'Добавил', width: W.cell, value: (p) => p.created_by ?? '' },
+  { key: 'created', title: 'Создан', width: W.cell, value: (p) => day(p.created_at) },
 ];
 
 const LOYALTY: PartyColumn[] = [
   ...START,
-  { key: 'card', title: 'Номер карты лояльности', width: 220, value: (p) => dash(p.discount_card) },
+  { key: 'card', title: 'Номер карты лояльности', width: W.cell, value: (p) => dash(p.discount_card) },
   {
     key: 'type',
     title: 'Система лояльности',
-    width: 200,
+    width: W.cell,
     value: (p) => LOYALTY_LABEL[p.loyalty_type ?? ''] ?? '—',
   },
-  { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
+  { key: 'bday', title: 'День рождения', width: W.cell, value: (p) => dash(p.birthday) },
   {
     key: 'discount',
     title: 'Скидка',
-    width: 120,
+    width: W.cell,
     numeric: true,
     value: (p) => (p.discount_bp ? formatPercent(p.discount_bp) : '—'),
     sort: (p) => p.discount_bp ?? 0,
@@ -217,21 +232,21 @@ const LOYALTY: PartyColumn[] = [
   {
     key: 'bonus',
     title: 'Бонусов',
-    width: 140,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.bonus_balance),
   },
   {
     key: 'bonusSpent',
     title: 'Потрачено бонусов',
-    width: 190,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.bonus_spent),
   },
   {
     key: 'cashback',
     title: 'Кешбэк',
-    width: 130,
+    width: W.cell,
     numeric: true,
     value: (p) => (p.cashback_bp ? formatPercent(p.cashback_bp) : '—'),
     sort: (p) => p.cashback_bp ?? 0,
@@ -240,11 +255,11 @@ const LOYALTY: PartyColumn[] = [
 
 const STATS_CUSTOMER: PartyColumn[] = [
   ...START,
-  { key: 'sales', title: 'Кол-во продаж', width: 160, numeric: true, value: (p) => String(p.receipts) },
+  { key: 'sales', title: 'Кол-во продаж', width: W.cell, numeric: true, value: (p) => String(p.receipts) },
   {
     key: 'salesSum',
     title: 'Сумма продаж',
-    width: 170,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.purchases),
     sort: (p) => p.purchases,
@@ -252,7 +267,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'debit',
     title: 'Сумма приходов',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum),
     sort: (p) => p.debit_sum,
@@ -260,14 +275,14 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'avg',
     title: 'Средний чек',
-    width: 160,
+    width: W.cell,
     numeric: true,
     value: (p) => (p.receipts ? formatMoneyWeb(Math.round(p.purchases / p.receipts)) : '—'),
   },
   {
     key: 'returns',
     title: 'Кол-во возвратов продаж',
-    width: 230,
+    width: W.cell,
     numeric: true,
     value: (p) => String(p.returns),
     sort: (p) => p.returns,
@@ -275,7 +290,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'returnsSum',
     title: 'Сумма возврата',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.returns_sum),
     sort: (p) => p.returns_sum,
@@ -283,7 +298,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'credit',
     title: 'Сумма расходов',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.credit_sum),
     sort: (p) => p.credit_sum,
@@ -293,7 +308,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'debt',
     title: 'Долг по продажам',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debt_sales),
     sort: (p) => p.debt_sales,
@@ -301,7 +316,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'rdebt',
     title: 'Долг по возвратам',
-    width: 180,
+    width: W.cell,
     numeric: true,
     // Долгов по возвратам мы не заводим: возврат отдаёт деньги сразу.
     value: () => formatMoneyWeb(0),
@@ -309,7 +324,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
   {
     key: 'balance',
     title: 'Баланс',
-    width: 160,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum - p.credit_sum),
     sort: (p) => p.debit_sum - p.credit_sum,
@@ -321,21 +336,21 @@ const STATS_SUPPLIER: PartyColumn[] = [
   {
     key: 'purchases',
     title: 'Количество закупок',
-    width: 200,
+    width: W.cell,
     numeric: true,
     value: (p) => String(p.purchases_count),
   },
   {
     key: 'purchasesSum',
     title: 'Сумма закупок',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.purchases_sum),
   },
   {
     key: 'credit',
     title: 'Сумма расходов',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.credit_sum),
     sort: (p) => p.credit_sum,
@@ -343,21 +358,21 @@ const STATS_SUPPLIER: PartyColumn[] = [
   {
     key: 'purchaseReturns',
     title: 'Количество возвратов закупок',
-    width: 260,
+    width: W.cell,
     numeric: true,
     value: (p) => String(p.purchase_returns),
   },
   {
     key: 'purchaseReturnsSum',
     title: 'Сумма возвратов закупок',
-    width: 230,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.purchase_returns_sum),
   },
   {
     key: 'debit',
     title: 'Сумма приходов',
-    width: 180,
+    width: W.cell,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum),
     sort: (p) => p.debit_sum,

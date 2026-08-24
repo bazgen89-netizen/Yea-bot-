@@ -53,7 +53,11 @@ export function ProductView({ id }: { id: Id }) {
         <View style={styles.header}>
           <View style={styles.photo}>
             {product.photo_uri ? (
-              <Image source={{ uri: product.photo_uri }} style={styles.photoImage} />
+              <Image
+                source={{ uri: product.photo_uri }}
+                resizeMode="contain"
+                style={styles.photoImage}
+              />
             ) : (
               <WebIcon.products size={54} color="#D3D6D9" />
             )}

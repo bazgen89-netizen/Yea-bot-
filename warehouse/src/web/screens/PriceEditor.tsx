@@ -185,7 +185,11 @@ export function PriceEditor() {
               <View key={product.id} style={styles.row}>
                 <View style={[styles.cell, styles.name]}>
                   {product.photo_uri ? (
-                    <Image source={{ uri: product.photo_uri }} style={styles.thumb} />
+                    <Image
+                      source={{ uri: product.photo_uri }}
+                      resizeMode="cover"
+                      style={styles.thumb}
+                    />
                   ) : (
                     <View style={styles.thumb} />
                   )}

@@ -2,6 +2,7 @@
  * Переснять фотографии товаров крупнее.
  *
  *   node scripts/refresh-photos.mjs [--size=288] [--quality=0.8]
+ *   node scripts/refresh-photos.mjs --size=160 --out=photos-link.json --from-disk
  *
  * Вазген сказал прямо: «у товаров очень плохого качества фото». Так и было:
  * при переносе они ужимались до 96 точек — этого хватает на значок 40×40 в
@@ -32,10 +33,34 @@ const arg = (name, fallback) => {
 const size = arg('size', 288);
 const quality = arg('quality', 0.8);
 
-const products = JSON.parse(readFileSync(`${out}/products.json`, 'utf8'));
-const withPhoto = products.filter((product) => product.img && product.c);
+const text = (name, fallback) => {
+  const found = process.argv.find((one) => one.startsWith(`--${name}=`));
+  return found ? found.slice(name.length + 3) : fallback;
+};
 
-console.log(`Фотографии: ${withPhoto.length} шт., ${size} точек, качество ${quality}`);
+/** Куда положить: по умолчанию туда же, откуда берёт сборка. */
+const file = `${out}/${text('out', 'photos.json')}`;
+
+/**
+ * Уменьшить уже скачанное, а не выкачивать заново.
+ *
+ * Нужно для страницы по ссылке: она не может быть тяжелее 16 МБ, и туда
+ * идёт тот же набор снимков, но мельче. Гонять ради этого тысячу картинок
+ * через сеть второй раз незачем — они уже лежат в `photos.json`.
+ */
+const fromDisk = process.argv.includes('--from-disk');
+
+const products = JSON.parse(readFileSync(`${out}/products.json`, 'utf8'));
+const saved = fromDisk ? JSON.parse(readFileSync(`${out}/photos.json`, 'utf8')) : {};
+
+const withPhoto = fromDisk
+  ? Object.keys(saved).map((code) => ({ c: code, img: saved[code] }))
+  : products.filter((product) => product.img && product.c);
+
+console.log(
+  `Фотографии: ${withPhoto.length} шт., ${size} точек, качество ${quality}` +
+    (fromDisk ? ' — из уже скачанных' : ''),
+);
 
 const { chromium } = await import('playwright');
 const browser = await chromium.launch();
@@ -47,7 +72,8 @@ let failed = 0;
 
 for (const product of withPhoto) {
   try {
-    const source = await download(product.img);
+    // Уже скачанное лежит строкой — качать нечего.
+    const source = fromDisk ? product.img : await download(product.img);
     if (!source) {
       failed += 1;
       continue;
@@ -71,11 +97,11 @@ process.stdout.write(`\r  снято: ${done}\n`);
 if (failed) console.log(`  не скачалось: ${failed}`);
 
 await browser.close();
-writeFileSync(`${out}/photos.json`, JSON.stringify(photos, null, 1));
+writeFileSync(file, JSON.stringify(photos, null, 1));
 
 const weight = Object.values(photos).reduce((sum, one) => sum + one.length, 0);
 console.log(
-  `Готово: ${out}/photos.json — ${(weight / 1048576).toFixed(1)} МБ, ` +
+  `Готово: ${file} — ${(weight / 1048576).toFixed(1)} МБ, ` +
     `в среднем ${Math.round(weight / (done || 1) / 1024)} КБ на снимок.`,
 );
 

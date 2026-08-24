@@ -59,6 +59,21 @@ const backup = `${seed}/clients.real.json`;
  */
 const REAL = process.argv.includes('--real');
 
+/**
+ * Какие снимки положить.
+ *
+ * Страница по ссылке не может быть тяжелее 16 МБ, а крупные фотографии —
+ * это пятнадцать из них. Поэтому у ссылки свой набор, помельче:
+ *
+ *   node scripts/refresh-photos.mjs --size=160 --out=photos-link.json --from-disk
+ *   node scripts/build-demo.mjs --real --photos=photos-link.json
+ *
+ * В файл, который открывается с диска, идут крупные: там предела нет.
+ */
+const PHOTOS =
+  process.argv.find((one) => one.startsWith('--photos='))?.slice('--photos='.length) ??
+  'photos.json';
+
 const NAMES = [
   'Анна', 'Борис', 'Вера', 'Георгий', 'Дарья', 'Егор', 'Жанна', 'Зоя',
   'Иван', 'Ксения', 'Леонид', 'Марина', 'Никита', 'Ольга', 'Павел', 'Римма',
@@ -148,7 +163,7 @@ const fake = REAL ? real : real.map((client, index) => {
 });
 
 const allSales = JSON.parse(readFileSync(source('sales.json'), 'utf8'));
-const allPhotos = JSON.parse(readFileSync(source('photos.json'), 'utf8'));
+const allPhotos = JSON.parse(readFileSync(source(PHOTOS), 'utf8'));
 const allStores = JSON.parse(readFileSync(source('stores.json'), 'utf8'));
 
 console.log(

@@ -26,18 +26,26 @@ import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
+/**
+ * Колонки — их же, с их же шириной.
+ *
+ * Ширины не подобраны на глаз, а взяты из их таблицы стилей
+ * (`css/my-*.css`, правила `.table.documents-table tr td[data-name=…]`):
+ * статус 60, документ 180, время и позиций по 80, сумма и оплаченные по
+ * 110, отправитель, получатель и автор по 180. У меня стояли свои, шире, и
+ * «Автор» уезжал за правый край экрана — в его кабинете видны все девять.
+ *
+ * Значка «%» отдельной колонкой у них нет: он стоит внутри ячейки суммы.
+ */
 const COLUMNS: Column[] = [
-  { key: 'doc', title: 'Документ', width: 230 },
-  { key: 'time', title: 'Время', width: 90 },
-  { key: 'positions', title: 'Позиций', width: 100 },
-  { key: 'amount', title: 'Сумма', width: 130 },
-  // Узкая колонка со значком «%»: у него он стоит сразу за суммой и
-  // отмечает документы, где была скидка.
-  { key: 'discount', title: '', width: 40 },
-  { key: 'paid', title: 'Оплаченные', width: 150 },
-  { key: 'sender', title: 'Отправитель', width: 210 },
-  { key: 'receiver', title: 'Получатель', width: 210 },
-  { key: 'author', title: 'Автор', width: 160 },
+  { key: 'doc', title: 'Документ', width: 180 },
+  { key: 'time', title: 'Время', width: 80 },
+  { key: 'positions', title: 'Позиций', width: 80 },
+  { key: 'amount', title: 'Сумма', width: 110 },
+  { key: 'paid', title: 'Оплаченные', width: 110 },
+  { key: 'sender', title: 'Отправитель', width: 180 },
+  { key: 'receiver', title: 'Получатель', width: 180 },
+  { key: 'author', title: 'Автор', width: 180 },
 ];
 
 /**
@@ -368,7 +376,7 @@ function EntryRow({
   onPress: () => void;
   onOpen: (what: 'sender' | 'receiver' | 'author', entry: JournalEntry) => void;
 }) {
-  const [doc, time, positions, amount, discount, paid, sender, receiver, author] = COLUMNS;
+  const [doc, time, positions, amount, paid, sender, receiver, author] = COLUMNS;
 
   return (
     <View style={styles.rowWrap}>
@@ -379,11 +387,11 @@ function EntryRow({
           <View style={styles.status}>
             {/* Проведённый отмечен галочкой, отложенный — карандашом: у него
                 это две разные иконки в той же колонке. */}
-            {entry.posted ? (
-              <WebIcon.done color={web.stripeSale} />
-            ) : (
-              <WebIcon.pencil color={web.textMuted} />
-            )}
+            {/* Галочка стоит всегда, меняется её цвет — так в их разметке:
+                `ng-style="{color: item.status ? '#4183C4' : '#bbb'}"`. Я
+                рисовал непроведённому карандаш, и в списке получались две
+                разные фигуры там, где у него одна. */}
+            <WebIcon.done color={entry.posted ? web.link : '#BBBBBB'} />
           </View>
 
           {/* Название документа и, если есть комментарий, значок рядом —
@@ -400,16 +408,11 @@ function EntryRow({
           </Text>
           <Text style={[webText.cellNumber, { width: positions.width }]}>{entry.positions}</Text>
           {/* Ноль — это ноль, а не прочерк: у него чек на 0.00 так и
-              подписан, и прочерк вместо суммы читался бы как «неизвестно». */}
-          <Text style={[webText.cellNumber, { width: amount.width }]}>
-            {formatMoneyWeb(entry.amount)}
-          </Text>
-
-          {/* Значок «%» — у чеков, как в кабинете: там он стоит в этой
-              колонке у каждой продажи. У складских документов скидки нет,
-              и колонка пустая. Сама скидка подписана рядом для чтения с
-              экрана: глазами её видно в самом документе. */}
-          <View style={[styles.discount, { width: discount.width }]}>
+              подписан, и прочерк вместо суммы читался бы как «неизвестно».
+              Значок «%» стоит здесь же, внутри ячейки суммы, — отдельной
+              колонки под него у них нет. */}
+          <View style={[styles.amountCell, { width: amount.width }]}>
+            <Text style={webText.cellNumber}>{formatMoneyWeb(entry.amount)}</Text>
             {entry.kind === 'sale' || entry.kind === 'refund' ? (
               <Text
                 style={styles.percent}
@@ -468,15 +471,21 @@ function EntryRow({
 const styles = StyleSheet.create({
 
   screen: { flex: 1, backgroundColor: web.bg },
-  statusHead: { width: 46, justifyContent: 'center' },
+  statusHead: { width: 60, justifyContent: 'center' },
   docCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   note: { fontSize: 12 },
-  discount: { alignItems: 'center' },
+  amountCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   percent: { fontFamily: WEB_FONT, fontSize: 14, fontWeight: '700', color: web.link },
   day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
-  rowWrap: { flexDirection: 'row' },
-  stripe: { width: 4 },
+  rowWrap: { flexDirection: 'row', position: 'relative' },
+  /**
+   * Полоска слева — их `i.indicator`:
+   * `top: 4; bottom: 4; left: 4; width: 4; border-radius: 2`.
+   * У меня она шла от края до края и сливалась в одну длинную ленту на всю
+   * группу; у него это отдельная скруглённая метка у каждой строки.
+   */
+  stripe: { position: 'absolute', top: 4, bottom: 4, left: 4, width: 4, borderRadius: 2 },
   rowInner: { flex: 1 },
-  status: { width: 42, alignItems: 'center' },
+  status: { width: 60, alignItems: 'center' },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

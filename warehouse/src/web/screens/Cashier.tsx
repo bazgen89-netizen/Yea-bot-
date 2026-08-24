@@ -1303,7 +1303,11 @@ const Tile = memo(function Tile({
       {card.image ? (
         <View style={list ? styles.lineImage : styles.tileImage}>
           {product.photo_uri ? (
-            <Image source={{ uri: product.photo_uri }} style={styles.tilePhoto} />
+            <Image
+              source={{ uri: product.photo_uri }}
+              resizeMode="cover"
+              style={styles.tilePhoto}
+            />
           ) : (
             // Без фотографии — тот же значок, что у него: четыре фигуры,
             // а не сетка из девяти квадратиков.

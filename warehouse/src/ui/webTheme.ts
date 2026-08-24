@@ -320,7 +320,22 @@ export const webText = StyleSheet.create({
    * Заголовок колонки в справочнике и журналах: 14 пикселей, начертание 700,
    * обычным регистром — так у него в `.ui.table thead th`.
    */
-  column: { fontFamily: WEB_FONT, fontSize: 14, color: 'rgba(0,0,0,0.87)', fontWeight: '700' },
+  /**
+   * Заголовок колонки — их же правило, а не на глаз.
+   *
+   * `.fixed-title .ui.table thead th > div` в их `my-*.css`:
+   * `font-weight: 400; font-size: .8em; text-transform: uppercase`. Восемь
+   * десятых от 14 — это 11 точек. У меня было 14 полужирным и с большой
+   * буквы: заголовки выглядели тяжелее строк, хотя должны быть тише их.
+   */
+  column: {
+    fontFamily: WEB_FONT,
+    fontSize: 11,
+    color: 'rgba(0,0,0,0.87)',
+    fontWeight: '400' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.2,
+  },
   /**
    * Заголовок колонки в отчётах — другой: прописные, синие, без полужирного.
    * Две разные шапки в одном приложении выглядят ошибкой, но у него они

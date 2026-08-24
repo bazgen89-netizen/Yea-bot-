@@ -378,7 +378,11 @@ function ProductRow({
             <View key={column.key} style={[styles.nameCell, { width: column.width }]}>
               <View style={styles.thumb}>
                 {product.photo_uri ? (
-                  <Image source={{ uri: product.photo_uri }} style={styles.thumbImage} />
+                  <Image
+                    source={{ uri: product.photo_uri }}
+                    resizeMode="cover"
+                    style={styles.thumbImage}
+                  />
                 ) : (
                   <WebIcon.products size={19} color="#C4C7CA" />
                 )}

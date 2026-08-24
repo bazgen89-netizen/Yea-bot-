@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     paddingHorizontal: 22,
-    height: 46,
+    height: 40,
     backgroundColor: web.tableHead,
     borderBottomWidth: 1,
     borderBottomColor: web.border,
@@ -284,7 +284,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     paddingHorizontal: 22,
-    paddingVertical: 12,
+    // Их `.ui.table td` — `padding: .78571429em` от 12,6 точек, то есть
+    // около десяти сверху и снизу; строка выходит в 38 точек, а не в 46.
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: web.gridLine,
   },

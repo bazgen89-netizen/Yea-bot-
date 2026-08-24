@@ -515,7 +515,7 @@ export function ProductCard({ id, onClose }: { id: string; onClose: () => void }
               style={styles.photo}
             >
               {photo ? (
-                <Image source={{ uri: photo }} style={styles.photoImage} />
+                <Image source={{ uri: photo }} resizeMode="contain" style={styles.photoImage} />
               ) : (
                 <Text style={styles.photoHint}>Нажмите, чтобы выбрать фотографию</Text>
               )}

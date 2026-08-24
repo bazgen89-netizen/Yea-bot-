@@ -325,6 +325,25 @@ export interface MoneyEntry {
   note: string | null;
 }
 
+/**
+ * Последний день, за который в базе есть движение денег.
+ *
+ * То же, что `lastJournalDay`, но по деньгам: приход рождается чеком, а
+ * расход — заведённым документом, и последний день у них может не
+ * совпадать. Журнал денег открывается неделей от этого дня.
+ */
+export function lastMoneyDay(db: SqlDriver): string | null {
+  const row = db.get<{ day: string | null }>(
+    `SELECT MAX(day) AS day FROM (
+       SELECT MAX(date(created_at)) AS day FROM sales
+       UNION ALL
+       SELECT MAX(date(created_at)) FROM money_docs
+     )`,
+  );
+
+  return row?.day ?? null;
+}
+
 /** Способ оплаты — это и есть счёт, на который попали деньги. */
 const ACCOUNT: Record<string, string> = {
   cash: 'Касса магазина',

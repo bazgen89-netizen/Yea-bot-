@@ -21,6 +21,7 @@ import {
 } from '../../db/journal';
 import { listLocations } from '../../db/locations';
 import { DOC_TYPES } from '../../domain/docTypes';
+import { weekEndingAt } from '../../domain/calendar';
 import { DOC_KIND_LABEL } from '../../domain/types';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
@@ -69,31 +70,6 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
   inventory: DOC_TYPES.inventory.color,
   adjustment: DOC_TYPES.adjustment.color,
 };
-
-/**
- * Неделя, которой открывается журнал.
- *
- * Считается не от сегодняшнего числа, а от последнего дня, за который в
- * базе есть документы. Раньше бралась календарная неделя «сейчас», и на
- * перенесённой истории, которая кончается двадцатым августа, журнал
- * открывался пустым — он и спросил, куда всё делось. В кабинете этого не
- * видно только потому, что там торгуют каждый день.
- */
-function weekOf(last: string | null): { from: string; to: string } {
-  const day = (date: Date) => {
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  };
-
-  // Последний день читается как местный полдень: от полуночи по Гринвичу
-  // дата в часовых поясах западнее уехала бы на сутки назад.
-  const to = last ? new Date(`${last}T12:00:00`) : new Date();
-
-  const from = new Date(to);
-  from.setDate(from.getDate() - 6);
-
-  return { from: day(from), to: day(to) };
-}
 
 /** Что стоит в поле «статус» строки отбора. */
 const STATUS = [
@@ -149,7 +125,7 @@ export function JournalTable() {
    */
   const last = useQuery((db) => lastJournalDay(db));
   const [values, setValues] = useState<Record<string, FilterValue>>(() => {
-    const { from, to } = weekOf(last);
+    const { from, to } = weekEndingAt(last);
     return { dateFrom: from, dateTo: to };
   });
 

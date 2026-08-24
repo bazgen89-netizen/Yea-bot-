@@ -73,3 +73,37 @@ export function shiftMonth(
   const total = year * 12 + month + delta;
   return { year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
 }
+
+/**
+ * Неделя, которой открывается журнал: семь дней, кончающихся заданным днём.
+ *
+ * Считается **не от сегодняшнего числа**, а от последнего дня, за который в
+ * базе есть документы. Так и появилась эта функция: журнал брал календарную
+ * неделю «в которой мы сейчас», перенесённая история кончалась двадцатым
+ * августа, а на дворе было двадцать четвёртое — и Вазген открывал журнал и
+ * видел пустой список. У него в кабинете такого не бывает просто потому, что
+ * там торгуют каждый день.
+ *
+ * День читается как местный полдень: от полуночи по Гринвичу дата в поясах
+ * западнее уехала бы на сутки назад, и неделя сдвинулась бы вся.
+ *
+ * Пусто (база без документов) — неделя от сегодняшнего дня: показывать
+ * нечего, и любой ответ одинаково верен.
+ */
+export function weekEndingAt(last: string | null, today: Date = new Date()): {
+  from: string;
+  to: string;
+} {
+  const to = last ? new Date(`${last}T12:00:00`) : today;
+
+  const from = new Date(to);
+  from.setDate(from.getDate() - 6);
+
+  return { from: dayString(from), to: dayString(to) };
+}
+
+/** «2026-08-20» из даты, по местному времени. */
+function dayString(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

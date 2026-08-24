@@ -10,6 +10,7 @@ import {
   formatDay,
   formatTime,
   groupMoneyByDay,
+  lastMoneyDay,
   listMoney,
   moneyOptions,
   moneyTitle,
@@ -17,6 +18,7 @@ import {
   type MoneyFilter as MoneyFilterInput,
 } from '../../db/journal';
 import type { MoneyType } from '../../db/money';
+import { weekEndingAt } from '../../domain/calendar';
 import { formatMoneyWeb } from '../../domain/money';
 import { useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
@@ -50,7 +52,12 @@ export function MoneyTable() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [values, setValues] = useState<Record<string, FilterValue>>({});
+
+  const last = useQuery((db) => lastMoneyDay(db));
+  const [values, setValues] = useState<Record<string, FilterValue>>(() => {
+    const { from, to } = weekEndingAt(last);
+    return { dateFrom: from, dateTo: to };
+  });
 
   const filter = useMemo<MoneyFilterInput>(
     () => ({
@@ -261,8 +268,13 @@ function MoneyRow({
 
       <View style={styles.rowInner}>
         <Row onPress={onOpen}>
+          {/* Галочка синяя у всех, цветом отличается только полоска слева:
+              так в их разметке — `ng-class="{red: credit, green: debit}"`
+              на полоске и `color: '#4183C4'` на галочке. Я красил галочку
+              в цвет полоски, и красная галочка у расхода читалась как
+              «что-то не так с документом». */}
           <View style={styles.status}>
-            <WebIcon.done color={stripe} />
+            <WebIcon.done color={web.link} />
           </View>
 
           <Text style={[webText.rowLink, { width: order.width }]} numberOfLines={1}>
@@ -316,9 +328,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
   statusHead: { width: 60, justifyContent: 'center' },
   day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
-  rowWrap: { flexDirection: 'row' },
-  stripe: { width: 4 },
+  rowWrap: { flexDirection: 'row', position: 'relative' },
+  /** Их `i.indicator`: `top:4 bottom:4 left:4 width:4 radius:2`. */
+  stripe: { position: 'absolute', top: 4, bottom: 4, left: 4, width: 4, borderRadius: 2 },
   rowInner: { flex: 1 },
-  status: { width: 42, alignItems: 'center' },
+  status: { width: 60, alignItems: 'center' },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

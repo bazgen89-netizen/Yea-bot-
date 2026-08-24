@@ -5,7 +5,7 @@ import { Text } from '../Translated';
 
 import { ActionsMenu } from '../ActionsMenu';
 import { PricesDialog, CategoryDialog, OtherDialog, ScalesDialog } from '../BulkDialogs';
-import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS } from '../catalogColumns';
+import { CATALOG_COLUMNS, COLUMNS_KEY, DEFAULT_COLUMNS, sortProducts } from '../catalogColumns';
 import { ColumnPicker } from '../ColumnPicker';
 import { CatalogFilter, activeParts } from '../CatalogFilter';
 import { Checkbox, Column, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
@@ -83,6 +83,8 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
   // Какие колонки показывать. Выбор запоминается: у него он тоже переживает
   // перезагрузку, иначе настраивать таблицу пришлось бы каждое утро.
   const [shown, setShown] = useState<string[]>(() => readColumns());
+  /** Сортировка: по наименованию и по возрастанию, как открывается у него. */
+  const [sorting, setSorting] = useState({ key: 'name', reverse: false });
 
   const products = useQuery(
     (db) => listProducts(db, { search, presets: filters.presets, query }),
@@ -105,7 +107,9 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
         title: column.title,
         width: column.width,
         numeric: column.numeric,
-        sortable: true,
+        // Подчёркнута — значит сортирует; без правила сортировки колонку
+        // подчёркивать нельзя.
+        sortable: Boolean(column.sort),
       })),
       // Остаток по каждому магазину — столько колонок, сколько точек заведено.
       ...locations.map((location) => ({
@@ -118,9 +122,15 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
     [picked, locations],
   );
 
-  const pages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  // Сортируем весь справочник, а не видимую страницу.
+  const sorted = useMemo(
+    () => sortProducts(products, picked, sorting),
+    [products, picked, sorting],
+  );
+
+  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const current = Math.min(page, pages);
-  const page1 = products.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const page1 = sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   return (
     <View style={styles.screen}>
@@ -275,7 +285,16 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
         contentContainerStyle={styles.tableContent}
       >
         <View style={styles.tableInner}>
-          <HeadRow columns={columns} lead={<Checkbox />} />
+          <HeadRow
+            columns={columns}
+            lead={<Checkbox />}
+            sorting={sorting}
+            onSort={(key) =>
+              setSorting((was) =>
+                was.key === key ? { key, reverse: !was.reverse } : { key, reverse: false },
+              )
+            }
+          />
 
           <ScrollView style={styles.body}>
             {page1.map((product) => (

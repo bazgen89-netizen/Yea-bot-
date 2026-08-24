@@ -23,13 +23,59 @@ export interface CatalogColumn {
   numeric?: boolean;
   /** Значение ячейки строкой; форматирование живёт здесь, а не в таблице. */
   value: (product: ProductWithStock) => string;
+  /**
+   * По чему сортировать. Число сортируется числом: «1 000,00» и «900,00»
+   * строками сравниваются наоборот.
+   */
+  sort?: (product: ProductWithStock) => string | number;
+}
+
+/**
+ * Отсортировать справочник по колонке.
+ *
+ * Заголовки в таблице подчёркнуты — значит, обещают сортировку. Пока её не
+ * было, подчёркивание было обманом.
+ */
+export function sortProducts(
+  products: ProductWithStock[],
+  columns: CatalogColumn[],
+  sorting: { key: string; reverse: boolean },
+): ProductWithStock[] {
+  const column = columns.find((one) => one.key === sorting.key);
+  if (!column) return products;
+
+  const of = (product: ProductWithStock) => {
+    const raw = column.sort ? column.sort(product) : column.value(product);
+    if (typeof raw === 'number') return raw;
+    const text = raw.trim();
+    return text === '' || text === '—' ? null : text.toLowerCase();
+  };
+
+  return [...products].sort((a, b) => {
+    const left = of(a);
+    const right = of(b);
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
+
+    const order =
+      typeof left === 'string' && typeof right === 'string'
+        ? left.localeCompare(right, 'ru')
+        : left < right
+          ? -1
+          : left > right
+            ? 1
+            : 0;
+
+    return sorting.reverse ? -order : order;
+  });
 }
 
 /** Прочерк вместо пустоты — так у него в карточке и в таблице. */
 const dash = (value: string | null | undefined) => (value?.trim() ? value : '');
 
 export const CATALOG_COLUMNS: CatalogColumn[] = [
-  { key: 'name', title: 'Наименование', width: 430, value: (p) => p.name },
+  { key: 'name', title: 'Наименование', width: 430, value: (p) => p.name, sort: (p) => p.name },
   {
     key: 'code',
     title: 'Код',
@@ -65,6 +111,7 @@ export const CATALOG_COLUMNS: CatalogColumn[] = [
     width: 150,
     numeric: true,
     value: (p) => formatMoneyWeb(p.sale_price),
+    sort: (p) => p.sale_price,
   },
   {
     key: 'cost',
@@ -72,6 +119,7 @@ export const CATALOG_COLUMNS: CatalogColumn[] = [
     width: 160,
     numeric: true,
     value: (p) => formatMoneyWeb(p.cost_price),
+    sort: (p) => p.cost_price,
   },
   {
     key: 'purchase',
@@ -79,6 +127,7 @@ export const CATALOG_COLUMNS: CatalogColumn[] = [
     width: 150,
     numeric: true,
     value: (p) => formatMoneyWeb(p.purchase_price),
+    sort: (p) => p.purchase_price,
   },
   {
     key: 'marginality',

@@ -25,6 +25,61 @@ export interface PartyColumn {
   width: number;
   numeric?: boolean;
   value: (party: CounterpartyWithTotals) => string;
+  /**
+   * По чему сортировать, если сортировать по этой колонке можно.
+   *
+   * Не по тому, что написано в ячейке: «1 000,00» и «900,00» строками
+   * сравниваются наоборот. Поэтому число сортируется числом, а текст —
+   * строкой без учёта регистра.
+   *
+   * У него сортируются не все колонки: телефон и почта — нет
+   * (`sorting: false` в их `columnSettings`), день рождения, пол, добавил,
+   * создан и вся статистика — да.
+   */
+  sort?: (party: CounterpartyWithTotals) => string | number;
+}
+
+/**
+ * Отсортировать справочник по колонке.
+ *
+ * Пусто всегда внизу, в обе стороны: карточка без дня рождения не должна
+ * вытеснять заполненные наверх только потому, что «пусто» меньше любой даты.
+ */
+export function sortParties(
+  parties: CounterpartyWithTotals[],
+  columns: PartyColumn[],
+  sorting: { key: string; reverse: boolean },
+): CounterpartyWithTotals[] {
+  const column = columns.find((one) => one.key === sorting.key);
+  if (!column) return parties;
+
+  const of = (party: CounterpartyWithTotals) => {
+    const raw = column.sort ? column.sort(party) : column.value(party);
+    if (typeof raw === 'number') return raw;
+    const text = raw.trim();
+    return text === '' || text === '—' ? null : text.toLowerCase();
+  };
+
+  return [...parties].sort((a, b) => {
+    const left = of(a);
+    const right = of(b);
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
+
+    // Строки сравниваем по русским правилам, а не по кодам букв: «ё» имеет
+    // код больше «я», и простое сравнение ставило «Ёлчиев» после «Ясонова».
+    const order =
+      typeof left === 'string' && typeof right === 'string'
+        ? left.localeCompare(right, 'ru')
+        : left < right
+          ? -1
+          : left > right
+            ? 1
+            : 0;
+
+    return sorting.reverse ? -order : order;
+  });
 }
 
 export type PartySet = 'basic' | 'loyalty' | 'stats';
@@ -71,7 +126,14 @@ export const SET_LABEL: Record<PartySet, string> = {
 const START: PartyColumn[] = [
   // Первый столбец у него подписан «Клиент» (`CLIENT` в их словаре), а не
   // «Наименование»: наименование бывает у товара, у человека — имя.
-  { key: 'name', title: 'Клиент', width: 320, value: (p) => p.name },
+  {
+    key: 'name',
+    title: 'Клиент',
+    width: 320,
+    value: (p) => p.name,
+    sort: (p) => p.name.toLowerCase(),
+  },
+  // Телефон и почта у него не сортируются — `sorting: false`.
   { key: 'phone', title: 'Телефон', width: 170, value: (p) => p.phone ?? '' },
   { key: 'email', title: 'Email', width: 210, value: (p) => p.email ?? '' },
 ];
@@ -89,13 +151,42 @@ const dash = (value: string | null) => value ?? '—';
  */
 const BASIC_CUSTOMER: PartyColumn[] = [
   ...START,
-  { key: 'bday', title: 'День рождения', width: 160, value: (p) => dash(p.birthday) },
-  { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender) },
+  {
+    key: 'bday',
+    title: 'День рождения',
+    width: 160,
+    value: (p) => dash(p.birthday),
+    // Дата в выгрузке лежит как «13/07/2006»: строкой такое сортируется по
+    // дню, а не по году.
+    sort: (p) => birthdayKey(p.birthday),
+  },
+  { key: 'sex', title: 'Пол', width: 110, value: (p) => dash(p.gender), sort: (p) => p.gender ?? '' },
   { key: 'note', title: 'Описание', width: 240, value: (p) => p.note ?? '' },
   { key: 'address', title: 'Адрес', width: 200, value: (p) => p.address ?? '' },
-  { key: 'by', title: 'Добавил', width: 160, value: (p) => p.created_by ?? '' },
-  { key: 'created', title: 'Создан', width: 150, value: (p) => day(p.created_at) },
+  {
+    key: 'by',
+    title: 'Добавил',
+    width: 160,
+    value: (p) => p.created_by ?? '',
+    sort: (p) => p.created_by ?? '',
+  },
+  {
+    key: 'created',
+    title: 'Создан',
+    width: 150,
+    value: (p) => day(p.created_at),
+    sort: (p) => p.created_at,
+  },
 ];
+
+/** «13/07/2006» → «2006-07-13», чтобы сортировалось по годам. */
+function birthdayKey(birthday: string | null): string {
+  if (!birthday) return '';
+  const parts = birthday.split(/[./-]/);
+  if (parts.length !== 3) return birthday;
+  const [d, m, y] = parts;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
 
 const BASIC_SUPPLIER: PartyColumn[] = [
   ...START,
@@ -121,6 +212,7 @@ const LOYALTY: PartyColumn[] = [
     width: 120,
     numeric: true,
     value: (p) => (p.discount_bp ? formatPercent(p.discount_bp) : '—'),
+    sort: (p) => p.discount_bp ?? 0,
   },
   {
     key: 'bonus',
@@ -142,6 +234,7 @@ const LOYALTY: PartyColumn[] = [
     width: 130,
     numeric: true,
     value: (p) => (p.cashback_bp ? formatPercent(p.cashback_bp) : '—'),
+    sort: (p) => p.cashback_bp ?? 0,
   },
 ];
 
@@ -154,6 +247,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 170,
     numeric: true,
     value: (p) => formatMoneyWeb(p.purchases),
+    sort: (p) => p.purchases,
   },
   {
     key: 'debit',
@@ -161,6 +255,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum),
+    sort: (p) => p.debit_sum,
   },
   {
     key: 'avg',
@@ -175,6 +270,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 230,
     numeric: true,
     value: (p) => String(p.returns),
+    sort: (p) => p.returns,
   },
   {
     key: 'returnsSum',
@@ -182,6 +278,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.returns_sum),
+    sort: (p) => p.returns_sum,
   },
   {
     key: 'credit',
@@ -189,6 +286,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.credit_sum),
+    sort: (p) => p.credit_sum,
   },
   // Три последних столбца у него замыкают «Статистику», а у меня их не было
   // вовсе — набор обрывался на расходах.
@@ -198,6 +296,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debt_sales),
+    sort: (p) => p.debt_sales,
   },
   {
     key: 'rdebt',
@@ -213,6 +312,7 @@ const STATS_CUSTOMER: PartyColumn[] = [
     width: 160,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum - p.credit_sum),
+    sort: (p) => p.debit_sum - p.credit_sum,
   },
 ];
 
@@ -238,6 +338,7 @@ const STATS_SUPPLIER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.credit_sum),
+    sort: (p) => p.credit_sum,
   },
   {
     key: 'purchaseReturns',
@@ -259,6 +360,7 @@ const STATS_SUPPLIER: PartyColumn[] = [
     width: 180,
     numeric: true,
     value: (p) => formatMoneyWeb(p.debit_sum),
+    sort: (p) => p.debit_sum,
   },
 ];
 

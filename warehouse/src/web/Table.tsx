@@ -113,7 +113,30 @@ export interface Column {
   sortable?: boolean;
 }
 
-export function HeadRow({ columns, lead }: { columns: Column[]; lead?: ReactNode }) {
+/** Что сейчас отсортировано и в какую сторону. */
+export interface Sorting {
+  key: string;
+  reverse: boolean;
+}
+
+/**
+ * Шапка таблицы.
+ *
+ * `onSort` — нажатие по названию сортируемой колонки. Без него подчёркнутый
+ * заголовок был бы обещанием без исполнения: у него шапка не просто
+ * подчёркнута, она сортирует (`sortable-table-link` в их разметке).
+ */
+export function HeadRow({
+  columns,
+  lead,
+  sorting,
+  onSort,
+}: {
+  columns: Column[];
+  lead?: ReactNode;
+  sorting?: Sorting;
+  onSort?: (key: string) => void;
+}) {
   return (
     <View style={styles.headRow}>
       {lead}
@@ -121,6 +144,8 @@ export function HeadRow({ columns, lead }: { columns: Column[]; lead?: ReactNode
         <View key={column.key} style={{ width: column.width }}>
           <View style={[styles.headCell, column.numeric && styles.headCellRight]}>
             <Text
+              accessibilityRole={column.sortable && onSort ? 'button' : 'text'}
+              onPress={column.sortable && onSort ? () => onSort(column.key) : undefined}
               style={[
                 column.report ? webText.reportColumn : webText.column,
                 column.numeric && styles.right,
@@ -129,6 +154,7 @@ export function HeadRow({ columns, lead }: { columns: Column[]; lead?: ReactNode
               numberOfLines={1}
             >
               {column.title}
+              {sorting?.key === column.key ? (sorting.reverse ? ' ▼' : ' ▲') : ''}
             </Text>
             {column.help ? (
               <Pressable

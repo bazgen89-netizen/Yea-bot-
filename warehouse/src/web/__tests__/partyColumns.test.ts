@@ -1,4 +1,4 @@
-import { partySets, usefulColumns } from '../partyColumns';
+import { partySets, sortParties, usefulColumns } from '../partyColumns';
 import type { CounterpartyWithTotals } from '../../domain/types';
 
 /**
@@ -146,5 +146,66 @@ describe('колонки справочника клиентов', () => {
     // Иначе новая база встречала бы таблицей из двух колонок, и куда
     // вписывать день рождения, было бы непонятно.
     expect(titles([]).length).toBe(basic().length);
+  });
+});
+
+/**
+ * Сортировка справочника.
+ *
+ * У него шапка не просто подчёркнута — она сортирует
+ * (`sortable-table-link` в `js/pages/clients/_list.html`). У меня заголовки
+ * были подчёркнуты и молчали: обещание без исполнения.
+ */
+describe('сортировка справочника', () => {
+  const columns = basic();
+  const by = (key: string, reverse = false) =>
+    sortParties(
+      [
+        party({ id: 1, name: 'Борис', birthday: '13/07/2006', created_at: '2024-01-01' }),
+        party({ id: 2, name: 'Анна', birthday: '02/11/1990', created_at: '2026-05-01' }),
+        party({ id: 3, name: 'Вера', birthday: null, created_at: '2025-03-01' }),
+      ],
+      columns,
+      { key, reverse },
+    ).map((one) => one.name);
+
+  it('по имени — от А до Я и обратно', () => {
+    expect(by('name')).toEqual(['Анна', 'Борис', 'Вера']);
+    expect(by('name', true)).toEqual(['Вера', 'Борис', 'Анна']);
+  });
+
+  it('день рождения сортируется по годам, а не по числу месяца', () => {
+    // «02/11/1990» раньше «13/07/2006»: строкой вышло бы наоборот.
+    expect(by('bday').slice(0, 2)).toEqual(['Анна', 'Борис']);
+  });
+
+  it('пустое всегда внизу — в обе стороны', () => {
+    expect(by('bday')[2]).toBe('Вера');
+    expect(by('bday', true)[2]).toBe('Вера');
+  });
+
+  it('дата создания сортируется как дата', () => {
+    expect(by('created')).toEqual(['Борис', 'Вера', 'Анна']);
+  });
+
+  it('по колонке, которой нет в наборе, порядок не меняется', () => {
+    expect(by('нет-такой')).toEqual(['Борис', 'Анна', 'Вера']);
+  });
+});
+
+describe('русский алфавит', () => {
+  it('«ё» стоит между «е» и «ж», а не после «я»', () => {
+    const order = sortParties(
+      [
+        party({ id: 1, name: 'Ясонов' }),
+        party({ id: 2, name: 'Ёлчиев' }),
+        party({ id: 3, name: 'Егоров' }),
+        party({ id: 4, name: 'Жуков' }),
+      ],
+      basic(),
+      { key: 'name', reverse: false },
+    ).map((one) => one.name);
+
+    expect(order).toEqual(['Егоров', 'Ёлчиев', 'Жуков', 'Ясонов']);
   });
 });

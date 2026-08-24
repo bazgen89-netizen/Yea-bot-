@@ -7,7 +7,7 @@ import { Dropdown } from '../Dropdown';
 import {
   partySets,
   SET_LABEL,
-  usefulColumns,
+  sortParties,
   type PartyColumn,
   type PartySet,
 } from '../partyColumns';
@@ -40,6 +40,11 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
   // Карточка открывается панелью справа, не уводя со списка: в кабинете
   // это `sidebar: true`, и после сохранения список остаётся на месте.
   const [open, setOpen] = useState<Id | 'new' | null>(null);
+  /**
+   * Сортировка. По имени и по возрастанию — как у него:
+   * `sorting = {field: 'name', reverse: false}` в их контроллере.
+   */
+  const [sorting, setSorting] = useState({ key: 'name', reverse: false });
 
   const sets = useMemo(() => partySets(kind), [kind]);
 
@@ -61,11 +66,15 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
     [sets, set],
   );
 
-  const pages = Math.max(1, Math.ceil(parties.length / PAGE_SIZE));
+  // Сортируем весь справочник, а не видимую страницу: иначе сортировка
+  // переставляла бы полсотни строк внутри страницы и врала бы про остальные.
+  const sorted = useMemo(() => sortParties(parties, columns, sorting), [parties, columns, sorting]);
+
+  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const current = Math.min(page, pages);
   const shown = useMemo(
-    () => parties.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
-    [parties, current],
+    () => sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
+    [sorted, current],
   );
 
   const customers = kind !== 'supplier';
@@ -130,18 +139,32 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
         />
       </Toolbar>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.table}
+        contentContainerStyle={styles.tableContent}
+      >
+        <View style={styles.tableInner}>
           <HeadRow
             columns={columns.map((column) => ({
               key: column.key,
               title: column.title,
               width: column.width,
               numeric: column.numeric,
+              // Подчёркнут — значит сортирует. Телефон и почта у него не
+              // сортируются, и подчёркивать их было бы обманом.
+              sortable: Boolean(column.sort),
             }))}
+            sorting={sorting}
+            onSort={(key) =>
+              setSorting((was) =>
+                was.key === key ? { key, reverse: !was.reverse } : { key, reverse: false },
+              )
+            }
           />
 
-          <ScrollView>
+          <ScrollView style={styles.body}>
             {shown.map((party) => (
               <PartyRow
                 key={party.id}
@@ -219,6 +242,11 @@ function PartyRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  /** Таблица кончается над нижней строкой, а не уходит под неё. */
+  table: { flex: 1 },
+  tableContent: { flexGrow: 1 },
+  tableInner: { flex: 1 },
+  body: { flex: 1 },
   nameCell: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   right: { textAlign: 'right' },
   total: { fontFamily: WEB_FONT, fontSize: 16, color: web.text, marginHorizontal: 6 },

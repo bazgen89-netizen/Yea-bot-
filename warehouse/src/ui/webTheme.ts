@@ -330,7 +330,7 @@ export const webText = StyleSheet.create({
    */
   column: {
     fontFamily: WEB_FONT,
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(0,0,0,0.87)',
     fontWeight: '400' as const,
     textTransform: 'uppercase' as const,
@@ -348,6 +348,24 @@ export const webText = StyleSheet.create({
     textTransform: 'uppercase' as const,
   },
   cell: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
+  /**
+   * Ячейка журнала — мельче, чем ячейка справочника.
+   *
+   * Это не вкусовщина: у них две разные таблицы. Справочник лежит в
+   * `.table-content`, где стоит `.ui.table{font-size:14px}`, а журналы
+   * движения товара и денег — в `.fixed-title`, где такого правила нет и
+   * работает `.ui.small.table{font-size:.9em}` — 12,6 от четырнадцати. Он
+   * сказал «шрифт как был крупный, так и остался»: журнал у меня был
+   * набран справочниковым кеглем.
+   */
+  rowCell: { fontFamily: WEB_FONT, fontSize: 13, color: web.text },
+  rowNumber: {
+    fontFamily: WEB_FONT,
+    fontSize: 13,
+    color: web.text,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  rowLink: { fontFamily: WEB_FONT, fontSize: 13, color: web.link },
   cellNumber: { fontFamily: WEB_FONT, fontSize: 14, color: web.text, fontVariant: ['tabular-nums'] as const },
   /** Название товара, номер документа — 15 пикселей, крупнее остальных ячеек. */
   link: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },

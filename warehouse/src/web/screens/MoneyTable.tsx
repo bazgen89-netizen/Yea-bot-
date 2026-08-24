@@ -29,15 +29,20 @@ const TYPES = [
   { value: 'transfer', label: 'Перевод' },
 ];
 
+/**
+ * Ширины — из их же таблицы стилей, как и в движении товара:
+ * `.table.order-table tr td[data-name=…]` — статус 60, название 180,
+ * дата 80, суммы 110, контрагент, счёт, категория и автор по 180.
+ */
 const COLUMNS: Column[] = [
-  { key: 'order', title: 'Заказ', width: 210 },
-  { key: 'time', title: 'Время', width: 90 },
-  { key: 'income', title: 'Приход, руб', width: 150 },
-  { key: 'expense', title: 'Расход, руб', width: 150 },
-  { key: 'party', title: 'Контрагент', width: 210 },
-  { key: 'account', title: 'Счёт', width: 210 },
-  { key: 'category', title: 'Категория плате…', width: 190 },
-  { key: 'author', title: 'Автор', width: 150 },
+  { key: 'order', title: 'Заказ', width: 180 },
+  { key: 'time', title: 'Время', width: 80 },
+  { key: 'income', title: 'Приход, руб', width: 110 },
+  { key: 'expense', title: 'Расход, руб', width: 110 },
+  { key: 'party', title: 'Контрагент', width: 180 },
+  { key: 'account', title: 'Счёт', width: 180 },
+  { key: 'category', title: 'Категория платежа', width: 180 },
+  { key: 'author', title: 'Автор', width: 180 },
 ];
 
 /** «Движение денег» — журнал кабинета. */
@@ -260,21 +265,21 @@ function MoneyRow({
             <WebIcon.done color={stripe} />
           </View>
 
-          <Text style={[webText.link, { width: order.width }]} numberOfLines={1}>
+          <Text style={[webText.rowLink, { width: order.width }]} numberOfLines={1}>
             {moneyTitle(entry)}
           </Text>
-          <Text style={[webText.cellNumber, { width: time.width }]}>
+          <Text style={[webText.rowNumber, { width: time.width }]}>
             {formatTime(entry.created_at)}
           </Text>
-          <Text style={[webText.cellNumber, { width: income.width }]}>
+          <Text style={[webText.rowNumber, { width: income.width }]}>
             {entry.income ? formatMoneyWeb(entry.income) : ''}
           </Text>
-          <Text style={[webText.cellNumber, { width: expense.width }]}>
+          <Text style={[webText.rowNumber, { width: expense.width }]}>
             {entry.expense ? formatMoneyWeb(entry.expense) : ''}
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.link, { width: party.width }]}
+            style={[webText.rowLink, { width: party.width }]}
             numberOfLines={1}
             onPress={onParty}
           >
@@ -282,20 +287,20 @@ function MoneyRow({
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.link, { width: account.width }]}
+            style={[webText.rowLink, { width: account.width }]}
             numberOfLines={1}
             onPress={onAccount}
           >
             {entry.account}
           </Text>
-          <Text style={[webText.cell, { width: category.width }]} numberOfLines={1}>
+          <Text style={[webText.rowCell, { width: category.width }]} numberOfLines={1}>
             {entry.category}
           </Text>
           {/* Автор — тот, кто провёл документ. Раньше здесь стояло слово
               «waystea» прямо в разметке, у всех строк одинаково. */}
           <Text
             accessibilityRole={entry.author ? 'link' : 'text'}
-            style={[webText.link, { width: author.width }]}
+            style={[webText.rowLink, { width: author.width }]}
             numberOfLines={1}
             onPress={entry.author ? onAuthor : undefined}
           >
@@ -309,8 +314,8 @@ function MoneyRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
-  statusHead: { width: 46, justifyContent: 'center' },
-  day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
+  statusHead: { width: 60, justifyContent: 'center' },
+  day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row' },
   stripe: { width: 4 },
   rowInner: { flex: 1 },

@@ -197,6 +197,29 @@ export function listJournal(
  * заведённые поставщики — иначе выбирать придётся из трёх тысяч строк, из
  * которых сработают пять.
  */
+/**
+ * Последний день, за который в базе вообще есть документы.
+ *
+ * Нужен журналу, чтобы открыться неделей **с документами**, а не неделей,
+ * в которой мы сейчас. Перенесённая история кончается двадцатым августа, а
+ * календарь показывал двадцать четвёртое — журнал открывался пустым, и он
+ * спросил, куда всё делось. В его кабинете такого не бывает просто потому,
+ * что там торгуют сегодня.
+ *
+ * Пусто — значит база пуста; тогда пусть решает вызывающий.
+ */
+export function lastJournalDay(db: SqlDriver): string | null {
+  const row = db.get<{ day: string | null }>(
+    `SELECT MAX(day) AS day FROM (
+       SELECT MAX(date(created_at)) AS day FROM sales
+       UNION ALL
+       SELECT MAX(date(created_at)) FROM docs
+     )`,
+  );
+
+  return row?.day ?? null;
+}
+
 export function journalOptions(db: SqlDriver): {
   senders: string[];
   receivers: string[];

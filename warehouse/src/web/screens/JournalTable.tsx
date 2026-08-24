@@ -13,6 +13,7 @@ import {
   formatTime,
   groupByDay,
   journalOptions,
+  lastJournalDay,
   listJournal,
   type JournalEntry,
   type JournalFilter as JournalFilterInput,
@@ -69,18 +70,27 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
   adjustment: DOC_TYPES.adjustment.color,
 };
 
-/** Неделя, в которой мы сейчас: с понедельника по воскресенье. */
-function thisWeek(): { from: string; to: string } {
+/**
+ * Неделя, которой открывается журнал.
+ *
+ * Считается не от сегодняшнего числа, а от последнего дня, за который в
+ * базе есть документы. Раньше бралась календарная неделя «сейчас», и на
+ * перенесённой истории, которая кончается двадцатым августа, журнал
+ * открывался пустым — он и спросил, куда всё делось. В кабинете этого не
+ * видно только потому, что там торгуют каждый день.
+ */
+function weekOf(last: string | null): { from: string; to: string } {
   const day = (date: Date) => {
     const pad = (value: number) => String(value).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   };
 
-  const from = new Date();
-  from.setDate(from.getDate() - ((from.getDay() + 6) % 7));
+  // Последний день читается как местный полдень: от полуночи по Гринвичу
+  // дата в часовых поясах западнее уехала бы на сутки назад.
+  const to = last ? new Date(`${last}T12:00:00`) : new Date();
 
-  const to = new Date(from);
-  to.setDate(to.getDate() + 6);
+  const from = new Date(to);
+  from.setDate(from.getDate() - 6);
 
   return { from: day(from), to: day(to) };
 }
@@ -130,12 +140,16 @@ export function JournalTable() {
   const [openSale, setOpenSale] = useState<number | null>(null);
   /**
    * Отбор. Дата с самого начала стоит неделей — как в его журнале: там в
-   * поле «дата» написано «17 авг — 23 авг», и список открывается уже
+   * поле «дата» написано «14 авг — 20 авг», и список открывается уже
    * отобранным. Иначе журнал на сорок пять тысяч документов открывается
    * всей историей сразу, и найти вчерашний чек тяжелее, чем нужно.
+   *
+   * Неделя отсчитывается от последнего дня с документами, а не от
+   * сегодняшнего: иначе журнал открывается пустым.
    */
+  const last = useQuery((db) => lastJournalDay(db));
   const [values, setValues] = useState<Record<string, FilterValue>>(() => {
-    const { from, to } = thisWeek();
+    const { from, to } = weekOf(last);
     return { dateFrom: from, dateTo: to };
   });
 
@@ -397,22 +411,22 @@ function EntryRow({
           {/* Название документа и, если есть комментарий, значок рядом —
               как у него: по значку видно, что в документе есть заметка. */}
           <View style={[styles.docCell, { width: doc.width }]}>
-            <Text style={webText.link} numberOfLines={1}>
+            <Text style={webText.rowLink} numberOfLines={1}>
               {entryTitle(entry)}
             </Text>
             {entry.note ? <Text style={styles.note}>💬</Text> : null}
           </View>
 
-          <Text style={[webText.cellNumber, { width: time.width }]}>
+          <Text style={[webText.rowNumber, { width: time.width }]}>
             {formatTime(entry.created_at)}
           </Text>
-          <Text style={[webText.cellNumber, { width: positions.width }]}>{entry.positions}</Text>
+          <Text style={[webText.rowNumber, { width: positions.width }]}>{entry.positions}</Text>
           {/* Ноль — это ноль, а не прочерк: у него чек на 0.00 так и
               подписан, и прочерк вместо суммы читался бы как «неизвестно».
               Значок «%» стоит здесь же, внутри ячейки суммы, — отдельной
               колонки под него у них нет. */}
           <View style={[styles.amountCell, { width: amount.width }]}>
-            <Text style={webText.cellNumber}>{formatMoneyWeb(entry.amount)}</Text>
+            <Text style={webText.rowNumber}>{formatMoneyWeb(entry.amount)}</Text>
             {entry.kind === 'sale' || entry.kind === 'refund' ? (
               <Text
                 style={styles.percent}
@@ -427,7 +441,7 @@ function EntryRow({
 
           {/* Прочерк — только у складских документов: оплаты у них нет
               вовсе, а ноль означал бы «не оплачено». */}
-          <Text style={[webText.cellNumber, { width: paid.width }]}>
+          <Text style={[webText.rowNumber, { width: paid.width }]}>
             {entry.paid === null ? '-' : formatMoneyWeb(entry.paid)}
           </Text>
           {/* Синее — значит нажимаемое. В его кабинете отправитель ведёт в
@@ -437,7 +451,7 @@ function EntryRow({
               ведёт, обещает переход, которого нет. */}
           <Text
             accessibilityRole="link"
-            style={[webText.link, { width: sender.width }]}
+            style={[webText.rowLink, { width: sender.width }]}
             numberOfLines={1}
             onPress={() => onOpen('sender', entry)}
           >
@@ -445,7 +459,7 @@ function EntryRow({
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.link, { width: receiver.width }]}
+            style={[webText.rowLink, { width: receiver.width }]}
             numberOfLines={1}
             onPress={() => onOpen('receiver', entry)}
           >
@@ -456,7 +470,7 @@ function EntryRow({
               «Черёмушек» тоже значился владелец. */}
           <Text
             accessibilityRole="link"
-            style={[webText.link, { width: author.width }]}
+            style={[webText.rowLink, { width: author.width }]}
             numberOfLines={1}
             onPress={() => onOpen('author', entry)}
           >
@@ -476,7 +490,7 @@ const styles = StyleSheet.create({
   note: { fontSize: 12 },
   amountCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   percent: { fontFamily: WEB_FONT, fontSize: 14, fontWeight: '700', color: web.link },
-  day: { fontFamily: WEB_FONT, fontSize: 22, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
+  day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row', position: 'relative' },
   /**
    * Полоска слева — их `i.indicator`:

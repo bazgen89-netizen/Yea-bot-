@@ -4,3 +4,7 @@ __pycache__/
 .env
 venv/
 .venv/
+
+# roomwalk: сгенерированные кадры и сегменты не версионируем
+roomwalk/frames/
+roomwalk/segments/

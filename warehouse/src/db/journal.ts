@@ -404,9 +404,11 @@ export function moneyOptions(db: SqlDriver): {
 /**
  * Отбор в движении денег.
  *
- * Поля — его: поиск, дата, счёт, контрагент, автор, тип, категория платежа.
- * Его «Статуса» (проведён / не проведён / удалён) у нас нет: ордер заводится
- * сразу проведённым.
+ * Поля — его: поиск, дата, счёт, контрагент, автор, статус, тип, категория.
+ *
+ * «Статус» отбирает по-честному: проведённые ордера — все, отложенных нет
+ * ни одного, потому что приход и расход заводятся сразу проведёнными.
+ * Значит, «не проведён» показывает пусто — и это правда, а не поломка.
  */
 export interface MoneyFilter {
   search?: string;
@@ -417,6 +419,7 @@ export interface MoneyFilter {
   author?: string;
   types?: MoneyType[];
   category?: string;
+  status?: 'posted' | 'draft';
 }
 
 export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}): MoneyEntry[] {
@@ -445,6 +448,9 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
   if (filter.counterparty) add('counterparty = ?', filter.counterparty);
   if (filter.author) add('author = ?', filter.author);
   if (filter.category) add('category = ?', filter.category);
+  // Отложенных денежных документов не бывает: «проведён» — это все строки,
+  // «не проведён» — ни одной.
+  if (filter.status === 'draft') add('1 = 0');
   if (filter.types?.length) {
     add(`type IN (${filter.types.map(() => '?').join(', ')})`, ...filter.types);
   }

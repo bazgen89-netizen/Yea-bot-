@@ -3,9 +3,8 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
-import { DateBox, FilterBox } from '../FilterBox';
-import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
-import { CELL, Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { InlineFilter, type FilterValue, type InlineField } from '../InlineFilter';
+import { CELL, Column, HeadRow, Row, Toolbar } from '../Table';
 import { MoneyDocumentDrawer } from './MoneyDocument';
 import { PartyCard } from './PartyCard';
 import {
@@ -27,11 +26,35 @@ import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { WebIcon } from '../../ui/icons';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
 
-/** Поле «тип» строки отбора — те же три слова, что в кабинете. */
+/**
+ * Поле «тип».
+ *
+ * У него в отборе движения денег ровно два значения и в таком порядке:
+ * `{name:"EXPENSE",_id:"credit"}`, `{name:"INCOME",_id:"debit"}` — «Расход»
+ * и «Приход». Перевода между счетами в отборе нет: у него перевод — это
+ * пара «расход со счёта» и «приход на счёт», и в списке он виден дважды.
+ * У нас перевод хранится одной записью, поэтому третье слово оставлено:
+ * без него перевод не отобрать вовсе.
+ */
 const TYPES = [
-  { value: 'income', label: 'Приход' },
   { value: 'expense', label: 'Расход' },
+  { value: 'income', label: 'Приход' },
   { value: 'transfer', label: 'Перевод' },
+];
+
+/**
+ * Поле «статус» — его `DOCUMENT_IS_APPLIED` и `DOCUMENT_IS_DELAYED`.
+ *
+ * В движении денег он подписывает статус длиннее, чем в движении товара:
+ * там «Проведён», а здесь «Документ проведён». Это его слова, не мои.
+ *
+ * Отложенных денежных документов у нас пока не бывает — приход и расход
+ * заводятся сразу проведёнными, — поэтому отбор «Документ не проведён»
+ * честно показывает пусто.
+ */
+const STATUS = [
+  { value: 'posted', label: 'Документ проведён' },
+  { value: 'draft', label: 'Документ не проведён' },
 ];
 
 /**
@@ -54,8 +77,6 @@ const COLUMNS: Column[] = [
 export function MoneyTable() {
   const router = useRouter();
   const { db } = useDatabase();
-  const [search, setSearch] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
   /** Открытый ордер — панелью поверх списка. */
   const [openDoc, setOpenDoc] = useState<{ id: number; source: MoneySource } | null>(null);
   /** Открытая карточка контрагента — панелью поверх списка. */
@@ -69,60 +90,73 @@ export function MoneyTable() {
 
   const filter = useMemo<MoneyFilterInput>(
     () => ({
-      search,
+      search: values.search as string | undefined,
       from: values.dateFrom as string | undefined,
       to: values.dateTo as string | undefined,
       account: values.account as string | undefined,
       counterparty: values.counterparty as string | undefined,
       author: values.author as string | undefined,
       category: values.category as string | undefined,
-      types: values.types as MoneyType[] | undefined,
+      types: values.type ? ([values.type] as MoneyType[]) : undefined,
+      status: values.status as 'posted' | 'draft' | undefined,
     }),
-    [search, values],
+    [values],
   );
 
   const entries = useQuery((db) => listMoney(db, 500, filter), [filter]);
   const options = useQuery((db) => moneyOptions(db));
 
-  const fields: FilterField[] = [
-    { key: 'date', label: 'Дата', kind: 'dates' },
+  /**
+   * Поля отбора — его набор из `moneyCtrl.filter.fields`, в его порядке:
+   * поиск, дата, счёт, контрагент, автор, статус, тип, категория. В строке
+   * с самого начала стоят поиск, статус и тип (у него `show: true`) и дата
+   * — у неё значение по умолчанию.
+   *
+   * «Категория» у него названа `CATEGORY` — «Категория»; в столбце таблицы
+   * то же поле подписано длиннее, «Категория платежа».
+   */
+  const fields: InlineField[] = [
+    {
+      key: 'search',
+      label: 'Поиск по номеру или комментарию',
+      kind: 'text',
+      show: true,
+      required: true,
+      width: 306,
+    },
+    { key: 'date', label: 'Дата', kind: 'date', width: 186 },
     {
       key: 'account',
       label: 'Счёт',
       kind: 'select',
+      width: 196,
       options: options.accounts.map((value) => ({ value, label: value })),
     },
     {
       key: 'counterparty',
       label: 'Контрагент',
       kind: 'select',
+      width: 196,
       options: options.counterparties.map((value) => ({ value, label: value })),
     },
     {
       key: 'author',
       label: 'Автор',
       kind: 'select',
+      width: 168,
       options: options.authors.map((value) => ({ value, label: value })),
     },
+    { key: 'status', label: 'Статус', kind: 'select', show: true, width: 196, options: STATUS },
+    { key: 'type', label: 'Тип', kind: 'select', show: true, options: TYPES },
     {
       key: 'category',
-      label: 'Категория платежа',
+      label: 'Категория',
       kind: 'select',
+      width: 196,
       options: options.categories.map((value) => ({ value, label: value })),
-    },
-    {
-      key: 'types',
-      label: 'Тип',
-      kind: 'checks',
-      options: [
-        { value: 'income', label: 'Приход' },
-        { value: 'expense', label: 'Расход' },
-        { value: 'transfer', label: 'Перевод' },
-      ],
     },
   ];
 
-  const active = activeCount(values);
   const groups = groupMoneyByDay(entries);
   const set = (key: string, value: FilterValue) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -144,52 +178,12 @@ export function MoneyTable() {
   return (
     <View style={styles.screen}>
       <Toolbar>
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="поиск по номеру или комментарию"
-          width={306}
-        />
-
-        {/* Строка отбора, как в кабинете: дата и тип. Поля «оплата» здесь
-            нет — его нет и у него. Поля «статус» тоже нет, хотя у него оно
-            есть: денежный документ у нас всегда проведён, отложенных не
-            бывает, и это поле не отбирало бы ничего. Рисовать кнопку,
-            которая ничего не делает, хуже, чем не рисовать её. */}
-        <DateBox
-          from={values.dateFrom as string | undefined}
-          to={values.dateTo as string | undefined}
-          onChange={(key, value) => set(key === 'from' ? 'dateFrom' : 'dateTo', value)}
-          onClear={() => {
-            set('dateFrom', undefined);
-            set('dateTo', undefined);
-          }}
-        />
-        <FilterBox
-          label="тип"
-          placeholder="Выберите"
-          value={TYPES.find((item) => item.value === (values.types as string[])?.[0])?.label}
-          options={TYPES}
-          onPick={(value) => set('types', value ? [value] : undefined)}
-          onClear={() => set('types', undefined)}
-        />
-
-        <ToolButton
-          label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
-          tone={active > 0 ? 'blueOutline' : 'plain'}
-          icon={<WebIcon.funnel color={active > 0 ? web.link : web.text} />}
-          onPress={() => setFilterOpen(true)}
-        />
+        {/* Отбор — строкой полей, как у него: поиск, дата, статус, тип, а
+            за кнопкой «Фильтр» остальные — счёт, контрагент, автор,
+            категория. Выбрал поле из списка — оно встало в строку и
+            открылось; крестик убирает его обратно в список. */}
+        <InlineFilter fields={fields} values={values} onChange={set} />
       </Toolbar>
-
-      <JournalFilter
-        visible={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        fields={fields}
-        values={values}
-        onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
-        onReset={() => setValues({})}
-      />
 
       {openDoc ? (
         <MoneyDocumentDrawer
@@ -251,7 +245,7 @@ export function MoneyTable() {
 
             {groups.length === 0 ? (
               <Text style={styles.empty}>
-                {search ? 'Ничего не нашлось' : 'Движения денег пока нет'}
+                {values.search ? 'Ничего не нашлось' : 'Движения денег пока нет'}
               </Text>
             ) : null}
           </ScrollView>

@@ -3,11 +3,10 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
-import { DateBox, FilterBox } from '../FilterBox';
-import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
+import { InlineFilter, type FilterValue, type InlineField } from '../InlineFilter';
 import { PartyCard } from './PartyCard';
 import { SaleDocumentDrawer } from './SaleDocument';
-import { CELL, Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { CELL, Column, HeadRow, Row, Toolbar } from '../Table';
 import {
   entryTitle,
   formatDay,
@@ -73,42 +72,52 @@ const STRIPE: Record<JournalEntry['kind'], string> = {
   adjustment: DOC_TYPES.adjustment.color,
 };
 
-/** Что стоит в поле «статус» строки отбора. */
+/**
+ * Что стоит в поле «статус».
+ *
+ * Слова его: `{_id:1,name:"APPLIED"}` и `{_id:2,name:"DELAYED"}`, а в
+ * переводе — «Проведён» и «Отложен». У меня стояло «Проведенные» и
+ * «Отложенные» — множественным числом, как у соседнего поля «оплата», хотя
+ * у него они в единственном.
+ *
+ * Третьего его значения, «Удалён», здесь нет: удалённых документов у нас
+ * не бывает — документ удаляется насовсем, корзины нет.
+ */
 const STATUS = [
-  { value: 'posted', label: 'Проведенные' },
-  { value: 'draft', label: 'Отложенные' },
+  { value: 'posted', label: 'Проведён' },
+  { value: 'draft', label: 'Отложен' },
 ];
 
-/** Поле «оплата». */
+/** Поле «оплата» — его `{PAID, UNPAID}`. */
 const PAID = [
   { value: 'paid', label: 'Оплаченные' },
   { value: 'unpaid', label: 'Неоплаченные' },
 ];
 
-/** Поле «тип» — виды документов, как они названы в кабинете. */
-const KIND_OPTIONS = [
-  { value: 'sale', label: 'Продажа' },
-  { value: 'refund', label: 'Возврат продажи' },
-  ...(Object.keys(DOC_KIND_LABEL) as (keyof typeof DOC_KIND_LABEL)[]).map((kind) => ({
-    value: kind,
-    label: DOC_KIND_LABEL[kind],
-  })),
-];
+/**
+ * Поле «тип» — виды документов, как они названы в кабинете.
+ *
+ * Слова берутся из `DOC_KIND_LABEL` — там его девять названий. Но у нас
+ * возврат бывает двух видов: чек-возврат с кассы (`refund`) и документ
+ * «Возврат продажи» (`sale_return`). Названы они одинаково, и в списке
+ * стояли **дважды**: «Продажа, Возврат продажи, Продажа, Возврат
+ * продажи, Закупка…». Поэтому одно название отбирает оба вида сразу.
+ */
+const KIND_OPTIONS = (Object.keys(DOC_KIND_LABEL) as (keyof typeof DOC_KIND_LABEL)[]).map(
+  (kind) => ({ value: kind, label: DOC_KIND_LABEL[kind] }),
+);
 
-/** Подпись поля «тип»: один вид — его название, несколько — сколько их. */
-function typeLabel(kinds?: string[]): string | undefined {
-  if (!kinds || kinds.length === 0) return undefined;
-  if (kinds.length === 1) return KIND_OPTIONS.find((item) => item.value === kinds[0])?.label;
-
-  return `Выбрано: ${kinds.length}`;
+/** Какие виды журнала отбирает выбранное название. */
+function kindsOf(value?: string): JournalKind[] | undefined {
+  if (!value) return undefined;
+  if (value === 'sale_return') return ['sale_return', 'refund'];
+  return [value as JournalKind];
 }
 
 /** «Движение товара» — журнал кабинета. */
 export function JournalTable() {
   const router = useRouter();
   const { db } = useDatabase();
-  const [search, setSearch] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
   /**
    * Открытый чек — панелью поверх журнала, как у него.
    *
@@ -138,77 +147,77 @@ export function JournalTable() {
   // отданные пятьсот строк значит показывать не то, что просили.
   const filter = useMemo<JournalFilterInput>(
     () => ({
-      search,
+      search: values.search as string | undefined,
       from: values.dateFrom as string | undefined,
       to: values.dateTo as string | undefined,
       sender: values.sender as string | undefined,
       receiver: values.receiver as string | undefined,
       author: values.author as string | undefined,
-      kinds: values.kinds as JournalKind[] | undefined,
+      kinds: kindsOf(values.kind as string | undefined),
       paid: values.paid as 'paid' | 'unpaid' | undefined,
       status: values.status as 'posted' | 'draft' | undefined,
     }),
-    [search, values],
+    [values],
   );
 
   const entries = useQuery((db) => listJournal(db, 500, filter), [filter]);
   const stores = useQuery((db) => listLocations(db));
   const options = useQuery((db) => journalOptions(db));
 
-  const fields: FilterField[] = [
-    { key: 'date', label: 'Дата', kind: 'dates' },
+  /**
+   * Поля отбора — его набор из `journalCtrl.filter.fields`, в его порядке:
+   * поиск, дата, отправитель, получатель, автор, статус, оплата, тип. В
+   * строке с самого начала стоят те, у кого `show: true`, — поиск, статус,
+   * оплата и тип; дата встаёт туда же, потому что у неё есть значение по
+   * умолчанию (`defaultValue` — неделя).
+   *
+   * Двух его полей здесь нет: «статус заказа» и «фискальный чек». Заказов у
+   * нас нет вовсе, фискальных чеков тоже — эти поля не отбирали бы ничего.
+   */
+  const fields: InlineField[] = [
+    {
+      key: 'search',
+      label: 'Поиск по номеру или комментарию',
+      kind: 'text',
+      show: true,
+      required: true,
+      width: 306,
+    },
+    { key: 'date', label: 'Дата', kind: 'date', width: 186 },
     {
       key: 'sender',
       label: 'Отправитель',
       kind: 'select',
+      width: 186,
       options: options.senders.map((value) => ({ value, label: value })),
     },
     {
       key: 'receiver',
       label: 'Получатель',
       kind: 'select',
+      width: 186,
       options: options.receivers.map((value) => ({ value, label: value })),
     },
     {
       key: 'author',
       label: 'Автор',
       kind: 'select',
+      width: 168,
       options: options.authors.map((value) => ({ value, label: value })),
     },
+    { key: 'status', label: 'Статус', kind: 'select', show: true, options: STATUS },
+    { key: 'paid', label: 'Оплата', kind: 'select', show: true, options: PAID },
     {
-      key: 'paid',
-      label: 'Оплата',
-      kind: 'select',
-      options: [
-        { value: 'paid', label: 'Оплаченные' },
-        { value: 'unpaid', label: 'Неоплаченные' },
-      ],
-    },
-    {
-      key: 'status',
-      label: 'Статус',
-      kind: 'select',
-      options: [
-        { value: 'posted', label: 'Проведенные' },
-        { value: 'draft', label: 'Отложенные' },
-      ],
-    },
-    {
-      key: 'kinds',
+      key: 'kind',
       label: 'Тип',
-      kind: 'checks',
-      options: [
-        { value: 'sale', label: 'Продажа' },
-        { value: 'refund', label: 'Возврат продажи' },
-        ...(Object.keys(DOC_KIND_LABEL) as (keyof typeof DOC_KIND_LABEL)[]).map((kind) => ({
-          value: kind,
-          label: DOC_KIND_LABEL[kind],
-        })),
-      ],
+      kind: 'select',
+      show: true,
+      width: 196,
+      placeholder: 'Выберите',
+      options: KIND_OPTIONS,
     },
   ];
 
-  const active = activeCount(values);
   const groups = groupByDay(entries);
   const set = (key: string, value: FilterValue) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -253,69 +262,12 @@ export function JournalTable() {
   return (
     <View style={styles.screen}>
       <Toolbar>
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="поиск по номеру или комментарию"
-          width={306}
-        />
-
-        {/* Отбор стоит строкой над таблицей, как в кабинете: дата, статус,
-            оплата, тип. За кнопкой «Фильтр» остаётся то, чему в строке
-            места нет — отправитель, получатель, автор. */}
-        <DateBox
-          from={values.dateFrom as string | undefined}
-          to={values.dateTo as string | undefined}
-          onChange={(key, value) =>
-            set(key === 'from' ? 'dateFrom' : 'dateTo', value)
-          }
-          onClear={() => {
-            set('dateFrom', undefined);
-            set('dateTo', undefined);
-          }}
-        />
-        <FilterBox
-          label="статус"
-          placeholder="Выберите"
-          value={STATUS.find((item) => item.value === values.status)?.label}
-          options={STATUS}
-          onPick={(value) => set('status', value)}
-          onClear={() => set('status', undefined)}
-        />
-        <FilterBox
-          label="оплата"
-          placeholder="Выберите"
-          value={PAID.find((item) => item.value === values.paid)?.label}
-          options={PAID}
-          onPick={(value) => set('paid', value)}
-          onClear={() => set('paid', undefined)}
-        />
-        <FilterBox
-          label="тип"
-          placeholder="введите"
-          width={196}
-          value={typeLabel(values.kinds as string[] | undefined)}
-          options={KIND_OPTIONS}
-          onPick={(value) => set('kinds', value ? [value] : undefined)}
-          onClear={() => set('kinds', undefined)}
-        />
-
-        <ToolButton
-          label={active > 0 ? `Фильтр: ${active}` : 'Фильтр'}
-          tone={active > 0 ? 'blueOutline' : 'plain'}
-          icon={<WebIcon.funnel color={active > 0 ? web.link : web.text} />}
-          onPress={() => setFilterOpen(true)}
-        />
+        {/* Отбор — строкой полей, как у него: что заведено, то и стоит, а
+            за кнопкой «Фильтр» лежит список оставшихся полей. Выбрал из
+            списка — поле встало в строку и открылось само; крестик убирает
+            его обратно в список. */}
+        <InlineFilter fields={fields} values={values} onChange={set} />
       </Toolbar>
-
-      <JournalFilter
-        visible={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        fields={fields}
-        values={values}
-        onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
-        onReset={() => setValues({})}
-      />
 
       <ScrollView
         horizontal
@@ -365,7 +317,7 @@ export function JournalTable() {
 
             {groups.length === 0 ? (
               <Text style={styles.empty}>
-                {search ? 'Ничего не нашлось' : 'Документов пока нет'}
+                {values.search ? 'Ничего не нашлось' : 'Документов пока нет'}
               </Text>
             ) : null}
           </ScrollView>

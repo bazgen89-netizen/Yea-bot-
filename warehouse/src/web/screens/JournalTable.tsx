@@ -7,7 +7,7 @@ import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
 import { PartyCard } from './PartyCard';
 import { SaleDocumentDrawer } from './SaleDocument';
-import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { CELL, Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import {
   entryTitle,
   formatDay,
@@ -329,6 +329,7 @@ export function JournalTable() {
         <View style={styles.tableInner}>
           <HeadRow
             columns={COLUMNS}
+            celled
             lead={
               <View style={styles.statusHead}>
                 <Text style={webText.column}>Статус</Text>
@@ -400,7 +401,7 @@ function EntryRow({
       <View style={[styles.stripe, { backgroundColor: STRIPE[entry.kind] }]} />
 
       <View style={styles.rowInner}>
-        <Row onPress={onPress}>
+        <Row onPress={onPress} celled>
           <View style={styles.status}>
             {/* Проведённый отмечен галочкой, отложенный — карандашом: у него
                 это две разные иконки в той же колонке. */}
@@ -413,22 +414,30 @@ function EntryRow({
 
           {/* Название документа и, если есть комментарий, значок рядом —
               как у него: по значку видно, что в документе есть заметка. */}
-          <View style={[styles.docCell, { width: doc.width }]}>
+          <View style={[styles.docCell, { width: doc.width }, styles.cell]}>
             <Text style={webText.rowLink} numberOfLines={1}>
               {entryTitle(entry)}
             </Text>
-            {entry.note ? <Text style={styles.note}>💬</Text> : null}
+            {/* Значок комментария — их `<i class="comment icon">` рядом с
+                названием документа, а не смайлик: у него это серая иконка
+                того же набора, что и остальные, и по наведению она
+                показывает сам комментарий. */}
+            {entry.note ? (
+              <View accessibilityLabel={`Комментарий: ${entry.note}`}>
+                <WebIcon.comment size={13} color="rgba(0,0,0,0.3)" />
+              </View>
+            ) : null}
           </View>
 
-          <Text style={[webText.rowNumber, { width: time.width }]}>
+          <Text style={[webText.rowNumber, { width: time.width }, styles.cell]}>
             {formatTime(entry.created_at)}
           </Text>
-          <Text style={[webText.rowNumber, { width: positions.width }]}>{entry.positions}</Text>
+          <Text style={[webText.rowNumber, { width: positions.width }, styles.cell]}>{entry.positions}</Text>
           {/* Ноль — это ноль, а не прочерк: у него чек на 0.00 так и
               подписан, и прочерк вместо суммы читался бы как «неизвестно».
               Значок «%» стоит здесь же, внутри ячейки суммы, — отдельной
               колонки под него у них нет. */}
-          <View style={[styles.amountCell, { width: amount.width }]}>
+          <View style={[styles.amountCell, { width: amount.width }, styles.cell]}>
             <Text style={webText.rowNumber}>{formatMoneyWeb(entry.amount)}</Text>
             {entry.kind === 'sale' || entry.kind === 'refund' ? (
               <Text
@@ -444,7 +453,7 @@ function EntryRow({
 
           {/* Прочерк — только у складских документов: оплаты у них нет
               вовсе, а ноль означал бы «не оплачено». */}
-          <Text style={[webText.rowNumber, { width: paid.width }]}>
+          <Text style={[webText.rowNumber, { width: paid.width }, styles.cell]}>
             {entry.paid === null ? '-' : formatMoneyWeb(entry.paid)}
           </Text>
           {/* Синее — значит нажимаемое. В его кабинете отправитель ведёт в
@@ -454,7 +463,7 @@ function EntryRow({
               ведёт, обещает переход, которого нет. */}
           <Text
             accessibilityRole="link"
-            style={[webText.rowLink, { width: sender.width }]}
+            style={[webText.rowLink, { width: sender.width }, styles.cell]}
             numberOfLines={1}
             onPress={() => onOpen('sender', entry)}
           >
@@ -462,7 +471,7 @@ function EntryRow({
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.rowLink, { width: receiver.width }]}
+            style={[webText.rowLink, { width: receiver.width }, styles.cell]}
             numberOfLines={1}
             onPress={() => onOpen('receiver', entry)}
           >
@@ -473,7 +482,7 @@ function EntryRow({
               «Черёмушек» тоже значился владелец. */}
           <Text
             accessibilityRole="link"
-            style={[webText.rowLink, { width: author.width }]}
+            style={[webText.rowLink, { width: author.width }, styles.cell]}
             numberOfLines={1}
             onPress={() => onOpen('author', entry)}
           >
@@ -488,14 +497,21 @@ function EntryRow({
 const styles = StyleSheet.create({
 
   screen: { flex: 1, backgroundColor: web.bg },
+  /**
+   * Ячейка с линией справа — как у него в `celled`-таблице.
+   *
+   * Без `justifyContent`: у ячейки суммы направление строкой (число и значок
+   * «%»), и выравнивание по центру согнало бы числа к середине столбца. У
+   * него они стоят по левому краю.
+   */
+  cell: { ...CELL },
   /** Лента кончается над подвалом, а не уходит под него. */
   table: { flex: 1 },
   tableContent: { flexGrow: 1 },
   tableInner: { flex: 1 },
   body: { flex: 1 },
-  statusHead: { width: 60, justifyContent: 'center' },
+  statusHead: { width: 60, justifyContent: 'center', alignItems: 'center', ...CELL },
   docCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  note: { fontSize: 12 },
   amountCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   percent: { fontFamily: WEB_FONT, fontSize: 14, fontWeight: '700', color: web.link },
   day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
@@ -508,6 +524,6 @@ const styles = StyleSheet.create({
    */
   stripe: { position: 'absolute', top: 4, bottom: 4, left: 4, width: 4, borderRadius: 2 },
   rowInner: { flex: 1 },
-  status: { width: 60, alignItems: 'center' },
+  status: { width: 60, alignItems: 'center', justifyContent: 'center', ...CELL },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

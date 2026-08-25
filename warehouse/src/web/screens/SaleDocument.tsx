@@ -417,6 +417,20 @@ function Body({
         </View>
       </View>
 
+      {/* Комментарий к чеку.
+          У него он стоит ровно здесь — между шапкой и «Оплатой», отдельной
+          кремовой плашкой со значком:
+          `<div class="doc-comment" ng-if="!!item.comment">` и
+          `.doc-comment{background:#FFFAF3;font-size:12px;padding:5px 10px;
+           border-radius:6px}`. Пустой плашки не бывает: нет комментария —
+          нет и полосы. */}
+      {sale.note ? (
+        <View style={styles.comment}>
+          <WebIcon.comment size={13} color="rgba(0,0,0,0.3)" />
+          <Text style={styles.commentText}>{sale.note.trim()}</Text>
+        </View>
+      ) : null}
+
       <Divider>Оплата</Divider>
       <View style={styles.table}>
         <View style={[styles.row, styles.headRow]}>
@@ -719,10 +733,15 @@ const styles = StyleSheet.create({
   chipDoneLabel: { color: '#FFFFFF' },
 
   head: { flexDirection: 'row', gap: 60 },
-  headColumn: { flex: 1, gap: 10 },
+  /** Между строками шапки пять пикселей — их `.description-item{padding-bottom:5px}`. */
+  headColumn: { flex: 1, gap: 5 },
   field: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   fieldPress: { flex: 1 },
-  fieldLabel: { width: 130, fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },
+  /**
+   * Подпись поля — их `.description-item b`: ширина 120, обычное начертание,
+   * цвет `rgba(51,66,91,.7)`. У меня стояли свои 130 и общий серый.
+   */
+  fieldLabel: { width: 120, fontFamily: WEB_FONT, fontSize: 14, color: 'rgba(51,66,91,0.7)' },
   fieldValue: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   link: { color: web.link },
 
@@ -795,8 +814,31 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
 
+  /**
+   * Плашка комментария — их `.doc-comment`.
+   * `background:#FFFAF3; font-size:12px; padding:5px 10px; border-radius:6px;
+   *  display:inline-flex; margin:5px 0`, значок серый на треть.
+   * `align-self: flex-start` — это их `inline-flex`: плашка по ширине текста,
+   * а не во всю страницу.
+   */
+  comment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 20,
+    marginBottom: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#FFFAF3',
+  },
+  commentText: { fontFamily: WEB_FONT, fontSize: 12, color: web.text },
+
   cellName: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cellCode: { width: 130, fontFamily: WEB_FONT, fontSize: 13, color: web.text },
+  /** Штрих-код и артикул — по правому краю: их таблица товаров вся
+      `right aligned`, слева стоит только наименование. */
+  cellCode: { width: 130, textAlign: 'right', fontFamily: WEB_FONT, fontSize: 13, color: web.text },
   cellNum: {
     width: 96,
     textAlign: 'right',

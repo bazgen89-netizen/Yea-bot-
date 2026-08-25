@@ -411,7 +411,12 @@ export function getSale(db: SqlDriver, saleId: Id): SaleWithItems | null {
   }>(
     `SELECT s.*,
             (SELECT l.name FROM locations l WHERE l.id = s.location_id)      AS store,
-            (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id) AS customer,
+            -- Имя покупателя: из справочника, а если карточки нет — то, что
+            -- пришло с чеком. В комментарии его больше не держим.
+            COALESCE(
+              (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+              s.customer_name
+            )                                                                AS customer,
             -- Своя касса, если чек пробит здесь; иначе название из
             -- CloudShop. То же со сменой: свои нумеруются сами, у
             -- перенесённых номер приехал вместе с историей.

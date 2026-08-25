@@ -186,7 +186,10 @@ export function getMoneyDoc(db: SqlDriver, id: Id, source: MoneySource = 'doc'):
       shift_number: number | null;
     }>(
       `SELECT s.id, s.number, s.money_number, s.total, s.payment, s.customer_id,
-              (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id) AS counterparty,
+              COALESCE(
+                (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+                s.customer_name
+              )                                                                AS counterparty,
               s.note, s.created_at,
               COALESCE(
                 (SELECT r.name FROM registers r

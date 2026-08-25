@@ -126,6 +126,14 @@ interface SeedSale {
    */
   cn?: string | null;
   /**
+   * Комментарий к продаже — тот, что видно в кабинете значком заметки.
+   *
+   * У CloudShop он свой у каждого вида документа: `comment` у продажи,
+   * `note` у складских. Раньше я не забирал ни то, ни другое, и значка
+   * заметки в журнале не было ни у одного чека.
+   */
+  cm?: string | null;
+  /**
    * Итог и скидка, копейки.
    *
    * Числа необязательные: в файле истории нули не записываются — на сорока
@@ -770,11 +778,15 @@ function seedHistory(db: SqlDriver): void {
       // Номер чека теперь стоит своей колонкой, а не прячется в примечании:
       // «Продажа #45658» — так его называет и ищет хозяин магазина.
       const number = Number(sale.no);
-      const note = customerId === null && sale.cn ? sale.cn : null;
+      // Комментарий — только настоящий комментарий из кабинета. Имя
+      // покупателя, чью карточку не нашли, живёт своей колонкой: раньше оно
+      // лежало здесь же, и в журнале у таких чеков стоял значок заметки.
+      const note = (sale.cm ?? '').trim() || null;
+      const customerName = customerId === null && sale.cn ? sale.cn : null;
 
       db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, location_id, number, money_number, bonus_earned, bonus_used, author, is_return, register_name, shift_no)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, customer_name, location_id, number, money_number, bonus_earned, bonus_used, author, is_return, register_name, shift_no)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sale.disc ?? 0,
           sale.t ?? 0,
@@ -783,6 +795,7 @@ function seedHistory(db: SqlDriver): void {
           sale.at ?? now,
           customerId,
           note,
+          customerName,
           sale.st ? (stores.get(sale.st) ?? null) : null,
           Number.isFinite(number) && number > 0 ? number : null,
           sale.ono ?? null,

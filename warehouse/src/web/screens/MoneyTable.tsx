@@ -5,7 +5,7 @@ import { Text } from '../Translated';
 
 import { DateBox, FilterBox } from '../FilterBox';
 import { activeCount, JournalFilter, type FilterField, type FilterValue } from '../JournalFilter';
-import { Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { CELL, Column, HeadRow, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { MoneyDocumentDrawer } from './MoneyDocument';
 import { PartyCard } from './PartyCard';
 import {
@@ -215,6 +215,7 @@ export function MoneyTable() {
         <View style={styles.tableInner}>
           <HeadRow
             columns={COLUMNS}
+            celled
             lead={
               <View style={styles.statusHead}>
                 <Text style={webText.column}>Статус</Text>
@@ -296,7 +297,7 @@ function MoneyRow({
       <View style={[styles.stripe, { backgroundColor: stripe }]} />
 
       <View style={styles.rowInner}>
-        <Row onPress={onOpen}>
+        <Row onPress={onOpen} celled>
           {/* Галочка синяя у всех, цветом отличается только полоска слева:
               так в их разметке — `ng-class="{red: credit, green: debit}"`
               на полоске и `color: '#4183C4'` на галочке. Я красил галочку
@@ -306,21 +307,32 @@ function MoneyRow({
             <WebIcon.done color={web.link} />
           </View>
 
-          <Text style={[webText.rowLink, { width: order.width }]} numberOfLines={1}>
-            {moneyTitle(entry)}
-          </Text>
-          <Text style={[webText.rowNumber, { width: time.width }]}>
+          {/* Название ордера и значок комментария рядом — как в их
+              movement-таблице денег: тот же `<i class="comment icon">`, что и
+              в движении товара. У прихода по чеку комментарий — это
+              комментарий самого чека. */}
+          <View style={[styles.orderCell, { width: order.width }, styles.cell]}>
+            <Text style={webText.rowLink} numberOfLines={1}>
+              {moneyTitle(entry)}
+            </Text>
+            {entry.note ? (
+              <View accessibilityLabel={`Комментарий: ${entry.note}`}>
+                <WebIcon.comment size={13} color="rgba(0,0,0,0.3)" />
+              </View>
+            ) : null}
+          </View>
+          <Text style={[webText.rowNumber, { width: time.width }, styles.cell]}>
             {formatTime(entry.created_at)}
           </Text>
-          <Text style={[webText.rowNumber, { width: income.width }]}>
+          <Text style={[webText.rowNumber, { width: income.width }, styles.cell]}>
             {entry.income ? formatMoneyWeb(entry.income) : ''}
           </Text>
-          <Text style={[webText.rowNumber, { width: expense.width }]}>
+          <Text style={[webText.rowNumber, { width: expense.width }, styles.cell]}>
             {entry.expense ? formatMoneyWeb(entry.expense) : ''}
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.rowLink, { width: party.width }]}
+            style={[webText.rowLink, { width: party.width }, styles.cell]}
             numberOfLines={1}
             onPress={onParty}
           >
@@ -328,20 +340,20 @@ function MoneyRow({
           </Text>
           <Text
             accessibilityRole="link"
-            style={[webText.rowLink, { width: account.width }]}
+            style={[webText.rowLink, { width: account.width }, styles.cell]}
             numberOfLines={1}
             onPress={onAccount}
           >
             {entry.account}
           </Text>
-          <Text style={[webText.rowCell, { width: category.width }]} numberOfLines={1}>
+          <Text style={[webText.rowCell, { width: category.width }, styles.cell]} numberOfLines={1}>
             {entry.category}
           </Text>
           {/* Автор — тот, кто провёл документ. Раньше здесь стояло слово
               «waystea» прямо в разметке, у всех строк одинаково. */}
           <Text
             accessibilityRole={entry.author ? 'link' : 'text'}
-            style={[webText.rowLink, { width: author.width }]}
+            style={[webText.rowLink, { width: author.width }, styles.cell]}
             numberOfLines={1}
             onPress={entry.author ? onAuthor : undefined}
           >
@@ -355,17 +367,26 @@ function MoneyRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.bg },
+  /**
+   * Ячейка с линией справа — как у него в `celled`-таблице.
+   *
+   * Без `justifyContent`: у ячейки суммы направление строкой (число и значок
+   * «%»), и выравнивание по центру согнало бы числа к середине столбца. У
+   * него они стоят по левому краю.
+   */
+  cell: { ...CELL },
+  orderCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   /** Лента кончается над подвалом, а не уходит под него. */
   table: { flex: 1 },
   tableContent: { flexGrow: 1 },
   tableInner: { flex: 1 },
   body: { flex: 1 },
-  statusHead: { width: 60, justifyContent: 'center' },
+  statusHead: { width: 60, justifyContent: 'center', alignItems: 'center', ...CELL },
   day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
   rowWrap: { flexDirection: 'row', position: 'relative' },
   /** Их `i.indicator`: `top:4 bottom:4 left:4 width:4 radius:2`. */
   stripe: { position: 'absolute', top: 4, bottom: 4, left: 4, width: 4, borderRadius: 2 },
   rowInner: { flex: 1 },
-  status: { width: 60, alignItems: 'center' },
+  status: { width: 60, alignItems: 'center', justifyContent: 'center', ...CELL },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
 });

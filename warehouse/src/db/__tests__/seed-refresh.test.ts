@@ -3,7 +3,7 @@ import type { SqlDriver } from '../driver';
 import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
 import { listJournal } from '../journal';
-import { createSale } from '../sales';
+import { createSale, getSale } from '../sales';
 import {
   seedStamp,
   loadedSeedStamp,
@@ -341,5 +341,112 @@ describe('перенесённые возвраты', () => {
 
     expect(kinds.get(11)).toBe('refund');
     expect(kinds.get(12)).toBe('sale');
+  });
+});
+
+/**
+ * Комментарий к продаже.
+ *
+ * В CloudShop у чека есть своё поле `comment` — оно и показывается значком в
+ * журнале и плашкой в самом документе. В переносе я его не забирал вовсе, и
+ * все комментарии за историю оставались в кабинете.
+ *
+ * Второе здесь же: имя покупателя без карточки — это **не** комментарий. Я
+ * складывал его в то же поле, и у чеков без комментария в журнале загорался
+ * значок, а в документе на месте комментария стояло имя человека.
+ */
+describe('комментарий к перенесённому чеку', () => {
+  it('доезжает в журнал и в документ, а имя покупателя в него не попадает', () => {
+    const db = createTestDriver();
+
+    useSeedData({
+      products: [
+        { n: 'Габа Алишань', c: '00145', s: null, u: 'гр', p: 3299, d: 0, q: { 'Чайный бар': 10_000 } },
+      ],
+      clients: [],
+      sales: [
+        {
+          at: '2026-08-16T12:00:00.000Z',
+          c: null,
+          no: 21,
+          t: 9_920,
+          st: 'Чайный бар',
+          cm: 'отложил до субботы',
+          ln: [{ code: '00145', q: 1_000, p: 9_920 }],
+        },
+        {
+          at: '2026-08-16T12:30:00.000Z',
+          c: null,
+          cn: 'Пётр Иванов',
+          no: 22,
+          t: 9_920,
+          st: 'Чайный бар',
+          ln: [{ code: '00145', q: 1_000, p: 9_920 }],
+        },
+      ],
+      photos: {},
+      stores: [],
+    });
+
+    seedCatalog(db);
+
+    const notes = new Map(listJournal(db, 10).map((entry) => [entry.number, entry.note] as const));
+    expect(notes.get(21)).toBe('отложил до субботы');
+    // У второго чека комментария нет — значит и значка в журнале не будет.
+    expect(notes.get(22)).toBeNull();
+
+    const ids = new Map(listJournal(db, 10).map((entry) => [entry.number, entry.id] as const));
+    expect(getSale(db, ids.get(21)!)?.note).toBe('отложил до субботы');
+    // Имя покупателя лежит своим полем и читается как покупатель.
+    expect(getSale(db, ids.get(22)!)?.customer).toBe('Пётр Иванов');
+  });
+
+  /**
+   * Поиск в журнале — «по номеру или комментарию», как и подписано в поле.
+   *
+   * Номер сравнивался с внутренним `id`, а в строке журнала стоит номер
+   * CloudShop. Поиск «21» не находил «Продажа #21»: в базе у неё свой другой
+   * `id`, и поле выглядело сломанным.
+   */
+  it('находится по номеру из строки и по слову из комментария', () => {
+    const db = createTestDriver();
+
+    useSeedData({
+      products: [
+        { n: 'Габа Алишань', c: '00145', s: null, u: 'гр', p: 3299, d: 0, q: { 'Чайный бар': 10_000 } },
+      ],
+      clients: [],
+      sales: [
+        {
+          at: '2026-08-16T12:00:00.000Z',
+          c: null,
+          no: 45_967,
+          t: 9_920,
+          st: 'Чайный бар',
+          cm: 'отложил до субботы',
+          ln: [{ code: '00145', q: 1_000, p: 9_920 }],
+        },
+        {
+          at: '2026-08-16T12:30:00.000Z',
+          c: null,
+          no: 45_968,
+          t: 9_920,
+          st: 'Чайный бар',
+          ln: [{ code: '00145', q: 1_000, p: 9_920 }],
+        },
+      ],
+      photos: {},
+      stores: [],
+    });
+
+    seedCatalog(db);
+
+    const numbers = (search: string) =>
+      listJournal(db, 10, { search }).map((entry) => entry.number);
+
+    expect(numbers('45967')).toEqual([45_967]);
+    expect(numbers('субботы')).toEqual([45_967]);
+    // Номер — точным совпадением: «4596» не должно вытаскивать оба чека.
+    expect(numbers('4596')).toEqual([]);
   });
 });

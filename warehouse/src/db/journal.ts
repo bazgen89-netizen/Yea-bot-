@@ -96,7 +96,16 @@ export function listJournal(
     const text = filter.search.trim().toLowerCase();
     // Номер ищется точным совпадением, остальное — по вхождению: «12» не
     // должно находить документ №120, иначе поиск по номеру бесполезен.
-    add("(CAST(id AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)", text, `%${text}%`);
+    //
+    // Ищем по тому номеру, который написан в строке. Раньше сравнивался
+    // внутренний `id`, а в журнале стоит `number` — перенесённый номер
+    // CloudShop. Поиск «45967» не находил чек «Продажа #45967»: у него в
+    // базе свой другой `id`.
+    add(
+      "(CAST(COALESCE(number, id) AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)",
+      text,
+      `%${text}%`,
+    );
   }
   if (filter.from) add('date(created_at) >= ?', filter.from);
   if (filter.to) add('date(created_at) <= ?', filter.to);
@@ -130,8 +139,12 @@ export function listJournal(
               s.total                                      AS amount,
               s.total                                      AS paid,
               (SELECT l.name FROM locations l WHERE l.id = s.location_id) AS sender,
+              -- Имя покупателя: из справочника, а если карточку не нашли —
+              -- из самого чека. Раньше оно лежало в комментарии, и у таких
+              -- чеков в журнале стоял значок заметки.
               COALESCE(
                 (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+                s.customer_name,
                 'Розничный покупатель'
               )                                            AS receiver,
               -- Свой сотрудник, если чек пробит здесь; иначе учётная запись,
@@ -417,7 +430,12 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
 
   if (filter.search?.trim()) {
     const text = filter.search.trim().toLowerCase();
-    add("(CAST(id AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)", text, `%${text}%`);
+    // Как и в движении товара — по номеру, который виден в строке.
+    add(
+      "(CAST(COALESCE(number, id) AS TEXT) = ? OR LOWER(COALESCE(note, '')) LIKE ?)",
+      text,
+      `%${text}%`,
+    );
   }
   if (filter.from) add('date(created_at) >= ?', filter.from);
   if (filter.to) add('date(created_at) <= ?', filter.to);
@@ -445,6 +463,7 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
               0                       AS expense,
               COALESCE(
                 (SELECT c.name FROM counterparties c WHERE c.id = s.customer_id),
+                s.customer_name,
                 'Розничный покупатель'
               )                       AS counterparty,
               s.customer_id           AS counterparty_id,
@@ -455,7 +474,10 @@ export function listMoney(db: SqlDriver, limit = 500, filter: MoneyFilter = {}):
                 (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
                 s.author
               )                       AS author,
-              NULL                    AS note
+              -- Комментарий прихода по чеку — комментарий самого чека: в их
+              -- движении денег у такой строки стоит тот же значок
+              -- (ng-if="::item.comment"), и правится он в чеке.
+              s.note                  AS note
        FROM sales s
        WHERE NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'

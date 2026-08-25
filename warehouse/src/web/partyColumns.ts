@@ -20,7 +20,7 @@ import type { CounterpartyWithTotals, PartyKind } from '../domain/types';
  */
 
 /**
- * Ширины столбцов.
+ * Ширины столбцов — снятые с его снимка.
  *
  * Из их же таблицы стилей: клиенты лежат в
  * `.content.full-width.fixed-title` таблицей `ui small celled table scroll
@@ -28,11 +28,24 @@ import type { CounterpartyWithTotals, PartyKind } from '../domain/types';
  * заголовок обрезан по `max-width: 130px`. Отдельные виды столбцов у них
  * жёстко заданы: цена — 100, штрихкод, артикул и страна — 140.
  *
- * Практически это значит: все столбцы одной ширины, кроме имени. У меня
- * они были подобраны на глаз, от 110 до 320, и таблица выходила заметно
- * шире его. Он это и назвал «толщина столбов».
+ * То есть ширина у них по содержимому, с полом в 75. Померено по его
+ * снимку `card/clients`: имя 274, телефон 110, почта 151, день рождения
+ * 144, пол 78, описание 200, адрес 77, добавил 151, создан 95. Пол и адрес
+ * стоят у самого пола — они почти всегда пустые.
  */
-const W = { name: 260, cell: 140 };
+const W = {
+  name: 274,
+  phone: 110,
+  email: 151,
+  bday: 144,
+  sex: 78,
+  note: 200,
+  address: 77,
+  by: 151,
+  created: 95,
+  /** Столбцы статистики и лояльности — по общему полу в 140. */
+  cell: 140,
+};
 
 export interface PartyColumn {
   key: string;
@@ -149,11 +162,25 @@ const START: PartyColumn[] = [
     sort: (p) => p.name.toLowerCase(),
   },
   // Телефон и почта у него не сортируются — `sorting: false`.
-  { key: 'phone', title: 'Телефон', width: W.cell, value: (p) => p.phone ?? '' },
-  { key: 'email', title: 'Email', width: W.cell, value: (p) => p.email ?? '' },
+  { key: 'phone', title: 'Телефон', width: W.phone, value: (p) => p.phone ?? '' },
+  { key: 'email', title: 'Email', width: W.email, value: (p) => p.email ?? '' },
 ];
 
-const dash = (value: string | null) => value ?? '—';
+/**
+ * Пусто у него подписано обычным дефисом — и только у дня рождения.
+ * У пола, описания и адреса пустая ячейка остаётся пустой.
+ */
+const dash = (value: string | null) => value ?? '-';
+
+/**
+ * День рождения — через косую черту, как у него: «13/07/2006».
+ *
+ * В базе он лежит строкой из выгрузки, и у перенесённых записей разделитель
+ * может быть точкой. Приводим к его виду при показе, не трогая саму запись.
+ */
+function birthdayText(value: string | null): string {
+  return value ? value.replace(/[.-]/g, '/') : '-';
+}
 
 /**
  * «Информация» — его набор и его порядок.
@@ -169,26 +196,26 @@ const BASIC_CUSTOMER: PartyColumn[] = [
   {
     key: 'bday',
     title: 'День рождения',
-    width: W.cell,
-    value: (p) => dash(p.birthday),
+    width: W.bday,
+    value: (p) => birthdayText(p.birthday),
     // Дата в выгрузке лежит как «13/07/2006»: строкой такое сортируется по
     // дню, а не по году.
     sort: (p) => birthdayKey(p.birthday),
   },
-  { key: 'sex', title: 'Пол', width: W.cell, value: (p) => dash(p.gender), sort: (p) => p.gender ?? '' },
-  { key: 'note', title: 'Описание', width: W.cell, value: (p) => p.note ?? '' },
-  { key: 'address', title: 'Адрес', width: W.cell, value: (p) => p.address ?? '' },
+  { key: 'sex', title: 'Пол', width: W.sex, value: (p) => p.gender ?? '', sort: (p) => p.gender ?? '' },
+  { key: 'note', title: 'Описание', width: W.note, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: W.address, value: (p) => p.address ?? '' },
   {
     key: 'by',
     title: 'Добавил',
-    width: W.cell,
+    width: W.by,
     value: (p) => p.created_by ?? '',
     sort: (p) => p.created_by ?? '',
   },
   {
     key: 'created',
     title: 'Создан',
-    width: W.cell,
+    width: W.created,
     value: (p) => day(p.created_at),
     sort: (p) => p.created_at,
   },
@@ -205,8 +232,8 @@ function birthdayKey(birthday: string | null): string {
 
 const BASIC_SUPPLIER: PartyColumn[] = [
   ...START,
-  { key: 'note', title: 'Описание', width: W.cell, value: (p) => p.note ?? '' },
-  { key: 'address', title: 'Адрес', width: W.cell, value: (p) => p.address ?? '' },
+  { key: 'note', title: 'Описание', width: W.note, value: (p) => p.note ?? '' },
+  { key: 'address', title: 'Адрес', width: W.address, value: (p) => p.address ?? '' },
   { key: 'by', title: 'Добавил', width: W.cell, value: (p) => p.created_by ?? '' },
   { key: 'created', title: 'Создан', width: W.cell, value: (p) => day(p.created_at) },
 ];
@@ -220,7 +247,7 @@ const LOYALTY: PartyColumn[] = [
     width: W.cell,
     value: (p) => LOYALTY_LABEL[p.loyalty_type ?? ''] ?? '—',
   },
-  { key: 'bday', title: 'День рождения', width: W.cell, value: (p) => dash(p.birthday) },
+  { key: 'bday', title: 'День рождения', width: W.bday, value: (p) => birthdayText(p.birthday) },
   {
     key: 'discount',
     title: 'Скидка',
@@ -400,6 +427,11 @@ export function partySets(kind: PartyKind): { key: PartySet; columns: PartyColum
   ];
 }
 
+/** «08/07/2023» — так дата подписана у него, через косые черты. */
 function day(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU');
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 }

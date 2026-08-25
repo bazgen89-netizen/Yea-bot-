@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
+import { say } from '../../ui/alert';
 import { Chart } from '../Chart';
 import { Dropdown, type Option } from '../Dropdown';
 import { listLocations } from '../../db/locations';
@@ -97,10 +98,27 @@ export function HomeDashboard() {
 
       <View style={styles.top}>
         <View style={styles.metrics}>
-          <Metric label={t('Выручка')} value={formatMoneyWeb(summary.revenue)} highlight />
-          <Metric label={t('Себестоимость продаж')} value={formatMoneyWeb(summary.cost)} />
-          <Metric label={t('Прибыль')} value={formatMoneyWeb(summary.profit)} />
-          <Metric label={t('Средний чек')} value={formatMoneyWeb(summary.averageReceipt)} />
+          <Metric
+            label={t('Выручка')}
+            value={formatMoneyWeb(summary.revenue)}
+            help="Сумма всех проведённых продаж за выбранный период. Возвраты в неё не входят."
+            highlight
+          />
+          <Metric
+            label={t('Себестоимость продаж')}
+            value={formatMoneyWeb(summary.cost)}
+            help="Во что обошёлся проданный товар: сумма себестоимостей проданных позиций."
+          />
+          <Metric
+            label={t('Прибыль')}
+            value={formatMoneyWeb(summary.profit)}
+            help="Выручка минус себестоимость продаж."
+          />
+          <Metric
+            label={t('Средний чек')}
+            value={formatMoneyWeb(summary.averageReceipt)}
+            help="Выручка, делённая на количество чеков за период."
+          />
         </View>
 
         <View style={styles.chartCard}>
@@ -126,9 +144,21 @@ export function HomeDashboard() {
 
           <View style={styles.docHead}>
             <Text style={[styles.docName, styles.docHeadText]}>{t('Наименование')}</Text>
-            <Text style={[styles.docCount, styles.docHeadText]}>{t('Кол-во')}</Text>
-            <Text style={[styles.docNumber, styles.docHeadText]}>{t('Сумма')}</Text>
-            <Text style={[styles.docNumber, styles.docHeadText]}>{t('Склад')}</Text>
+            <View style={[styles.docCount, styles.docHeadCell]}>
+              <Text style={styles.docHeadText}>{t('Кол-во')}</Text>
+              <Help title={t('Кол-во')} text="Сколько документов этого вида проведено за период." />
+            </View>
+            <View style={[styles.docNumber, styles.docHeadCell]}>
+              <Text style={styles.docHeadText}>{t('Сумма')}</Text>
+              <Help title={t('Сумма')} text="Сумма по документам этого вида за период." />
+            </View>
+            <View style={[styles.docNumber, styles.docHeadCell]}>
+              <Text style={styles.docHeadText}>{t('Склад')}</Text>
+              <Help
+                title={t('Склад')}
+                text="На сколько изменилась стоимость склада по этим документам."
+              />
+            </View>
           </View>
 
           {documents.map((row) => (
@@ -214,17 +244,43 @@ export function HomeDashboard() {
 function Metric({
   label,
   value,
+  help,
   highlight,
 }: {
   label: string;
   value: string;
+  /** Что стоит за числом: у него у каждого показателя есть кружок «?». */
+  help?: string;
   highlight?: boolean;
 }) {
   return (
     <View style={[styles.metric, highlight && styles.metricHighlight]}>
       <Text style={webText.metric}>{value}</Text>
-      <Text style={webText.metricLabel}>{label}</Text>
+      <View style={styles.metricRow}>
+        <Text style={webText.metricLabel}>{label}</Text>
+        {help ? <Help title={label} text={help} /> : null}
+      </View>
     </View>
+  );
+}
+
+/**
+ * Кружок «?» рядом с подписью.
+ *
+ * У него он стоит у каждого показателя и у каждого столбца «Документов»: по
+ * нажатию видно, как считается число. Я подписи оставил без объяснений, и
+ * «Прибыль» приходилось угадывать.
+ */
+function Help({ title, text }: { title: string; text: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Как считается «${title}»`}
+      onPress={() => say(title, text)}
+      hitSlop={6}
+    >
+      <Text style={styles.help}>?</Text>
+    </Pressable>
   );
 }
 
@@ -275,9 +331,25 @@ const styles = StyleSheet.create({
     borderBottomColor: web.gridLine,
   },
   // Доли колонок — те же, что в оригинале: 36 / 24 / 20 / 20 %.
-  docName: { width: '36%' },
-  docCount: { width: '24%', textAlign: 'right' },
-  docNumber: { width: '20%', textAlign: 'right' },
+  docName: { width: '34%' },
+  docCount: { width: '22%', textAlign: 'right' },
+  docNumber: { width: '22%', textAlign: 'right' },
+  /** Шапка столбца с кружком «?»: подпись и кружок в одну строку, вправо. */
+  docHeadCell: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  metricRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  /** Кружок «?» — серый, тонкой рамкой, одиннадцать точек, как у него. */
+  help: {
+    fontFamily: WEB_FONT,
+    fontSize: 11,
+    color: web.textMuted,
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: 9,
+    width: 18,
+    height: 18,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
   stock: {
     flex: 1,
     borderWidth: 1,

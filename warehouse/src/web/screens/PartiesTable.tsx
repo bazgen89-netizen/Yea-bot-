@@ -11,7 +11,7 @@ import {
   type PartyColumn,
   type PartySet,
 } from '../partyColumns';
-import { HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
+import { CELL, HeadRow, Pager, Row, SearchBox, ToolButton, Toolbar } from '../Table';
 import { PartyCard } from './PartyCard';
 import { listCounterparties } from '../../db/counterparties';
 import { partiesCsv } from '../../db/export';
@@ -156,6 +156,7 @@ export function PartiesTable({ kind }: { kind: PartyKind }) {
               // сортируются, и подчёркивать их было бы обманом.
               sortable: Boolean(column.sort),
             }))}
+            celled
             sorting={sorting}
             onSort={(key) =>
               setSorting((was) =>
@@ -205,7 +206,7 @@ function PartyRow({
   onPress: () => void;
 }) {
   return (
-    <Row onPress={onPress}>
+    <Row onPress={onPress} celled>
       {columns.map((column, index) => {
         // Первая колонка несёт значок и ссылку — по ней открывают карточку.
         if (index === 0) {
@@ -223,17 +224,17 @@ function PartyRow({
         const link = column.key === 'phone' || column.key === 'email';
 
         return (
-          <Text
-            key={column.key}
-            style={[
-              link ? webText.rowLink : column.numeric ? webText.rowNumber : webText.rowCell,
-              { width: column.width },
-              column.numeric && styles.right,
-            ]}
-            numberOfLines={2}
-          >
-            {column.value(party)}
-          </Text>
+          <View key={column.key} style={[styles.cell, { width: column.width }]}>
+            <Text
+              style={[
+                link ? webText.rowLink : column.numeric ? webText.rowNumber : webText.rowCell,
+                column.numeric && styles.right,
+              ]}
+              numberOfLines={2}
+            >
+              {column.value(party)}
+            </Text>
+          </View>
         );
       })}
     </Row>
@@ -247,7 +248,8 @@ const styles = StyleSheet.create({
   tableContent: { flexGrow: 1 },
   tableInner: { flex: 1 },
   body: { flex: 1 },
-  nameCell: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nameCell: { flexDirection: 'row', alignItems: 'center', gap: 8, ...CELL },
+  cell: { justifyContent: 'center', ...CELL },
   right: { textAlign: 'right' },
   total: { fontFamily: WEB_FONT, fontSize: 16, color: web.text, marginHorizontal: 6 },
   empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },

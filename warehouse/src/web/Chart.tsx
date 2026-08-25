@@ -252,7 +252,19 @@ function isMarked(day: number): boolean {
 const styles = StyleSheet.create({
   chart: { flexDirection: 'row', height: 280, gap: 10 },
   axis: { width: 58, justifyContent: 'space-between', paddingBottom: 26 },
-  tick: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, textAlign: 'right' },
+  /**
+   * Подписи оси — их же: `.dashboard #dashboard-chart .axis text
+   * { font-size: 12px; fill: #B0B0B0; font-weight: 300 }`, а у оси дней
+   * `.axis.x text { font-size: 10px }`. У меня стояло 12 и 11 обычным
+   * начертанием, и ось выходила темнее и тяжелее его.
+   */
+  tick: {
+    fontFamily: WEB_FONT,
+    fontSize: 12,
+    color: '#B0B0B0',
+    fontWeight: '300' as const,
+    textAlign: 'right',
+  },
   plot: { flex: 1 },
   area: { height: PLOT_HEIGHT },
   grid: {
@@ -271,7 +283,7 @@ const styles = StyleSheet.create({
   bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
   dayCell: { flex: 1 },
-  day: { fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted, textAlign: 'center' },
+  day: { fontFamily: WEB_FONT, fontSize: 10, color: '#B0B0B0', fontWeight: '300' as const, textAlign: 'center' },
   dayMarked: { color: web.link },
   dayActive: { color: web.text, fontWeight: '700' },
 });

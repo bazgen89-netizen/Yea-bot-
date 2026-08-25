@@ -131,17 +131,26 @@ export function HeadRow({
   lead,
   sorting,
   onSort,
+  celled,
 }: {
   columns: Column[];
   lead?: ReactNode;
   sorting?: Sorting;
   onSort?: (key: string) => void;
+  /**
+   * Столбцы разделены вертикальными линиями — как в его таблицах.
+   *
+   * У них это `ui small celled table`: `.fixed-title .ui.table thead th`
+   * несёт `border-right: 1px solid #f2f2f2`, и такая же линия идёт по
+   * строкам. Без них таблица на девять столбцов читается как каша.
+   */
+  celled?: boolean;
 }) {
   return (
-    <View style={styles.headRow}>
+    <View style={[styles.headRow, celled && styles.rowCelled]}>
       {lead}
       {columns.map((column) => (
-        <View key={column.key} style={{ width: column.width }}>
+        <View key={column.key} style={[{ width: column.width }, celled && styles.celledCell]}>
           <View style={[styles.headCell, column.numeric && styles.headCellRight]}>
             <Text
               accessibilityRole={column.sortable && onSort ? 'button' : 'text'}
@@ -186,13 +195,23 @@ export function HeadRow({
   );
 }
 
-export function Row({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+export function Row({
+  children,
+  onPress,
+  celled,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+  /** Столбцы разделены линиями: тогда отступ между ними даёт сама ячейка. */
+  celled?: boolean;
+}) {
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
       onPress={onPress}
       style={(state) => [
         styles.row,
+        celled && styles.rowCelled,
         (state as { hovered?: boolean }).hovered && styles.rowHover,
       ]}
     >
@@ -217,9 +236,29 @@ export function Pager({
 }) {
   if (pages <= 1) return null;
 
+  /**
+   * Листалка — его: «« ‹ 1 2 3 … 65 › »». Слова «Страницы» у него нет,
+   * зато есть четыре стрелки: к первой, на шаг назад, на шаг вперёд и к
+   * последней. Без них на шестидесяти пяти страницах до конца не добраться.
+   */
+  const step = (to: number, label: string, hint: string, off: boolean) => (
+    <Pressable
+      key={hint}
+      accessibilityRole="button"
+      accessibilityLabel={hint}
+      accessibilityState={{ disabled: off }}
+      disabled={off}
+      onPress={() => onPage(to)}
+      style={[styles.pageButton, off && styles.pageStepOff]}
+    >
+      <Text style={[styles.pageLabel, off && styles.pageStepOffLabel]}>{label}</Text>
+    </Pressable>
+  );
+
   return (
     <View style={styles.pager}>
-      <Text style={styles.pagerLabel}>Страницы</Text>
+      {step(1, '«', 'К первой странице', page === 1)}
+      {step(page - 1, '‹', 'Предыдущая страница', page === 1)}
       {visiblePages(page, pages).map((item, index) =>
         item === null ? (
           <Text key={`gap${index}`} style={styles.pagerGap}>
@@ -237,9 +276,18 @@ export function Pager({
           </Pressable>
         ),
       )}
+      {step(page + 1, '›', 'Следующая страница', page === pages)}
+      {step(pages, '»', 'К последней странице', page === pages)}
     </View>
   );
 }
+
+export const CELL = {
+  paddingLeft: 9,
+  paddingRight: 11,
+  borderRightWidth: 1,
+  borderRightColor: '#F2F2F2',
+} as const;
 
 const styles = StyleSheet.create({
   toolbar: {
@@ -317,6 +365,19 @@ const styles = StyleSheet.create({
     borderBottomColor: web.gridLine,
   },
   rowHover: { backgroundColor: web.rowHover },
+  pageStepOff: { opacity: 0.4 },
+  pageStepOffLabel: { color: web.textMuted },
+  /** Разделённые столбцы: промежуток даёт не `gap`, а поля самой ячейки. */
+  rowCelled: { gap: 0, paddingHorizontal: 0 },
+  /** Та же ячейка для строк таблицы — экспортируется через `CELL`. */
+  celledCell: {
+    // Их `th > div`: `padding: 11px 11px 11px 9px`, линия справа.
+    paddingLeft: 9,
+    paddingRight: 11,
+    borderRightWidth: 1,
+    borderRightColor: '#F2F2F2',
+    justifyContent: 'center',
+  },
   checkbox: {
     width: 17,
     height: 17,

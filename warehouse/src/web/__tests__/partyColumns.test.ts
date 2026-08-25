@@ -209,3 +209,22 @@ describe('русский алфавит', () => {
     expect(order).toEqual(['Егоров', 'Ёлчиев', 'Жуков', 'Ясонов']);
   });
 });
+
+/**
+ * День рождения показывается так, как он видит его в кабинете: «13/07/2006».
+ */
+describe('день рождения', () => {
+  const shows = (birthday: string | null) => {
+    const column = basic().find((one) => one.key === 'bday');
+    return column?.value(party({ birthday }));
+  };
+
+  it('через косую черту, даже если в базе точки', () => {
+    expect(shows('13.07.2006')).toBe('13/07/2006');
+    expect(shows('13/07/2006')).toBe('13/07/2006');
+  });
+
+  it('пусто — дефис, как у него', () => {
+    expect(shows(null)).toBe('-');
+  });
+});

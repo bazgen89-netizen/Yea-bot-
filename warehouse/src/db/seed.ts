@@ -5,6 +5,7 @@ import STORES_JSON from './seed/stores.json';
 import PHOTOS_JSON from './seed/photos.json';
 import CATALOG_JSON from './seed/products.json';
 import SALES_JSON from './seed/sales.json';
+import DOCS_JSON from './seed/docs.json';
 
 /**
  * Пример данных — каталог одной чайной: 590 позиций с остатками по магазинам
@@ -168,6 +169,43 @@ interface SeedSale {
 }
 
 /**
+ * Складской документ из CloudShop — закупка или возврат поставщику.
+ *
+ * Чеки приезжают своим списком, а всё остальное движение товара — этим.
+ * Connect API отдаёт из складских документов три вида: закупки
+ * (`/documents/purchases`), возвраты поставщику (`/documents/return`) и
+ * корректировки (`/documents/changes`). Списаний, перемещений и
+ * инвентаризаций у ключа нет вовсе — их видно только в самом кабинете.
+ *
+ * Склад эти документы, как и перенесённые чеки, **не двигают**: остаток
+ * приезжает готовым из карточек товара и ставится одной корректировкой
+ * «Загрузка каталога». Если бы перенесённая закупка ещё и приходовала
+ * товар, остаток вышел бы вдвое больше настоящего.
+ */
+interface SeedDoc {
+  /** Вид: `purchase` — закупка, `purchase_return` — возврат поставщику. */
+  k: 'purchase' | 'purchase_return';
+  /** Когда проведён. */
+  at: string | null;
+  /** Номер документа в CloudShop: «Закупка #128». */
+  no?: number | string | null;
+  /** Магазин — куда пришло или откуда ушло. */
+  st?: string | null;
+  /** Контрагент — поставщик. */
+  cp?: string | null;
+  /** Комментарий к документу. */
+  cm?: string | null;
+  /** Проведён ли: отложенные документы склад не трогают и у него. */
+  ok?: number;
+  ln: {
+    code?: string | null;
+    n?: string | null;
+    q?: number;
+    p?: number;
+  }[];
+}
+
+/**
  * Пример данных — каталог и клиенты одной чайной.
  *
  * **Не загружается сам.** Программа предназначена не одному магазину: чужой
@@ -184,6 +222,7 @@ export function seedCatalog(db: SqlDriver): void {
   seedClients(db);
   seedRegisters(db);
   seedHistory(db);
+  seedDocs(db);
 }
 
 /**
@@ -204,6 +243,7 @@ interface SeedData {
   products: SeedProduct[];
   clients: SeedClient[];
   sales: SeedSale[];
+  docs: SeedDoc[];
   photos: Record<string, string>;
   stores: { n?: string; a?: string; name?: string; address?: string }[];
 }
@@ -212,6 +252,7 @@ const data: SeedData = {
   products: CATALOG_JSON as SeedProduct[],
   clients: CLIENTS_JSON as SeedClient[],
   sales: SALES_JSON as SeedSale[],
+  docs: DOCS_JSON as SeedDoc[],
   photos: PHOTOS_JSON as Record<string, string>,
   stores: STORES_JSON as SeedData['stores'],
 };
@@ -221,6 +262,7 @@ export function useSeedData(next: Partial<SeedData>): void {
   if (next.products) data.products = next.products;
   if (next.clients) data.clients = next.clients;
   if (next.sales) data.sales = next.sales;
+  if (next.docs) data.docs = next.docs;
   if (next.photos) data.photos = next.photos;
   if (next.stores) data.stores = next.stores;
 }
@@ -663,7 +705,8 @@ export function resetSeed(db: SqlDriver): void {
       // иначе следующий проход снова ничего не сделает.
       db.run(
         `DELETE FROM app_state
-          WHERE key IN ('catalog_seeded', 'clients_seeded', 'registers_seeded', 'history_seeded')`,
+          WHERE key IN ('catalog_seeded', 'clients_seeded', 'registers_seeded',
+                        'history_seeded', 'docs_seeded')`,
       );
     });
   } finally {
@@ -814,6 +857,106 @@ function seedHistory(db: SqlDriver): void {
           `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
            VALUES (?, ?, ?, ?, ?, ?)`,
           [saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost, line.d ?? 0],
+        );
+      }
+    }
+
+    db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
+  });
+}
+
+/**
+ * Складские документы из CloudShop — закупки и возвраты поставщику.
+ *
+ * До сих пор в журнале стояли только чеки: движение товара наполовину
+ * состояло из продаж, а откуда товар взялся — видно не было. Теперь
+ * приезжают и закупки: «Закупка #128», с поставщиком, строками и суммой.
+ *
+ * Склад они не двигают — по той же причине, что и перенесённые чеки:
+ * остаток приезжает готовым из карточек товара. Иначе он удвоился бы.
+ */
+function seedDocs(db: SqlDriver): void {
+  const DONE_KEY = 'docs_seeded';
+  if (db.get('SELECT value FROM app_state WHERE key = ?', [DONE_KEY])) return;
+
+  const docs = data.docs;
+  const now = new Date().toISOString();
+  if (docs.length === 0) {
+    db.run('INSERT INTO app_state (key, value) VALUES (?, ?)', [DONE_KEY, now]);
+    return;
+  }
+
+  const byCode = new Map<string, number>();
+  for (const row of db.all<{ id: number; code: string | null }>(
+    'SELECT id, code FROM products WHERE code IS NOT NULL',
+  )) {
+    if (row.code) byCode.set(row.code, row.id);
+  }
+
+  const stores = new Map(
+    listLocations(db).map((location) => [location.name, location.id as number]),
+  );
+
+  // Поставщик заводится карточкой: в журнале его имя — ссылка, и вести она
+  // должна в справочник, а не в пустоту.
+  const suppliers = new Map<string, number>();
+  for (const row of db.all<{ id: number; name: string }>(
+    "SELECT id, name FROM counterparties WHERE kind = 'supplier'",
+  )) {
+    suppliers.set(row.name, row.id);
+  }
+
+  db.tx(() => {
+    for (const doc of docs) {
+      const location = doc.st ? (stores.get(doc.st) ?? null) : null;
+
+      let supplierId: number | null = null;
+      const supplier = (doc.cp ?? '').trim();
+      if (supplier) {
+        supplierId = suppliers.get(supplier) ?? null;
+        if (supplierId === null) {
+          db.run(
+            "INSERT INTO counterparties (name, kind, created_at) VALUES (?, 'supplier', ?)",
+            [supplier, doc.at ?? now],
+          );
+          supplierId = db.lastInsertId();
+          suppliers.set(supplier, supplierId);
+        }
+      }
+
+      const number = Number(doc.no);
+
+      db.run(
+        `INSERT INTO docs
+           (type, subtype, counterparty, counterparty_id, note, created_at, doc_date,
+            location_id, number, posted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          // Закупка кладёт товар на склад, возврат поставщику — снимает.
+          doc.k === 'purchase' ? 'receipt' : 'writeoff',
+          doc.k,
+          supplier || null,
+          supplierId,
+          (doc.cm ?? '').trim() || null,
+          doc.at ?? now,
+          doc.at ?? now,
+          location,
+          Number.isFinite(number) && number > 0 ? String(number) : null,
+          doc.ok === 0 ? 0 : 1,
+        ],
+      );
+      const docId = db.lastInsertId();
+
+      for (const line of doc.ln) {
+        const productId = line.code ? byCode.get(line.code) : undefined;
+        // Товара нет в справочнике — строку пропускаем, но документ
+        // остаётся: у него есть номер, поставщик и дата, и в журнале он
+        // должен стоять.
+        if (productId === undefined) continue;
+
+        db.run(
+          'INSERT INTO doc_lines (doc_id, product_id, qty, price) VALUES (?, ?, ?, ?)',
+          [docId, productId, line.q ?? 0, line.p ?? 0],
         );
       }
     }

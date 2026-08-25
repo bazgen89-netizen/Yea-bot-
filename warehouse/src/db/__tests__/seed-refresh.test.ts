@@ -450,3 +450,65 @@ describe('комментарий к перенесённому чеку', () => 
     expect(numbers('4596')).toEqual([]);
   });
 });
+
+/**
+ * Складские документы из переноса.
+ *
+ * До сих пор в журнале стояли одни чеки: движение товара состояло из
+ * продаж, а откуда товар взялся — видно не было. Connect API отдаёт
+ * закупки и возвраты поставщику, и теперь они приезжают вместе с историей.
+ *
+ * Склад они не двигают — остаток приезжает готовым из карточек товара.
+ * Если бы двигали, он вышел бы вдвое больше настоящего.
+ */
+describe('перенесённые закупки', () => {
+  it('становятся документами журнала и склад не трогают', () => {
+    const db = createTestDriver();
+
+    useSeedData({
+      products: [
+        { n: 'Габа Алишань', c: '00145', s: null, u: 'гр', p: 3299, d: 0, q: { 'Чайный бар': 10_000 } },
+      ],
+      clients: [],
+      sales: [],
+      docs: [
+        {
+          k: 'purchase',
+          at: '2026-08-16T09:00:00.000Z',
+          no: 128,
+          st: 'Чайный бар',
+          cp: 'Чайная лавка',
+          cm: 'по накладной 4512',
+          ln: [{ code: '00145', q: 5_000, p: 1_200 }],
+        },
+      ],
+      photos: {},
+      stores: [],
+    });
+
+    seedCatalog(db);
+
+    const entry = listJournal(db, 10).find((row) => row.number === 128);
+    expect(entry?.kind).toBe('purchase');
+    expect(entry?.sender).toBe('Чайная лавка');
+    expect(entry?.receiver).toBe('Чайный бар');
+    expect(entry?.note).toBe('по накладной 4512');
+    expect(entry?.positions).toBe(1);
+
+    // Остаток — тот, что приехал из карточки товара: закупка его не двигает.
+    const store = db.get<{ id: number }>('SELECT id FROM locations WHERE name = ?', ['Чайный бар'])!;
+    const stock = db.get<{ qty: number }>(
+      'SELECT COALESCE(SUM(qty_delta), 0) AS qty FROM stock_moves WHERE location_id = ?',
+      [store.id],
+    );
+    expect(stock?.qty).toBe(10_000);
+
+    // Поставщик заведён карточкой: в журнале его имя — ссылка.
+    expect(
+      db.get('SELECT id FROM counterparties WHERE name = ? AND kind = ?', [
+        'Чайная лавка',
+        'supplier',
+      ]),
+    ).not.toBeNull();
+  });
+});

@@ -167,6 +167,11 @@ const fake = REAL ? real : real.map((client, index) => {
 });
 
 const allSales = JSON.parse(readFileSync(source('sales.json'), 'utf8'));
+// Складские документы: закупки и возвраты поставщику. Их может не быть
+// вовсе — перенос до них добрался не сразу.
+const allDocs = existsSync(source('docs.json'))
+  ? JSON.parse(readFileSync(source('docs.json'), 'utf8'))
+  : [];
 const allPhotos = JSON.parse(readFileSync(source(PHOTOS), 'utf8'));
 const allStores = JSON.parse(readFileSync(source('stores.json'), 'utf8'));
 
@@ -190,6 +195,7 @@ const packed = gzipSync(
       products: cleanProducts,
       clients: fake,
       sales: allSales,
+      docs: allDocs,
       photos: allPhotos,
       stores: allStores,
     }),

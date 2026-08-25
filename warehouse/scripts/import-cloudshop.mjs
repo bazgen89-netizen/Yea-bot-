@@ -10,7 +10,13 @@
  *                магазинам, и фотографии;
  *   • клиенты  — имя, телефоны, почта, день рождения, пол, адрес, личная
  *                скидка, бонусный счёт и накопления;
- *   • история  — все чеки со строками: что, сколько, почём, кому и когда.
+ *   • история  — все чеки со строками: что, сколько, почём, кому и когда;
+ *   • документы — закупки и возвраты поставщику: движение товара, которое
+ *                чеком не сопровождается.
+ *
+ * Чего ключ **не** отдаёт вовсе: списаний, перемещений, инвентаризаций и
+ * денежных ордеров. В описи Connect API таких разделов нет — они видны
+ * только внутри кабинета.
  *
  * Ключ читается только из переменной окружения. Ключ, попавший в git,
  * остаётся в истории навсегда, и «удалить» его оттуда нельзя — только
@@ -233,6 +239,25 @@ async function history(since, cap) {
  */
 async function returns(since) {
   return walk('/documents/return?type=sales', since, Infinity, 'возвратов');
+}
+
+/**
+ * Закупки — приход товара от поставщика.
+ *
+ * Их не было в переносе вовсе, и движение товара наполовину состояло из
+ * одних продаж: откуда товар взялся, в журнале видно не было.
+ *
+ * Это всё, что о складских движениях отдаёт ключ. Списаний, перемещений и
+ * инвентаризаций в описи Connect API нет ни одного раздела — они живут
+ * только внутри кабинета.
+ */
+async function purchases(since) {
+  return walk('/documents/purchases', since, Infinity, 'закупок');
+}
+
+/** Возвраты поставщику — тот же раздел возвратов, но другого вида. */
+async function supplierReturns(since) {
+  return walk('/documents/return?type=purchases', since, Infinity, 'возвратов поставщику');
 }
 
 /**
@@ -782,6 +807,96 @@ if (!flag('no-history')) {
   // чеков: он один прибавляет к файлу мегабайты, а читать эту выгрузку
   // глазами всё равно никто не будет.
   writeFileSync(`${out}/sales.json`, JSON.stringify(sales, skipEmpty));
+
+  /**
+   * Складские документы: закупки и возвраты поставщику.
+   *
+   * Строки у них устроены так же, как у чека, — товар лежит внутри
+   * `legacy_line`, — поэтому и разбираются тем же `resolve`, что и чек:
+   * код, артикул, штрихкод, имя.
+   */
+  console.log('Складские документы…');
+  const bought = await purchases(value('since', SINCE));
+  const sentBack = await supplierReturns(value('since', SINCE));
+
+  const docLines = (doc) =>
+    (doc.line_items ?? []).map((line) => {
+      const inner = line.legacy_line ?? {};
+      const product = inner.product ?? {};
+      const name = (product.name ?? line.name ?? line.title ?? '').trim();
+      const code = resolve(product, line, name);
+
+      return {
+        code,
+        n: known.has(code) ? null : name || null,
+        // Количество приходит движением склада: у прихода со знаком плюс,
+        // у возврата поставщику — с минусом. В документе нужно просто
+        // количество, знак задаёт вид документа.
+        q: Math.abs(milli(inner.qty ?? line.quantity ?? 0)),
+        p: kopecks(inner.price ?? line.price ?? line.unit_price ?? 0),
+      };
+    });
+
+  const docs = [
+    ...bought.map((doc) => ({ doc, k: 'purchase' })),
+    ...sentBack.map((doc) => ({ doc, k: 'purchase_return' })),
+  ].map(({ doc, k }) => ({
+    k,
+    at: doc.processed_at ?? doc.created_at ?? null,
+    no: doc.order_number ?? null,
+    st: storeName.get(doc.location_id) ?? null,
+    // Поставщик стоит в `source` у прихода и в `destination` у возврата: у
+    // прихода товар идёт **от** него, у возврата — **к** нему.
+    cp: partyName(k === 'purchase' ? (doc.source ?? doc.customer) : (doc.destination ?? doc.customer)),
+    cm: (doc.note ?? doc.comment ?? '').trim() || null,
+    // Отложенный документ у него склад не двигает и в отборе стоит
+    // «Отложен». Признак лежит в `document_flags.status`.
+    ok: doc.document_flags?.status === false ? 0 : 1,
+    ln: docLines(doc),
+  }));
+
+  writeFileSync(`${out}/docs.json`, JSON.stringify(mergeDocs(docs), skipEmpty));
+  console.log(`  закупок ${bought.length}, возвратов поставщику ${sentBack.length}`);
+}
+
+/**
+ * Как подписан контрагент документа.
+ *
+ * У поставщика имя лежит в `name`, у карточки — в `first_name`/`last_name`,
+ * а у безымянного — в `legacy_party.name`.
+ */
+function partyName(party) {
+  if (!party) return null;
+
+  const full = [party.first_name, party.last_name]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join(' ')
+    .trim();
+
+  const name = (party.name ?? '').trim() || full || (party.legacy_party?.name ?? '').trim();
+  return name || null;
+}
+
+/**
+ * Прибавить свежие складские документы к уже собранным.
+ *
+ * Ровно то же, что и с чеками: ключ отдаёт окно, а не всю историю, и файл
+ * поэтому дополняется, а не переписывается. Документы различаются видом и
+ * номером: у закупки и возврата нумерация своя, и «#12» бывает и там, и там.
+ */
+function mergeDocs(fresh) {
+  let old = [];
+  try {
+    old = JSON.parse(readFileSync(`${out}/docs.json`, 'utf8'));
+  } catch {
+    return fresh;
+  }
+  if (!Array.isArray(old) || old.length === 0) return fresh;
+
+  const seen = new Set(fresh.filter((doc) => doc.no != null).map((doc) => `${doc.k}#${doc.no}`));
+  const kept = old.filter((doc) => doc.no == null || !seen.has(`${doc.k}#${doc.no}`));
+
+  return [...kept, ...fresh].sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')));
 }
 
 /**
@@ -996,6 +1111,7 @@ console.log(`
   с фотографией    ${flag('no-photos') ? 'пропущено' : Object.keys(JSON.parse(readFileSync(`${out}/photos.json`, 'utf8'))).length}
   клиентов         ${customers.length}   (${size('clients.json')})
   чеков в истории  ${flag('no-history') ? 'пропущено' : sales.length}   из них возвратов ${flag('no-history') ? 0 : sales.filter((item) => item.ret).length}   (${size('sales.json')})
+  складских документов ${flag('no-history') ? 'пропущено' : size('docs.json')}
 
 Записано в ${out.replace(root + '/', '')} — эта папка не попадает в git.
 Дальше: node scripts/build-mine.mjs — и всё это окажется в программе.`);

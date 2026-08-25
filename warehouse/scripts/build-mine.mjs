@@ -34,6 +34,7 @@ const FILES = {
   'products.json': '[]',
   'clients.json': '[]',
   'sales.json': '[]',
+  'docs.json': '[]',
   'photos.json': '{}',
   'stores.json': '[]',
 };
@@ -57,6 +58,8 @@ const bundle = {
   products: read('products.json') ?? [],
   clients: read('clients.json') ?? [],
   sales: read('sales.json') ?? [],
+  // Складские документы: закупки и возвраты поставщику.
+  docs: read('docs.json') ?? [],
   photos: read('photos.json') ?? {},
   stores: read('stores.json') ?? [],
 };

@@ -161,16 +161,26 @@ export function listJournal(
        UNION ALL
 
        SELECT d.id,
-              NULL,
+              -- Свой номер документа: у перенесённой закупки это номер
+              -- CloudShop — «Закупка #128». Раньше здесь стоял NULL, и
+              -- перенесённый документ подписывался внутренним номером
+              -- строки, по которому его в кабинете не найти.
+              CAST(NULLIF(d.number, '') AS INTEGER),
               ${KIND_SQL},
               d.created_at,
-              -- У отложенного документа движений нет вовсе, и позиции с суммой
-              -- берутся из его строк: иначе он показался бы пустым.
-              CASE WHEN d.posted = 1
+              -- Позиции и сумма — по движениям склада, а если движений нет,
+              -- по строкам документа. Движений не бывает у двух документов:
+              -- у отложенного (он склад ещё не трогал) и у перенесённого из
+              -- CloudShop (остаток приезжает готовым из карточек товара, и
+              -- второй раз его двигать нельзя). И тот и другой без этого
+              -- показывались бы пустыми: ноль позиций, ноль рублей.
+              CASE WHEN (SELECT COUNT(*) FROM stock_moves m
+                          WHERE m.doc_id = d.id AND ${ONE_SIDE}) > 0
                    THEN (SELECT COUNT(*) FROM stock_moves m
                          WHERE m.doc_id = d.id AND ${ONE_SIDE})
                    ELSE (SELECT COUNT(*) FROM doc_lines l WHERE l.doc_id = d.id) END,
-              CASE WHEN d.posted = 1
+              CASE WHEN (SELECT COUNT(*) FROM stock_moves m
+                          WHERE m.doc_id = d.id AND ${ONE_SIDE}) > 0
                    THEN CAST(ROUND(COALESCE((
                           SELECT SUM(ABS(m.qty_delta) * m.price) FROM stock_moves m
                           WHERE m.doc_id = d.id AND ${ONE_SIDE}

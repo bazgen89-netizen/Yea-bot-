@@ -5,6 +5,9 @@ from typing import Mapping, Optional
 
 
 GROQ_MODEL = "llama-3.3-70b-versatile"
+GEMINI_MODEL = "gemini-2.5-flash"
+# Какой мозг отвечает первым: groq или gemini
+AI_PRIMARY = "groq"
 
 # Тайм-ауты внешних запросов, секунды
 SEARCH_TIMEOUT = 8
@@ -77,6 +80,9 @@ class Settings:
     webhook_url: str
     port: int
     groq_model: str = GROQ_MODEL
+    gemini_api_key: str = ""
+    gemini_model: str = GEMINI_MODEL
+    ai_primary: str = AI_PRIMARY
     social: Optional[SocialSettings] = None
 
     @classmethod
@@ -87,6 +93,9 @@ class Settings:
             serper_key=os.getenv("SERPER_KEY", ""),
             webhook_url=os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com"),
             port=int(os.getenv("PORT", 8080)),
+            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            gemini_model=os.getenv("GEMINI_MODEL", GEMINI_MODEL),
+            ai_primary=os.getenv("AI_PRIMARY", AI_PRIMARY).strip().lower(),
             social=SocialSettings.from_env(),
         )
 

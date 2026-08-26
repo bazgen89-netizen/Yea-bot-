@@ -13,10 +13,16 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 class GroqClient:
+    name = "Groq"
+
     def __init__(self, api_key: str, model: str, session: aiohttp.ClientSession):
         self.api_key = api_key
         self.model = model
         self.session = session
+
+    @property
+    def available(self) -> bool:
+        return bool(self.api_key)
 
     @property
     def _headers(self) -> dict:

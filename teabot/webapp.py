@@ -10,7 +10,7 @@ from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
 from .handlers.social import ADMIN_KEY, HUB_KEY, poll_job
 from .http import create_session, close_session
-from .services import GroqClient, SerperClient
+from .services import AIRouter, GeminiClient, GroqClient, SerperClient
 from .social import SeenStore, SocialHub, build_connectors
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,14 @@ async def on_startup(app: web.Application):
         settings.serper_key, session,
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
-    ai = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    # Два мозга: основной отвечает, второй подстраховывает при сбое
+    ai = AIRouter(
+        {
+            "groq": GroqClient(settings.groq_api_key, settings.groq_model, session),
+            "gemini": GeminiClient(settings.gemini_api_key, settings.gemini_model, session),
+        },
+        primary=settings.ai_primary,
+    )
     ptb.bot_data[AI_KEY] = ai
 
     setup_social(ptb, settings, session, ai)
@@ -48,7 +55,12 @@ async def on_startup(app: web.Application):
     await ptb.bot.set_webhook(full_url)
     logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
     logger.info(f"🔗 Webhook: {full_url}")
-    logger.info(f"🤖 AI: Groq {settings.groq_model}")
+    brains = ", ".join(
+        f"{getattr(b, 'name', n)} {getattr(b, 'model', '')}"
+        + ("" if getattr(b, "available", False) else " (нет ключа)")
+        for n, b in ai.brains.items()
+    )
+    logger.info(f"🧠 Мозги: {brains} | основной: {ai.primary}")
 
 
 def setup_social(ptb: Application, settings: Settings,

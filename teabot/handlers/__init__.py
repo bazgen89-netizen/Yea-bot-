@@ -22,7 +22,7 @@ def get_ai(ctx: ContextTypes.DEFAULT_TYPE) -> GroqClient:
 
 
 def register_handlers(ptb: Application) -> None:
-    from .commands import start_cmd, debug_cmd
+    from .commands import start_cmd, debug_cmd, brain_cmd, second_cmd
     from .messages import on_msg
     from .callbacks import on_cb
     from .social import (
@@ -31,6 +31,8 @@ def register_handlers(ptb: Application) -> None:
 
     ptb.add_handler(CommandHandler("start", start_cmd))
     ptb.add_handler(CommandHandler("debug", debug_cmd))
+    ptb.add_handler(CommandHandler("brain", brain_cmd))
+    ptb.add_handler(CommandHandler("second", second_cmd))
 
     # Единый центр соцсетей
     ptb.add_handler(CommandHandler("social", social_cmd))

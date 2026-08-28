@@ -113,6 +113,37 @@ def convert_tvs(raw, media):
     return out
 
 
+def parse_home_slider(html, media):
+    """
+    Разбирает чанк sliderHome на слайды.
+
+    В MODX слайдер главной правился прямо в коде чанка. В теме это
+    поле-повторитель, поэтому разбираем разметку на составляющие —
+    иначе слайды остались бы недоступны для редактирования.
+    """
+    # Закомментированные слайды в чанке есть — их не переносим.
+    html = re.sub(r'<!--.*?-->', '', html or '', flags=re.S)
+
+    slides = []
+    for block in re.findall(r'<div class="swiper-slide">(.*?)</div>\s*</div>\s*</div>', html, re.S):
+        img = re.search(r'background-image:url\(([^)]+)\)', block)
+        title = re.search(r'<p class="h1">(.*?)</p>', block, re.S)
+        text = re.search(r'</p>\s*<p>(.*?)</p>', block, re.S)
+        link = re.search(r'<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', block, re.S)
+        if not img:
+            continue
+        path = media_path(img.group(1).strip('\'" '), '1')
+        media.add(path)
+        slides.append({
+            'img':   path,
+            'title': re.sub(r'\s+', ' ', title.group(1)).strip() if title else '',
+            'text':  re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', text.group(1))).strip() if text else '',
+            'url':   link.group(1).strip() if link else '',
+            'btn':   re.sub(r'<[^>]+>', '', link.group(2)).strip() if link else '',
+        })
+    return slides
+
+
 def collect_media(html, media):
     """Собирает пути к файлам, на которые ссылается текст страницы."""
     for m in re.finditer(r'(?:content|assets)/[A-Za-z0-9._/-]+\.'
@@ -137,12 +168,15 @@ def main():
 
     # Статические чанки -> блоки
     blocks = []
+    home_slider = []
     chunk_dir = os.path.join(args.src, 'src', 'chunks')
     if os.path.isdir(chunk_dir):
         for name in os.listdir(chunk_dir):
             if not name.endswith('.json'):
                 continue
             obj = json.load(open(os.path.join(chunk_dir, name), encoding='utf-8')).get('object', {})
+            if obj.get('name') == 'sliderHome':
+                home_slider = parse_home_slider(obj.get('snippet') or '', media)
             if obj.get('name') in STATIC_CHUNKS:
                 html = obj.get('snippet') or ''
                 collect_media(html, media)
@@ -179,6 +213,11 @@ def main():
             'tvs':       convert_tvs(tvs.get(rid), media),
         }
 
+    # Слайдер главной жил в чанке, а не в поле ресурса.
+    front = int(1)
+    if home_slider and front in pages:
+        pages[front]['tvs']['home_slider'] = home_slider
+
     # Родитель обязан импортироваться раньше ребёнка.
     ordered, placed = [], set()
 
@@ -210,7 +249,7 @@ def main():
     for p in ordered:
         by_type[p['post_type']] = by_type.get(p['post_type'], 0) + 1
     print(f'страниц: {len(ordered)}  {by_type}')
-    print(f'блоков: {len(blocks)}')
+    print(f'блоков: {len(blocks)}, слайдов на главной: {len(home_slider)}')
     print(f'медиафайлов: {len(media)}')
     print(f'записано: {args.out}')
 

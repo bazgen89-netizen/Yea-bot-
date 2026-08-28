@@ -279,6 +279,25 @@ foreach ($bundle['pages'] as $page) {
 }
 say("Содержимое переписано на $fixed страницах");
 
+// Ссылки внутри строк слайдера — такие же теги [[~id]].
+foreach ($bundle['pages'] as $page) {
+    $post_id = $map[$page['modx_id']] ?? 0;
+    if (!$post_id || empty($page['tvs']['home_slider'])) {
+        continue;
+    }
+    $rows = get_post_meta($post_id, 'home_slider', true);
+    if (!is_array($rows)) {
+        continue;
+    }
+    foreach ($rows as $i => $row) {
+        if (!empty($row['url'])) {
+            $rows[$i]['url'] = convert_content($row['url'], $map, $theme_assets, $unresolved);
+        }
+    }
+    update_post_meta($post_id, 'home_slider', $rows);
+}
+
+
 // Блоки тоже содержат ссылки [[~id]] — чиним их тем же проходом,
 // теперь когда все страницы созданы и адреса известны.
 $fixed_blocks = 0;

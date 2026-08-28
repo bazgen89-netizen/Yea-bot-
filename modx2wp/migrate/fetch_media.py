@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -34,8 +35,16 @@ def main():
     files = bundle.get('media', [])
     base = args.base.rstrip('/') + '/'
 
-    session = requests.Session()
-    session.headers['User-Agent'] = 'Mozilla/5.0 (миграция сайта)'
+    # Своя сессия на поток: одна общая requests.Session при работе
+    # в несколько потоков изредка залипает на пуле соединений.
+    local = threading.local()
+
+    def session():
+        if not hasattr(local, 's'):
+            local.s = requests.Session()
+            # Заголовки HTTP кодируются latin-1 — кириллица здесь роняет запрос.
+            local.s.headers['User-Agent'] = 'Mozilla/5.0 (site migration)'
+        return local.s
 
     ok, skipped, missing, failed = [], [], [], []
 
@@ -47,7 +56,7 @@ def main():
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         for attempt in range(3):
             try:
-                r = session.get(base + rel, timeout=60)
+                r = session().get(base + rel, timeout=60)
                 if r.status_code == 200:
                     with open(dst, 'wb') as f:
                         f.write(r.content)

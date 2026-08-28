@@ -26,7 +26,11 @@ $eco_index = get_posts( array(
 						<div class="next"></div>
 					</div>
 				</div>
-				<?php get_template_part( 'template-parts/section-events' ); ?>
+				<div class="swiper-container">
+					<div class="swiper-wrapper">
+						<?php get_template_part( 'template-parts/section-events' ); ?>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>

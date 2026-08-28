@@ -1,0 +1,97 @@
+/* Стили, которые в MODX жили в <style> внутри чанков и шаблонов.
+   Собраны в один файл, чтобы не тащить инлайн-CSS в контент страниц. */
+
+/* --- из чанка cookieslabel --- */
+.pp_cookies {
+	position: fixed;
+	z-index: 9999;
+	left: 30px;
+	bottom: 30px;
+	width: 320px;
+	height: 50px;
+	display: flex;
+	border: 1px solid #DDDDDD;
+	background: #fff;
+	padding: 0 12px;
+	opacity: 0;
+	transform: translateX(-100px);
+	align-items: center;
+	justify-content: space-between;
+	transition: left 0s linear 0.5s, transform 0s linear 0.5s, opacity 0.5s linear 0s;
+}
+.pp_cookies.sh {
+	left: 30px;
+	opacity: 1;
+	transform: translateX(0);
+	transition: left 0s linear 0s, transform 0.5s linear 0s, opacity 0.5s linear 0s;
+}
+.pp_cookies p {
+	font-family: museosanscyrl-regular;
+	font-size: 12px;
+	line-height: 14px;
+	color: #333333;
+}
+.pp_cookies p a {
+	font-family: inherit;
+	font-size: inherit;
+	line-height: inherit;
+	text-decoration: underline;
+	color: #333333;
+}
+.pp_cookies p a:hover { color: #669933; }
+.pp_cookies button {
+	font-family: museosanscyrl-regular;
+	font-size: 10px;
+	width: 70px;
+	height: 30px;
+	line-height: 25px;
+	border: 1px solid #333333;
+	background: #333333;
+	color: #fff;
+	text-transform: uppercase;
+	transition: 0.5s;
+	cursor: pointer;
+}
+.pp_cookies button:hover {
+	color: #333333;
+	background: #fff;
+}
+
+/* --- из шаблона «Номерной фонд»: плашки про животных и завтрак --- */
+.icontxt,
+.icontxt2 {
+	display: inline-block;
+	position: relative;
+	font-size: 16px;
+	line-height: 20px;
+	color: #62794F;
+	padding-left: 40px;
+	margin-top: 15px;
+	width: 100%;
+}
+.icontxt { min-height: 16px; }
+.icontxt2 { min-height: 36px; }
+
+.icontxt:before,
+.icontxt2:before {
+	display: block;
+	content: "";
+	position: absolute;
+	transform: translateY(-50%);
+	background-repeat: no-repeat;
+	background-size: contain;
+}
+.icontxt:before {
+	left: 1%;
+	top: 40%;
+	width: 25px;
+	height: 25px;
+	background-image: url(../img/animals.svg);
+}
+.icontxt2:before {
+	left: 0;
+	top: 30%;
+	width: 30px;
+	height: 30px;
+	background-image: url(../img/breakfast.svg);
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="70px" height="70px" viewBox="0 0 70 70" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <path d="M35 70C54.33 70 70 54.3301 70 35C70 15.6699 54.33 0 35 0C15.67 0 0 15.6699 0 35C0 54.3301 15.67 70 35 70Z" id="path_1" />
+    <clipPath id="clip_1">
+      <use xlink:href="#path_1" />
+    </clipPath>
+  </defs>
+  <g id="Oval">
+    <g clip-path="url(#clip_1)">
+      <use xlink:href="#path_1" fill="none" stroke="#FFFFFF" stroke-width="8" />
+    </g>
+  </g>
+  <path d="M30.2991 25.0034C30.2991 25.1902 30.6274 45 30.0217 45C29.4159 45 45.7448 34.8362 45.7448 34.8362C45.7448 34.8362 30.2991 24.8167 30.2991 25.0034Z" id="Path-4" fill="#FFFFFF" fill-rule="evenodd" stroke="none" />
+</svg>

@@ -91,3 +91,58 @@ add_shortcode( 'links', function () {
 	get_template_part( 'template-parts/section-links' );
 	return ob_get_clean();
 } );
+
+/**
+ * [block slug="mesblock"] — вставляет блок из раздела «Блоки».
+ * Заменяет вставку чанка [[$mesblock]] в тексте страницы.
+ */
+add_shortcode( 'block', 'eco_sc_block' );
+function eco_sc_block( $atts ) {
+	$atts = shortcode_atts( array( 'slug' => '' ), $atts );
+	if ( ! $atts['slug'] ) {
+		return '';
+	}
+
+	$block = get_page_by_path( $atts['slug'], OBJECT, 'eco_block' );
+	if ( ! $block || 'publish' !== $block->post_status ) {
+		return '';
+	}
+
+	// Вложенный [block] не раскрываем: так не получить бесконечную вложенность.
+	static $depth = 0;
+	if ( $depth > 0 ) {
+		return '';
+	}
+	$depth++;
+	$html = do_shortcode( wp_kses_post( $block->post_content ) );
+	$depth--;
+	return $html;
+}
+
+/** [events] — слайдер публикаций. Бывший getResources &parents=`5`. */
+add_shortcode( 'events', function () {
+	ob_start();
+	get_template_part( 'template-parts/section-events' );
+	return ob_get_clean();
+} );
+
+/** [calendar] — блок «Публикации» со слайдером. Бывший чанк `calendar`. */
+add_shortcode( 'calendar', function () {
+	ob_start();
+	get_template_part( 'template-parts/section-calendar' );
+	return ob_get_clean();
+} );
+
+/** [cottages] — список коттеджей. Бывший getResources &tpl=`nomera_anblock_2`. */
+add_shortcode( 'cottages', function () {
+	ob_start();
+	get_template_part( 'template-parts/section-cottages' );
+	return ob_get_clean();
+} );
+
+/** [main_event] — главное событие крупным блоком. Бывший чанк `events_mainpage`. */
+add_shortcode( 'main_event', function () {
+	ob_start();
+	get_template_part( 'template-parts/section-main-event' );
+	return ob_get_clean();
+} );

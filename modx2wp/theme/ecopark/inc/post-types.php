@@ -62,3 +62,29 @@ function eco_labels( $single, $plural, $menu ) {
 function eco_post_types() {
 	return array( 'page', 'cottage', 'service', 'event' );
 }
+
+/**
+ * Блоки — бывшие статические чанки MODX, которые вставлялись в текст
+ * страниц ([[$mesblock]], [[$otzyv]] и другие). Это содержимое, а не
+ * вёрстка, поэтому оно живёт записями и правится в админке, а не в коде.
+ */
+add_action( 'init', 'eco_register_blocks' );
+function eco_register_blocks() {
+	register_post_type( 'eco_block', array(
+		'labels' => array(
+			'name'          => 'Блоки',
+			'singular_name' => 'Блок',
+			'menu_name'     => 'Блоки',
+			'add_new_item'  => 'Добавить блок',
+			'edit_item'     => 'Редактировать блок',
+			'all_items'     => 'Все блоки',
+		),
+		'public'        => false,
+		'show_ui'       => true,
+		'menu_icon'     => 'dashicons-screenoptions',
+		'menu_position' => 25,
+		'supports'      => array( 'title', 'editor', 'revisions' ),
+		'rewrite'       => false,
+		'show_in_rest'  => false,
+	) );
+}

@@ -169,16 +169,16 @@ function eco_flag( $name, $post_id = null ) {
 	return ( '1' === $value || 'en' === $value || 1 === $value || true === $value );
 }
 
-/** URL картинки из поля типа image. Принимает и id вложения, и готовый путь. */
+/**
+ * URL картинки из поля типа image. Принимает и id вложения, и путь,
+ * доставшийся от MODX.
+ *
+ * Относительный путь вида `content/rooms/1.jpg` обязательно приводится
+ * к адресу от корня сайта: esc_url() принимает строку без схемы и без
+ * ведущего слэша за имя хоста и превращает её в `http://content/...`.
+ */
 function eco_image_url( $name, $size = 'full', $post_id = null ) {
-	$value = eco_field( $name, $post_id );
-	if ( ! $value ) {
-		return '';
-	}
-	if ( is_numeric( $value ) ) {
-		return (string) wp_get_attachment_image_url( (int) $value, $size );
-	}
-	return esc_url( $value ); // путь, доставшийся от MODX
+	return eco_row_image_url( eco_field( $name, $post_id ), $size );
 }
 
 /** То же для значения внутри строки повторителя. */
@@ -189,7 +189,20 @@ function eco_row_image_url( $value, $size = 'full' ) {
 	if ( is_numeric( $value ) ) {
 		return (string) wp_get_attachment_image_url( (int) $value, $size );
 	}
-	return esc_url( $value );
+	return esc_url( eco_normalize_url( (string) $value ) );
+}
+
+/** Достраивает относительный путь до адреса от корня сайта. */
+function eco_normalize_url( $value ) {
+	$value = trim( $value );
+	if ( '' === $value ) {
+		return '';
+	}
+	// Уже абсолютный: со схемой, протокол-относительный или от корня.
+	if ( preg_match( '~^(https?:)?//~i', $value ) || str_starts_with( $value, '/' ) ) {
+		return $value;
+	}
+	return home_url( '/' . ltrim( $value, '/' ) );
 }
 
 /** Строки повторителя. */

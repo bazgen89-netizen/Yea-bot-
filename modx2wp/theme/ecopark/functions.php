@@ -31,5 +31,10 @@ require_once ECO_DIR . '/inc/template-tags.php';
 require_once ECO_DIR . '/inc/seo.php';
 require_once ECO_DIR . '/inc/sitemap.php';
 require_once ECO_DIR . '/inc/robots.php';
+require_once ECO_DIR . '/inc/importer.php';
+
+if ( is_admin() ) {
+	require_once ECO_DIR . '/inc/admin-import.php';
+}
 require_once ECO_DIR . '/inc/forms.php';
 require_once ECO_DIR . '/inc/shortcodes.php';

@@ -32,6 +32,17 @@ if (!is_file($bundle_path)) {
 define('WP_USE_THEMES', false);
 require "$wp_path/wp-load.php";
 
+// Импорт идёт из командной строки, без вошедшего пользователя, поэтому
+// WordPress прогоняет содержимое через kses и вырезает из него <script>.
+// На старом сайте встроенные скрипты есть (формы, отложенные редиректы),
+// и терять их нельзя — работаем от имени администратора.
+$admins = get_users(['role' => 'administrator', 'number' => 1, 'fields' => 'ID']);
+if ($admins) {
+    wp_set_current_user((int) $admins[0]);
+} else {
+    fwrite(STDERR, "Не найден администратор: встроенные скрипты в тексте страниц будут вырезаны.\n");
+}
+
 if (!function_exists('eco_post_types')) {
     fwrite(STDERR, "Тема «ЭкоПарк» не активна — включите её перед импортом.\n");
     exit(1);
@@ -70,11 +81,15 @@ function find_by_modx_id($modx_id) {
 $block_ids = [];
 foreach (($bundle['blocks'] ?? []) as $block) {
     $existing = get_page_by_path($block['slug'], OBJECT, 'eco_block');
+    // Закомментированную вёрстку из чанков не переносим: она мертва,
+    // а любая её обработка рискует показать её на странице.
+    $content = preg_replace('~<!--.*?-->~s', '', $block['content']);
+
     $data = [
         'post_type'    => 'eco_block',
         'post_name'    => $block['slug'],
         'post_title'   => $block['title'] ?: $block['slug'],
-        'post_content' => $block['content'],
+        'post_content' => $content,
         'post_status'  => 'publish',
     ];
     if ($dry) {
@@ -190,6 +205,15 @@ function convert_content($html, array $map, $theme_assets, &$unresolved, $page =
         return '#';
     }, $html);
 
+    // Скрипт формы бронирования TravelLine, вставленный прямо в текст,
+    // заменяем шорткодом: WordPress вырезает <script> из содержимого
+    // у редакторов без права unfiltered_html, и форма однажды пропадёт.
+    $html = preg_replace(
+        '~<div id="tl-booking-form">\s*</div>\s*<script.*?</script>~s',
+        '[travelline]',
+        $html
+    );
+
     // Выборки getResources различаем по имени чанка-шаблона.
     $lists = [
         'events_mainpage'       => '[main_event]',
@@ -207,8 +231,9 @@ function convert_content($html, array $map, $theme_assets, &$unresolved, $page =
 
     // Чанки, у которых в теме есть свой шорткод
     $chunks = [
-        'travelline2' => '[travelline]',
-        'travelline'  => '[travelline]',
+        // Оба чанка выводили форму подбора дат, а не форму брони.
+        'travelline2' => '[travelline_search variant="2"]',
+        'travelline'  => '[travelline_search]',
         'services'    => '[services]',
         'links'       => '[links]',
         'ymap'        => '[ymap]',

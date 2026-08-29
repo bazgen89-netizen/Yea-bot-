@@ -95,3 +95,27 @@
 	height: 30px;
 	background-image: url(../img/breakfast.svg);
 }
+
+/* --- из чанков travelline / travelline2: форма подбора дат --- */
+#block-search,
+#block-search * {
+	box-sizing: border-box;
+}
+
+#block-search {
+	background: #fff;
+	width: 100%;
+	max-width: 1246px;
+	margin: 0 auto;
+	border-radius: 10px;
+}
+
+.tl-container {
+	padding: 0 25px;
+}
+
+/* вариант чанка travelline2 — в рамке */
+.cont.tl-bordered {
+	border: solid 1px #ccc;
+	border-radius: 10px;
+}

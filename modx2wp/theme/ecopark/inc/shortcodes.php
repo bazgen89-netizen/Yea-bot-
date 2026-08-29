@@ -43,6 +43,34 @@ function eco_sc_travelline() {
 	return ob_get_clean();
 }
 
+/**
+ * [travelline_search] — форма подбора дат.
+ *
+ * Порт чанков `travelline` и `travelline2`: оба выводили именно форму
+ * поиска, а не форму бронирования. Отличались только обёрткой, поэтому
+ * здесь один шорткод с параметром.
+ *
+ * Сам виджет подключается один раз в template-parts/travelline-head.php —
+ * тут нужен только контейнер с идентификатором tl-search-form.
+ */
+add_shortcode( 'travelline_search', 'eco_sc_travelline_search' );
+function eco_sc_travelline_search( $atts ) {
+	$atts = shortcode_atts( array( 'variant' => '1' ), $atts );
+
+	$inner = '<div id="block-search">'
+		. '<div id="tl-search-form" class="tl-container">'
+		. '<noindex><a href="https://www.travelline.ru/products/tl-hotel/" rel="nofollow" target="_blank">TravelLine</a></noindex>'
+		. '</div></div>';
+
+	if ( '2' === $atts['variant'] ) {
+		// Рамка была задана инлайном прямо в чанке — оставляем как было,
+		// чтобы разметка совпадала с прежней до атрибута.
+		return '<div class="halign"><div class="cont" style="border: solid 1px #ccc; border-radius: 10px;">'
+			. $inner . '</div></div>';
+	}
+	return '<div class="trline"><div class="halign"><div class="cont">' . $inner . '</div></div></div>';
+}
+
 /** [booking_button]Забронировать[/booking_button] */
 add_shortcode( 'booking_button', 'eco_sc_booking_button' );
 function eco_sc_booking_button( $atts, $content = null ) {
@@ -114,7 +142,11 @@ function eco_sc_block( $atts ) {
 		return '';
 	}
 	$depth++;
-	$html = do_shortcode( wp_kses_post( $block->post_content ) );
+	// Без wp_kses_post: он вырезает комментарии вместе с обёрткой, обнажая
+	// закомментированную вёрстку, и выбрасывает <style> из блоков.
+	// Блоки правят только администраторы — уровень доверия тот же,
+	// что и у содержимого страниц.
+	$html = do_shortcode( $block->post_content );
 	$depth--;
 	return $html;
 }

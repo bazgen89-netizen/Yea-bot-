@@ -173,3 +173,18 @@ function eco_the_slider( $field ) {
 function eco_title_html( $title ) {
 	return wp_kses( $title, array( 'br' => array( 'class' => array() ) ) );
 }
+
+/**
+ * Вывод поля с HTML: раскрывает шорткоды и расставляет абзацы.
+ *
+ * Поля вроде pg_topcont и nomera_text содержат вставки блоков
+ * ([block slug="..."]) — без do_shortcode() они выводятся как текст.
+ * wp_kses_post здесь не применяем: он вырезает <style> и комментарии,
+ * а поля правят те же люди, что и содержимое страниц.
+ */
+function eco_field_html( $value ) {
+	if ( ! is_string( $value ) || '' === trim( $value ) ) {
+		return '';
+	}
+	return do_shortcode( wpautop( $value ) );
+}

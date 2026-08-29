@@ -30,10 +30,10 @@ while ( have_posts() ) :
 						</div>
 					</div>
 
-					<?php echo do_shortcode( wp_kses_post( eco_field( 'nomera_bronlink' ) ) ); ?>
+					<?php echo do_shortcode( eco_field( 'nomera_bronlink' ) ); ?>
 
 					<?php if ( eco_field( 'nomera_text' ) ) : ?>
-						<?php echo wp_kses_post( wpautop( eco_field( 'nomera_text' ) ) ); ?>
+						<?php echo eco_field_html( eco_field( 'nomera_text' ) ); ?>
 					<?php endif; ?>
 					<?php if ( has_excerpt() ) : ?>
 						<p><?php echo esc_html( get_the_excerpt() ); ?></p>

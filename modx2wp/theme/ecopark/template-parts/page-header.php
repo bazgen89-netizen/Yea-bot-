@@ -21,7 +21,7 @@ if ( 'v1' === $eco_var ) : ?>
 				<?php if ( is_singular( 'event' ) && eco_field( 'ev_dat' ) ) : ?>
 					<p class="dat">Дата проведения: <?php echo esc_html( eco_field( 'ev_dat' ) ); ?></p>
 				<?php endif; ?>
-				<?php echo wp_kses_post( wpautop( $eco_top ) ); ?>
+				<?php echo eco_field_html( $eco_top ); ?>
 			</div>
 		</div>
 	</div>
@@ -40,7 +40,7 @@ if ( 'v1' === $eco_var ) : ?>
 					<?php if ( is_singular( 'event' ) && eco_field( 'ev_dat' ) ) : ?>
 						<p class="dat">Дата проведения: <?php echo esc_html( eco_field( 'ev_dat' ) ); ?></p>
 					<?php endif; ?>
-					<?php echo wp_kses_post( wpautop( $eco_top ) ); ?>
+					<?php echo eco_field_html( $eco_top ); ?>
 				</div>
 			</div>
 		</div>

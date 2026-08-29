@@ -20,7 +20,7 @@ if ( ! $eco_items ) {
 						</div>
 						<div class="tx">
 							<p class="pre">Загородный дом</p>
-							<p class="t"><?php echo esc_html( eco_long_title( $eco_item->ID ) ); ?></p>
+							<p class="t"><?php echo eco_title_html( eco_long_title( $eco_item->ID ) ); ?></p>
 							<p><?php echo esc_html( get_the_excerpt( $eco_item ) ); ?></p>
 							<div class="bot">
 								<div class="lf">

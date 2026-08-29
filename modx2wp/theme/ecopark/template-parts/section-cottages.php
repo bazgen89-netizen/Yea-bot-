@@ -21,7 +21,7 @@ foreach ( $eco_items as $eco_item ) :
 		<div class="tx">
 			<div class="lf">
 				<p class="pre">Коттедж с баней</p>
-				<a href="<?php echo esc_url( get_permalink( $eco_item ) ); ?>" class="h"><?php echo esc_html( eco_long_title( $eco_item->ID ) ); ?></a>
+				<a href="<?php echo esc_url( get_permalink( $eco_item ) ); ?>" class="h"><?php echo eco_title_html( eco_long_title( $eco_item->ID ) ); ?></a>
 				<p><?php echo esc_html( get_the_excerpt( $eco_item ) ); ?></p>
 				<div class="wr">
 					<div class="price">

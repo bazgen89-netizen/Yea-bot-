@@ -16,7 +16,7 @@ while ( have_posts() ) :
 
 				<div class="txt">
 					<p class="pre">Коттедж с баней</p>
-					<h1><?php echo esc_html( eco_long_title() ); ?></h1>
+					<h1><?php echo eco_title_html( eco_long_title() ); ?></h1>
 
 					<div class="tbl">
 						<div class="lf">

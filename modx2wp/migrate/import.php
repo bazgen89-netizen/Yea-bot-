@@ -150,6 +150,12 @@ foreach ($bundle['pages'] as $page) {
     if (!empty($page['longtitle'])) {
         update_post_meta($post_id, '_eco_longtitle', $page['longtitle']);
     }
+    // Описание страницы: на старом сайте это поле ресурса, а не TV.
+    if (!empty($page['description'])) {
+        update_post_meta($post_id, '_eco_description', $page['description']);
+    }
+    // Флаг «скрыть в меню» решал, попадёт ли страница в карту сайта.
+    update_post_meta($post_id, '_eco_hidemenu', $page['hidemenu'] ? '1' : '');
     foreach ($page['tvs'] as $name => $value) {
         update_post_meta($post_id, $name, $value);
     }
@@ -326,6 +332,44 @@ if (isset($map[$front_modx_id])) {
     update_option('page_on_front', $front_id);
     update_post_meta($front_id, '_eco_uri', '');
     say('Главная страница: #' . $front_id);
+}
+
+/* ------------------------------------------------------------------ *
+ * Меню
+ * ------------------------------------------------------------------ */
+
+$locations = get_theme_mod('nav_menu_locations', []);
+$menu_count = 0;
+
+foreach (($bundle['menus'] ?? []) as $menu) {
+    $existing = wp_get_nav_menu_object($menu['name']);
+    $menu_id = $existing ? (int) $existing->term_id : wp_create_nav_menu($menu['name']);
+    if (is_wp_error($menu_id)) {
+        fwrite(STDERR, "Меню «{$menu['name']}»: " . $menu_id->get_error_message() . "\n");
+        continue;
+    }
+
+    // Пункты пересобираем заново: иначе повторный запуск их удвоит.
+    foreach (wp_get_nav_menu_items($menu_id) ?: [] as $item) {
+        wp_delete_post($item->ID, true);
+    }
+
+    foreach ($menu['items'] as $item) {
+        $url = convert_content($item['url'], $map, $theme_assets, $unresolved);
+        wp_update_nav_menu_item($menu_id, 0, [
+            'menu-item-title'  => $item['title'],
+            'menu-item-url'    => $url,
+            'menu-item-status' => 'publish',
+        ]);
+    }
+
+    $locations[$menu['location']] = $menu_id;
+    $menu_count++;
+}
+
+if ($menu_count) {
+    set_theme_mod('nav_menu_locations', $locations);
+    say("Меню: $menu_count");
 }
 
 $redirects = get_option('eco_redirects', []);

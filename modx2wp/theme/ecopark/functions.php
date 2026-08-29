@@ -28,5 +28,8 @@ require_once ECO_DIR . '/inc/meta-boxes.php';
 require_once ECO_DIR . '/inc/fields.php';
 require_once ECO_DIR . '/inc/permalinks.php';
 require_once ECO_DIR . '/inc/template-tags.php';
+require_once ECO_DIR . '/inc/seo.php';
+require_once ECO_DIR . '/inc/sitemap.php';
+require_once ECO_DIR . '/inc/robots.php';
 require_once ECO_DIR . '/inc/forms.php';
 require_once ECO_DIR . '/inc/shortcodes.php';

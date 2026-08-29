@@ -38,8 +38,11 @@ SKIP_MODX_IDS = {
 # В WordPress они становятся записями типа «Блок» и правятся в админке.
 STATIC_CHUNKS = ['mesblock', 'otzyv', 'banprogram', 'promoblock', 'subscribe', 'interesting']
 
-# TV, которые никуда не переносятся: их работу берёт на себя SEO-плагин.
-SKIP_TVS = {'sitemap_freq', 'sitemap_prio', 'index_page'}
+# TV, которые переносятся как есть: тема выводит их сама (inc/seo.php,
+# карта сайта), а если позже поставят SEO-плагин — он их перекроет.
+# Ничего не отбрасываем: правило индексации и приоритеты уже настроены
+# по страницам, и терять эту работу при переносе нельзя.
+SKIP_TVS = set()
 
 # Флажки MODX хранят строку 'en'; в WordPress это обычная единица.
 CHECKBOX_TVS = {'all_footer_mode', 'pg_nobg', 'ev_main'}
@@ -144,6 +147,60 @@ def parse_home_slider(html, media):
     return slides
 
 
+def parse_menus(head, footer):
+    """
+    Разбирает меню, зашитые в чанки `head` и `footer`.
+
+    В MODX пункты меню были прописаны прямо в разметке. В WordPress это
+    обычные меню, которые правятся в админке, поэтому вытаскиваем их
+    из чанков, а не заводим заново руками — так ничего не потеряется.
+    """
+    # Закомментированные пункты в чанках есть — их не переносим.
+    head = re.sub(r'<!--.*?-->', '', head or '', flags=re.S)
+    footer = re.sub(r'<!--.*?-->', '', footer or '', flags=re.S)
+
+    def links(fragment):
+        out = []
+        for m in re.finditer(r'<li[^>]*>\s*<a([^>]*)>(.*?)</a>', fragment or '', re.S):
+            attrs, label = m.group(1), re.sub(r'<[^>]+>', '', m.group(2)).strip()
+            href = re.search(r'href="([^"]*)"', attrs)
+            if label and href:
+                out.append({'title': label, 'url': href.group(1).strip()})
+        return out
+
+    menus = []
+
+    # Верхнее меню — блок .menuwr в шапке
+    top = re.search(r'<div class="menuwr">(.*?)</div>', head or '', re.S)
+    if top:
+        menus.append({'location': 'primary', 'name': 'Верхнее меню', 'items': links(top.group(1))})
+
+    # Мобильное меню — три колонки .menublock
+    locations = ['mobile_guest', 'mobile_usl', 'mobile_park']
+    blocks = re.findall(r'<div class="menublock">\s*<p>(.*?)</p>(.*?)</div>', head or '', re.S)
+    for i, (title, body) in enumerate(blocks[:3]):
+        menus.append({
+            'location': locations[i],
+            'name': 'Мобильное меню — ' + re.sub(r'<[^>]+>', '', title).strip(),
+            'items': links(body),
+        })
+
+    # Подвал
+    bottom = re.search(r'<div class="menuwr">(.*?)</div>', footer or '', re.S)
+    if bottom:
+        menus.append({'location': 'footer', 'name': 'Меню в подвале', 'items': links(bottom.group(1))})
+
+    # Правовые ссылки в подвале лежат вне списка
+    legal = re.search(r'<a href="\[\[~42\]\]">(.*?)</a>\s*<a href="\[\[~51\]\]">(.*?)</a>', footer or '', re.S)
+    if legal:
+        menus.append({'location': 'legal', 'name': 'Правовые ссылки', 'items': [
+            {'title': legal.group(1).strip(), 'url': '[[~42]]'},
+            {'title': legal.group(2).strip(), 'url': '[[~51]]'},
+        ]})
+
+    return [m for m in menus if m['items']]
+
+
 def collect_media(html, media):
     """Собирает пути к файлам, на которые ссылается текст страницы."""
     for m in re.finditer(r'(?:content|assets)/[A-Za-z0-9._/-]+\.'
@@ -169,12 +226,14 @@ def main():
     # Статические чанки -> блоки
     blocks = []
     home_slider = []
+    chunk_html = {}
     chunk_dir = os.path.join(args.src, 'src', 'chunks')
     if os.path.isdir(chunk_dir):
         for name in os.listdir(chunk_dir):
             if not name.endswith('.json'):
                 continue
             obj = json.load(open(os.path.join(chunk_dir, name), encoding='utf-8')).get('object', {})
+            chunk_html[obj.get('name')] = obj.get('snippet') or ''
             if obj.get('name') == 'sliderHome':
                 home_slider = parse_home_slider(obj.get('snippet') or '', media)
             if obj.get('name') in STATIC_CHUNKS:
@@ -240,6 +299,7 @@ def main():
         'source': 'MODX Revolution 3.0.3-pl',
         'front_page': 1,          # id ресурса MODX, который станет главной
         'blocks': blocks,
+        'menus': parse_menus(chunk_html.get('head'), chunk_html.get('footer')),
         'pages': ordered,
         'media': sorted(media),
     }
@@ -250,6 +310,8 @@ def main():
         by_type[p['post_type']] = by_type.get(p['post_type'], 0) + 1
     print(f'страниц: {len(ordered)}  {by_type}')
     print(f'блоков: {len(blocks)}, слайдов на главной: {len(home_slider)}')
+    print(f'меню: {len(bundle["menus"])} '
+          f'({sum(len(m["items"]) for m in bundle["menus"])} пунктов)')
     print(f'медиафайлов: {len(media)}')
     print(f'записано: {args.out}')
 

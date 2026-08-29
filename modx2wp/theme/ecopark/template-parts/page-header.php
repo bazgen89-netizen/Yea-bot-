@@ -17,7 +17,7 @@ if ( 'v1' === $eco_var ) : ?>
 				<?php if ( $eco_pre ) : ?>
 					<p class="pre"><?php echo esc_html( $eco_pre ); ?></p>
 				<?php endif; ?>
-				<h1><?php echo esc_html( eco_long_title() ); ?></h1>
+				<h1><?php echo eco_title_html( eco_long_title() ); ?></h1>
 				<?php if ( is_singular( 'event' ) && eco_field( 'ev_dat' ) ) : ?>
 					<p class="dat">Дата проведения: <?php echo esc_html( eco_field( 'ev_dat' ) ); ?></p>
 				<?php endif; ?>
@@ -36,7 +36,7 @@ if ( 'v1' === $eco_var ) : ?>
 					<?php if ( $eco_pre ) : ?>
 						<p class="pre"><?php echo esc_html( $eco_pre ); ?></p>
 					<?php endif; ?>
-					<h1><?php echo esc_html( eco_long_title() ); ?></h1>
+					<h1><?php echo eco_title_html( eco_long_title() ); ?></h1>
 					<?php if ( is_singular( 'event' ) && eco_field( 'ev_dat' ) ) : ?>
 						<p class="dat">Дата проведения: <?php echo esc_html( eco_field( 'ev_dat' ) ); ?></p>
 					<?php endif; ?>

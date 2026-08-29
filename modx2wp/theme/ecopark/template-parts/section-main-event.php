@@ -13,7 +13,7 @@ if ( ! $eco_item ) {
 					<?php if ( eco_field( 'ev_dat', $eco_item->ID ) ) : ?>
 						<div class="dt frombottom"><p><?php echo esc_html( eco_field( 'ev_dat', $eco_item->ID ) ); ?></p></div>
 					<?php endif; ?>
-					<h2 class="frombottom"><?php echo esc_html( eco_long_title( $eco_item->ID ) ); ?></h2>
+					<h2 class="frombottom"><?php echo eco_title_html( eco_long_title( $eco_item->ID ) ); ?></h2>
 					<p class="frombottom"><?php echo esc_html( get_the_excerpt( $eco_item ) ); ?></p>
 					<a class="btn brown frombottom" href="<?php echo esc_url( get_permalink( $eco_item ) ); ?>">Подробнее</a>
 				</div>

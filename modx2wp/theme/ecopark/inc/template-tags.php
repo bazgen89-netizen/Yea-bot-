@@ -24,11 +24,6 @@ function eco_canonical_url() {
 	return home_url( add_query_arg( array() ) );
 }
 
-add_action( 'wp_head', 'eco_canonical_tag', 2 );
-function eco_canonical_tag() {
-	printf( '<link rel="canonical" href="%s">' . "\n", esc_url( eco_canonical_url() ) );
-}
-
 /**
  * Размер картинки для PhotoSwipe в виде "1600x1200".
  * Сниппет sldimgsize читал файл с диска на каждый слайд; здесь берём
@@ -168,4 +163,13 @@ function eco_long_title( $post_id = null ) {
 /** Слайдер с превью по имени поля-повторителя. */
 function eco_the_slider( $field ) {
 	get_template_part( 'template-parts/slider', null, array( 'field' => $field ) );
+}
+
+/**
+ * Заголовок для вывода в разметке. В поле longtitle встречается <br> —
+ * на старом сайте он переносил строку, поэтому экранировать заголовок
+ * целиком нельзя, но и произвольный HTML пускать не будем.
+ */
+function eco_title_html( $title ) {
+	return wp_kses( $title, array( 'br' => array( 'class' => array() ) ) );
 }

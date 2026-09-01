@@ -1,4 +1,5 @@
 """Сборка приложения: Telegram-бот (PTB) + aiohttp-сервер webhook."""
+import asyncio
 import logging
 
 from aiohttp import web
@@ -8,10 +9,11 @@ from telegram.ext import Application
 from .cache import TTLCache
 from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
-from .handlers.social import ADMIN_KEY, HUB_KEY, poll_job
+from .handlers.social import ADMIN_KEY, HUB_KEY, deliver_items, poll_job
 from .http import create_session, close_session
 from .services import AIRouter, GeminiClient, GroqClient, SerperClient
 from .social import SeenStore, SocialHub, build_connectors
+from .social.webhooks import parse_meta_payload, verify_signature
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,50 @@ async def handle_webhook(request: web.Request) -> web.Response:
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
+
+
+async def handle_meta_verify(request: web.Request) -> web.Response:
+    """Подтверждение подписки: Meta ждёт обратно hub.challenge."""
+    social: SocialSettings = request.app['settings'].social
+    query = request.query
+    if (query.get("hub.mode") == "subscribe"
+            and social and query.get("hub.verify_token") == social.meta_verify_token):
+        return web.Response(text=query.get("hub.challenge", ""))
+    logger.warning("Meta webhook: неверный verify-токен")
+    return web.Response(status=403, text="forbidden")
+
+
+async def handle_meta_webhook(request: web.Request) -> web.Response:
+    """События WhatsApp, Instagram и Facebook — одной точкой входа.
+
+    Meta ждёт ответ за секунды и повторяет доставку при задержке, поэтому
+    отвечаем сразу, а разбор и отправку в чат делаем фоновой задачей.
+    """
+    social: SocialSettings = request.app['settings'].social
+    body = await request.read()
+    if not verify_signature(body, request.headers.get("X-Hub-Signature-256", ""),
+                            social.meta_app_secret if social else ""):
+        logger.warning("Meta webhook: подпись не сошлась")
+        return web.Response(status=403, text="bad signature")
+
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.warning(f"Meta webhook: тело не разобрано: {e}")
+        return web.Response(text="OK")
+
+    ptb: Application = request.app['ptb_app']
+    hub: SocialHub = ptb.bot_data.get(HUB_KEY)
+    admin_chat_id = ptb.bot_data.get(ADMIN_KEY)
+    if hub is None or admin_chat_id is None:
+        return web.Response(text="OK")
+
+    items = hub.seen.filter_new(parse_meta_payload(payload))
+    if items:
+        task = asyncio.create_task(deliver_items(ptb.bot, admin_chat_id, hub, items))
+        request.app['background'].add(task)
+        task.add_done_callback(request.app['background'].discard)
+    return web.Response(text="OK")
 
 
 async def on_startup(app: web.Application):
@@ -83,6 +129,11 @@ def setup_social(ptb: Application, settings: Settings,
         logger.warning("⚠️ JobQueue недоступна — автономный опрос соцсетей выключен")
         return
 
+    if social.meta_webhook_enabled:
+        logger.info("🔔 Webhook Meta включён: /social/meta (WhatsApp, Instagram, Facebook)")
+    else:
+        logger.info("ℹ️ META_VERIFY_TOKEN не задан — WhatsApp не сможет принимать сообщения")
+
     ptb.job_queue.run_repeating(
         poll_job, interval=social.poll_interval, first=20, name="social_poll",
     )
@@ -115,6 +166,10 @@ def create_app(settings: Settings) -> web.Application:
     web_app['bot'] = ptb.bot
     web_app['ptb_app'] = ptb
     web_app.router.add_post('/webhook', handle_webhook)
+    # Одна точка приёма для WhatsApp, Instagram и Facebook
+    web_app.router.add_get('/social/meta', handle_meta_verify)
+    web_app.router.add_post('/social/meta', handle_meta_webhook)
+    web_app['background'] = set()
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     return web_app

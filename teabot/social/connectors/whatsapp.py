@@ -1,7 +1,8 @@
 """WhatsApp Business Cloud API: исходящие сообщения и ответы.
 
-Входящие приходят на webhook Meta, а не по запросу, поэтому чтение
-не поддерживается: ответить можно на элемент, у которого thread_id —
+Входящие приходят на webhook Meta, а не по запросу, поэтому опроса здесь
+нет: события принимает `/social/meta` (см. teabot/social/webhooks.py) и
+кладёт их в общий поток хаба. Отвечаем на элемент, у которого thread_id —
 номер клиента в международном формате (WA_PHONE_ID, WA_TOKEN).
 """
 from ..base import CAP_REPLY, ConnectorError, HttpConnector

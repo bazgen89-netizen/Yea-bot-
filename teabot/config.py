@@ -44,6 +44,8 @@ class SocialSettings:
     poll_interval: int
     autopilot: bool
     state_path: str
+    meta_verify_token: str = ""
+    meta_app_secret: str = ""
     env: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -63,6 +65,8 @@ class SocialSettings:
             poll_interval=poll_interval,
             autopilot=_as_bool(env.get("SOCIAL_AUTOPILOT", "")),
             state_path=env.get("SOCIAL_STATE_PATH", "/tmp/teabot_social_seen.json"),
+            meta_verify_token=env.get("META_VERIFY_TOKEN", ""),
+            meta_app_secret=env.get("META_APP_SECRET", ""),
             env=dict(env),
         )
 
@@ -70,6 +74,11 @@ class SocialSettings:
     def polling_enabled(self) -> bool:
         """Автономный опрос имеет смысл только если известно, куда слать."""
         return self.admin_chat_id is not None
+
+    @property
+    def meta_webhook_enabled(self) -> bool:
+        """Meta подтверждает подписку только при заданном verify-токене."""
+        return bool(self.meta_verify_token)
 
 
 @dataclass(frozen=True)

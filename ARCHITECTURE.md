@@ -8,12 +8,14 @@ Telegram-бот, отвечающий на вопросы о китайском 
 2. [Поток обработки запроса](#поток-обработки-запроса)
 3. [Структура кода](#структура-кода)
 4. [Описание модулей](#описание-модулей)
-5. [Внешние зависимости](#внешние-зависимости)
-6. [Переменные окружения](#переменные-окружения)
-7. [Деплой](#деплой)
-8. [Решения для масштабируемости](#решения-для-масштабируемости)
-9. [Известные проблемы](#известные-проблемы)
-10. [Дорожная карта масштабирования](#дорожная-карта-масштабирования)
+5. [Два мозга: Groq + Gemini](#два-мозга-groq--gemini)
+6. [Единый центр соцсетей](#единый-центр-соцсетей)
+7. [Внешние зависимости](#внешние-зависимости)
+8. [Переменные окружения](#переменные-окружения)
+9. [Деплой](#деплой)
+10. [Решения для масштабируемости](#решения-для-масштабируемости)
+11. [Известные проблемы](#известные-проблемы)
+12. [Дорожная карта масштабирования](#дорожная-карта-масштабирования)
 
 ---
 
@@ -90,11 +92,22 @@ Yea-bot-/
 │   ├── http.py             # общая aiohttp.ClientSession на всё приложение
 │   ├── services/
 │   │   ├── search.py       # SerperClient — поиск (cn + ru параллельно) + кэш
-│   │   └── ai.py           # GroqClient — chat completions + health_check
+│   │   ├── ai.py           # GroqClient — chat completions + health_check
+│   │   ├── gemini.py       # GeminiClient — второй мозг, тот же интерфейс
+│   │   └── router.py       # AIRouter — основной мозг + подстраховка запасным
+│   ├── social/             # единый центр соцсетей (см. docs/SOCIAL.md)
+│   │   ├── models.py       # SocialItem, PublishResult — общий формат для всех сетей
+│   │   ├── base.py         # Connector / HttpConnector — контракт площадки
+│   │   ├── registry.py     # сборка коннекторов из переменных окружения
+│   │   ├── state.py        # SeenStore — память о показанных элементах
+│   │   ├── webhooks.py     # разбор событий Meta (WhatsApp, Instagram, Facebook)
+│   │   ├── hub.py          # SocialHub — чтение, ответы, кросспостинг
+│   │   └── connectors/     # VK, Telegram, OK, Meta, WhatsApp, Авито, Яндекс/Google Карты
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
+│   │   ├── social.py       # /social, /inbox, /post, /autopilot, фоновый опрос
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
@@ -109,6 +122,8 @@ flowchart TD
     E[bot.py — точка входа] --> W[webapp.py — сборка приложения]
     W --> HA[handlers/ — логика диалога]
     HA --> SV[services/ — внешние API]
+    HA --> SO[social/ — хаб соцсетей]
+    SO --> CN[connectors/ — VK, Авито, Карты, …]
     HA --> K[keyboards.py]
     SV --> CA[cache.py]
     SV --> CO[config.py / constants.py]
@@ -128,7 +143,11 @@ flowchart TD
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |
 | `teabot/services/ai.py` | Генерация ответов Groq (Llama 3.3 70B), обработка 429/401/таймаутов | `GroqClient.ask()`, `.health_check()` |
+| `teabot/services/gemini.py` | Второй мозг: Google Gemini с тем же интерфейсом | `GeminiClient.ask()`, `.health_check()` |
+| `teabot/services/router.py` | Выбор мозга и переход на запасной при сбое | `AIRouter.ask()`, `.switch()`, `is_error_answer()` |
+| `teabot/social/` | Единый хаб соцсетей: общий формат, коннекторы, кросспостинг | `SocialHub`, `Connector`, `SeenStore`, `build_connectors()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
+| `teabot/handlers/social.py` | Панель соцсетей, доставка входящих в админский чат, фоновый опрос | `social_cmd`, `deliver_items()`, `poll_job` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
 
@@ -136,13 +155,55 @@ flowchart TD
 
 Клиенты сервисов создаются один раз при старте (`webapp.on_startup`) и кладутся в `bot_data` PTB-приложения. Обработчики получают их через `get_search(ctx)` / `get_ai(ctx)` — глобальных переменных с состоянием нет, в тестах клиенты легко подменяются моками.
 
+## Два мозга: Groq + Gemini
+
+Основная модель отвечает первой, вторая подстраховывает: ответ с маркером
+ошибки (`⚠️` — нет ключа, rate limit, таймаут, пустой ответ) заставляет
+`AIRouter` повторить тот же запрос запасным мозгом. Подробности и настройка —
+в [docs/AI.md](docs/AI.md).
+
+- **Единый контракт.** У `GroqClient` и `GeminiClient` одинаковые
+  `ask(prompt, system="")`, `health_check()`, `name`, `model`, `available`,
+  поэтому `AIRouter` для обработчиков неотличим от обычного клиента —
+  остальной код о втором мозге не знает.
+- **Общая подстраховка.** Через роутер идут все обращения к AI, включая
+  автоответы в соцсетях.
+- **Переключение на лету.** `/brain gemini` меняет основной мозг,
+  `/second <вопрос>` спрашивает запасной для сравнения.
+- **Порядок по умолчанию** задаётся `AI_PRIMARY`; хватает ключа любого
+  одного мозга.
+
+## Единый центр соцсетей
+
+Все площадки бизнеса сведены в один Telegram-чат: входящие сообщения,
+комментарии и отзывы приходят карточками, ответ уходит обратно в ту же сеть,
+пост публикуется во все сети сразу. Подробности и настройка каждой
+площадки — в [docs/SOCIAL.md](docs/SOCIAL.md).
+
+- **Контракт вместо частных случаев.** Коннектор объявляет `capabilities`
+  (`inbox` / `reply` / `publish`) и реализует только то, что умеет площадка.
+  Хаб не вызывает недоступную операцию, поэтому Instagram без медиа и
+  WhatsApp без опроса не требуют условий в общей логике.
+- **Изоляция сбоев.** `fetch`/`publish` выполняются через `asyncio.gather(...,
+  return_exceptions=True)`: упавшая площадка попадает в `last_errors`
+  и показывается в `/social`, остальные работают.
+- **Дедупликация.** `SeenStore` помнит показанные элементы (файл
+  `SOCIAL_STATE_PATH`), поэтому один отзыв не приходит дважды.
+- **Автономность.** `JobQueue` опрашивает сети каждые `SOCIAL_POLL_INTERVAL`
+  секунд. При `SOCIAL_AUTOPILOT=on` ответ пишет Groq и отправляет сам,
+  кроме негативных отзывов — их хаб отдаёт человеку.
+- **Секреты только в окружении.** Площадка включается сама, когда заданы её
+  переменные; ключи в коде и в репозитории не хранятся.
+
 ## Внешние зависимости
 
 | Сервис | Назначение | Протокол |
 |---|---|---|
 | **Telegram Bot API** | Приём/отправка сообщений | Webhook (входящие) + HTTPS (исходящие), библиотека `python-telegram-bot` |
 | **Groq API** | LLM-генерация ответов (`llama-3.3-70b-versatile`) | OpenAI-совместимый REST, тайм-аут 30 с |
+| **Google Gemini API** | Второй мозг (`gemini-2.5-flash`), подстраховка при сбое Groq | REST `generateContent`, тайм-аут 30 с |
 | **Serper API** | Поиск Google (zh-cn и ru локали) | REST, тайм-аут 8 с, результаты кэшируются на 5 мин |
+| **API соцсетей** | VK, Telegram, OK, Meta (Facebook/Instagram/WhatsApp), Авито, Яндекс Бизнес, Google Business Profile | REST, тайм-аут 15 с, подключаются по переменным окружения |
 | **Render** | Хостинг, даёт `RENDER_EXTERNAL_URL` и `PORT` | — |
 
 ## Переменные окружения
@@ -150,10 +211,20 @@ flowchart TD
 | Переменная | Обязательна | Описание |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | ✅ да | Токен бота от @BotFather; без него приложение не стартует |
-| `GROQ_API_KEY` | нет | Ключ Groq; без него бот отвечает заглушкой «AI отключён» |
+| `GROQ_API_KEY` | нет | Ключ Groq; без него отвечает второй мозг |
+| `GEMINI_API_KEY` | нет | Ключ Google Gemini — второй мозг и подстраховка |
+| `GEMINI_MODEL` | нет | Модель Gemini, по умолчанию `gemini-2.5-flash` |
+| `AI_PRIMARY` | нет | Какой мозг отвечает первым: `groq` (по умолчанию) или `gemini` |
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |
+| `SOCIAL_ADMIN_CHAT_ID` | нет | Чат единого центра соцсетей; без него автономный опрос выключен |
+| `SOCIAL_POLL_INTERVAL` | нет | Период опроса площадок, секунды (по умолчанию 180) |
+| `SOCIAL_AUTOPILOT` | нет | `on` — отвечать в соцсетях автоматически |
+| `SOCIAL_STATE_PATH` | нет | Файл памяти о показанных входящих |
+| `META_VERIFY_TOKEN` | нет | Подтверждение подписки Meta; без него точка приёма `/social/meta` отключена |
+| `META_APP_SECRET` | нет | Проверка подписи событий Meta |
+| ключи площадок | нет | По одной группе переменных на сеть — см. [docs/SOCIAL.md](docs/SOCIAL.md) |
 
 ## Деплой
 

@@ -468,6 +468,34 @@ export function Cashier() {
       event.preventDefault();
       setPickingCustomer(true);
     }
+    /**
+     * Пробел — оплата. В его кассе это `HC("Space")` рядом с кнопкой
+     * продажи: `useEffect(() => { c > 0 && !disabled && showModal() })`.
+     * Пустой чек он не оплачивает, и мы тоже: `startPay` сам скажет, чего
+     * не хватает.
+     */
+    if (event.code === 'Space') {
+      event.preventDefault();
+      startPay();
+    }
+    /**
+     * Shift открывает меню. У него меню и вызывается им: цифры 1–6 внутри
+     * работают, пока Shift держат, — а показывать цифры, не умея открыть
+     * меню тем же пальцем, бессмысленно.
+     */
+    if (event.key === 'Shift') {
+      event.preventDefault();
+      setMenu(true);
+    }
+    /**
+     * Escape открывает выбор витрины — товары, категории, группы. Это его
+     * `case "Escape": setAnchor(ref.current)` у того же поля поиска, и тот
+     * же список, что под синим значком слева.
+     */
+    if (event.code === 'Escape') {
+      event.preventDefault();
+      setBrowseMenu(true);
+    }
   });
 
   const startPay = () => {

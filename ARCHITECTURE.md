@@ -90,15 +90,26 @@ Yea-bot-/
 │   ├── http.py             # общая aiohttp.ClientSession на всё приложение
 │   ├── services/
 │   │   ├── search.py       # SerperClient — поиск (cn + ru параллельно) + кэш
-│   │   └── ai.py           # GroqClient — chat completions + health_check
+│   │   ├── ai.py           # GroqClient — chat completions + health_check
+│   │   ├── vpn.py          # VpnManager — выдача/отзыв ключей VLESS+Reality
+│   │   ├── happ.py         # форматы клиента Happ: routing-профиль, подписка
+│   │   ├── rules.py        # загрузка групп сервисов и страновых профилей
+│   │   └── qr.py           # QR-код ссылки (опциональная зависимость)
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
+│   │   ├── vpn.py          # /vpn, /vpn_new, /vpn_list, /vpn_revoke
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
+│   ├── subscription.py     # GET /sub/{token} — подписка для Happ и др. клиентов
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
 ├── tests/                  # unit-тесты (без сети)
+├── vpn/                    # VPN-подсистема, см. vpn/README.md
+│   ├── docker-compose.yml  # Xray (VLESS + Reality)
+│   ├── config/profiles/    # страновые профили маршрутизации (ru, ir, by, cn)
+│   ├── data/services.json  # группы иностранных сервисов для whitelist
+│   └── tools/              # install.sh, geofw.sh, генераторы конфигов
 └── .github/workflows/main.yml  # ⚠️ см. «Известные проблемы»
 ```
 
@@ -128,6 +139,10 @@ flowchart TD
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |
 | `teabot/services/ai.py` | Генерация ответов Groq (Llama 3.3 70B), обработка 429/401/таймаутов | `GroqClient.ask()`, `.health_check()` |
+| `teabot/services/vpn.py` | Ключи VPN: JSON-хранилище, `vless://`-ссылки, перезапуск Xray | `VpnManager.issue()`, `.revoke()`, `VpnServer.link()` |
+| `teabot/services/happ.py` | Форматы Happ: routing-профиль, deep link, тело и заголовки подписки | `build_routing_profile()`, `routing_deeplink()`, `subscription_body()` |
+| `teabot/services/rules.py` | Общие загрузчики групп сервисов и страновых профилей | `load_services()`, `load_profile()`, `collect_domains()` |
+| `teabot/subscription.py` | Эндпоинт подписки `/sub/{token}` | `handle_subscription()`, `build_routing_link()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
@@ -154,12 +169,87 @@ flowchart TD
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |
+| `VPN_HOST`, `VPN_PORT` | нет | Адрес VPN-сервера; без `VPN_HOST` VPN-команды отвечают «не настроен» |
+| `REALITY_PUBLIC_KEY`, `REALITY_SNI`, `REALITY_SHORT_IDS` | нет | Параметры Reality для `vless://`-ссылок (см. `vpn/.env.example`) |
+| `VPN_ADMINS` | нет | ID администраторов через запятую — кому разрешено выдавать ключи |
+| `VPN_USERS_PATH` | нет | Путь к `users.json`, по умолчанию `vpn/data/users.json` |
+| `VPN_RELOAD_CMD` | нет | Команда применения конфига на VPN-ноде (`vpn/tools/apply.sh`) |
+| `VPN_PROFILE` | нет | Профиль маршрутизации, который уходит в подписку, по умолчанию `ru` |
+| `VPN_SUB_TITLE` | нет | Имя подписки в клиенте, по умолчанию `VPN` (Happ обрезает до 25 символов) |
 
 ## Деплой
 
 - **Платформа**: Render (web service). Команда запуска — `python bot.py` (не менялась при рефакторинге).
 - **Старт**: `webapp.main()` валидирует настройки → собирает приложение → на `on_startup` создаёт HTTP-сессию и клиентов, инициализирует PTB и регистрирует webhook `{RENDER_EXTERNAL_URL}/webhook`.
 - **Остановка**: `on_shutdown` останавливает PTB и закрывает HTTP-сессию.
+
+## VPN-подсистема
+
+Отдельный контур в каталоге `vpn/`: он не зависит от бота и разворачивается на
+своём сервере. Бот — только интерфейс выдачи ключей.
+
+```mermaid
+flowchart LR
+    A[👤 Админ] -->|/vpn_new| B[teabot/handlers/vpn.py]
+    B --> C[VpnManager<br/>services/vpn.py]
+    C -->|атомарная запись| D[(vpn/data/users.json)]
+    C -->|VPN_RELOAD_CMD| E[vpn/tools/apply.sh]
+    E --> F[gen_server_config.py]
+    F --> G[config/xray-server.json]
+    E -->|docker compose restart| X[Xray<br/>VLESS + Reality]
+    D -.читает.-> F
+    U[👤 Пользователь] -->|vless://| X
+    X -.гео-фильтр nftables.-> N[(списки CIDR<br/>ipdeny.com)]
+```
+
+### Подписка для клиента
+
+`GET /sub/{token}` на том же aiohttp-сервере, что и webhook. Клиент опрашивает
+адрес раз в 12 часов и получает ключ вместе с правилами маршрутизации, так что
+при отзыве ключа или правке белого списка ничего переустанавливать не нужно.
+
+```mermaid
+sequenceDiagram
+    participant H as Happ
+    participant B as Бот (/sub/{token})
+    participant D as users.json
+    H->>B: GET /sub/{token}
+    B->>D: найти активный ключ по токену
+    D-->>B: uuid, label
+    B-->>H: profile-title, profile-update-interval,<br/>routing: happ://routing/onadd/{base64},<br/>vless://...
+    Note over H: применяет белый список<br/>и подключается
+```
+
+Формат — по [документации Happ](https://www.happ.su/main/dev-docs/): параметры
+идут и в HTTP-заголовках, и строками тела с префиксом `#`, потому что часть
+клиентов читает только тело. Routing-профиль собирается один раз при старте:
+у него есть поле `LastUpdated`, и пересборка на каждый запрос заставляла бы
+клиент постоянно перекачивать гео-базы.
+
+Токен подписки (`sub_token`) хранится в записи ключа отдельно от `uuid` — адрес
+подписки можно сменить, не выпуская новый ключ. Неизвестный и отозванный токен
+дают одинаковый 404, чтобы перебор не отличал одно от другого.
+
+Два независимых «белых списка»:
+
+1. **Split tunnel по доменам (клиент).** `gen_client_config.py` собирает
+   маршрутизацию из групп сервисов (`data/services.json`) и странового профиля
+   (`config/profiles/*.json`): иностранные сервисы — в туннель, локальные
+   домены и `geoip` страны — напрямую. Последнее правило конфига — «всё
+   остальное напрямую», поэтому список именно белый.
+2. **Гео-фильтр по странам (сервер).** `geofw.sh` строит в nftables наборы
+   CIDR разрешённых стран и открывает порт VPN только для них. Правила
+   ограничены портом VPN, поэтому потерять SSH-доступ нельзя.
+
+Для Happ первый список отдаётся готовым профилем: `GlobalProxy: "false"` делает
+выходом по умолчанию direct, а в туннель уходит только то, что перечислено в
+`ProxySites`.
+
+Ключи хранятся в JSON с блокировкой и атомарной подменой файла; отозванные
+записи помечаются `revoked`, а не удаляются. Xray не перечитывает конфиг на
+лету — после каждого изменения контейнер перезапускается.
+
+Подробности, установка и разбор проблем — `vpn/README.md`.
 
 ## Решения для масштабируемости
 

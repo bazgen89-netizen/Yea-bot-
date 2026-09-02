@@ -1,0 +1,15 @@
+services:
+  xray:
+    image: ghcr.io/xtls/xray-core:latest
+    container_name: vpn-xray
+    restart: unless-stopped
+    # host-сеть: порт берётся прямо из конфига, не нужен проброс и NAT.
+    network_mode: host
+    command: ["run", "-c", "/etc/xray/config.json"]
+    volumes:
+      - ./config/xray-server.json:/etc/xray/config.json:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

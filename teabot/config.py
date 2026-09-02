@@ -44,6 +44,7 @@ class Settings:
     vpn_profile: str
     vpn_users_path: str
     vpn_reload_cmd: str
+    vpn_sub_title: str
     groq_model: str = GROQ_MODEL
 
     @classmethod
@@ -58,6 +59,8 @@ class Settings:
             vpn_profile=os.getenv("VPN_PROFILE", "ru"),
             vpn_users_path=os.getenv("VPN_USERS_PATH", VPN_USERS_PATH),
             vpn_reload_cmd=os.getenv("VPN_RELOAD_CMD", ""),
+            # Happ обрезает имя подписки до 25 символов
+            vpn_sub_title=os.getenv("VPN_SUB_TITLE", "VPN")[:25],
         )
 
     def validate(self) -> None:

@@ -8,6 +8,7 @@
 Примеры:
     python3 vpn/tools/gen_client_config.py --profile ru --link "vless://..." -o out/
     python3 vpn/tools/gen_client_config.py --profile ir --groups ai,dev --format singbox
+    python3 vpn/tools/gen_client_config.py --profile ru --format happ
     python3 vpn/tools/gen_client_config.py --profile ru --format domains
 """
 from __future__ import annotations
@@ -18,58 +19,19 @@ import sys
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-ROOT = Path(__file__).resolve().parent.parent
-SERVICES_PATH = ROOT / "data" / "services.json"
-PROFILES_DIR = ROOT / "config" / "profiles"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from teabot.services.happ import build_routing_profile, routing_deeplink  # noqa: E402
+from teabot.services.rules import (  # noqa: E402
+    collect_domains, dedup, load_profile, load_services,
+)
 
 SINGBOX_RULESET_BASE = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set"
 
 PROXY_TAG = "proxy"
 DIRECT_TAG = "direct"
 BLOCK_TAG = "block"
-
-
-# --------------------------------------------------------------------------- #
-# Загрузка данных
-# --------------------------------------------------------------------------- #
-
-def load_services(path: Path = SERVICES_PATH) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))["groups"]
-
-
-def load_profile(name: str, profiles_dir: Path = PROFILES_DIR) -> dict:
-    path = profiles_dir / f"{name}.json"
-    if not path.exists():
-        available = ", ".join(sorted(p.stem for p in profiles_dir.glob("*.json")))
-        raise SystemExit(f"Профиль '{name}' не найден. Доступные: {available}")
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def collect_domains(profile: dict, services: dict, groups: list[str] | None = None,
-                    with_geosite: bool = False) -> tuple[list[str], list[str]]:
-    """Возвращает (домены для проксирования, теги geosite для проксирования)."""
-    wanted = groups if groups is not None else profile.get("groups", [])
-    domains: list[str] = []
-    geosite: list[str] = []
-    for name in wanted:
-        group = services.get(name)
-        if group is None:
-            raise SystemExit(f"Неизвестная группа сервисов: {name}")
-        domains.extend(group.get("domains", []))
-        if with_geosite:
-            geosite.extend(group.get("geosite", []))
-    return dedup(domains), dedup(geosite)
-
-
-def dedup(items: list[str]) -> list[str]:
-    """Уникальные значения с сохранением порядка."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -278,6 +240,19 @@ def build(args) -> dict[str, str]:
     if args.format in ("singbox", "all"):
         cfg = singbox_config(profile, domains, geosite, server, args.socks_port)
         out[f"singbox-client-{args.profile}.json"] = json.dumps(cfg, ensure_ascii=False, indent=2)
+    if args.format in ("happ", "all"):
+        direct = profile.get("direct", {})
+        happ_profile = build_routing_profile(
+            name=args.happ_name or f"Whitelist {profile.get('country', args.profile.upper())}",
+            proxy_domains=domains,
+            proxy_geosite=geosite,
+            direct_domains=list(direct.get("domains", []))
+            + [f"geosite:{g}" for g in direct.get("geosite", [])],
+            direct_ip=[f"geoip:{c}" for c in direct.get("geoip", []) if c != "private"],
+        )
+        out[f"happ-routing-{args.profile}.json"] = json.dumps(
+            happ_profile, ensure_ascii=False, indent=2)
+        out[f"happ-routing-{args.profile}.link.txt"] = routing_deeplink(happ_profile) + "\n"
     if args.format in ("domains", "all"):
         out[f"proxy-domains-{args.profile}.txt"] = "\n".join(domains) + "\n"
     return out
@@ -288,7 +263,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--profile", default="ru", help="страновой профиль (ru, ir, by, cn, global)")
     p.add_argument("--groups", help="список групп через запятую (по умолчанию — из профиля)")
     p.add_argument("--link", help="vless://-ссылка сервера; без неё генерируется шаблон без outbound")
-    p.add_argument("--format", default="all", choices=["xray", "singbox", "domains", "all"])
+    p.add_argument("--format", default="all",
+                   choices=["xray", "singbox", "happ", "domains", "all"])
+    p.add_argument("--happ-name", help="имя routing-профиля в Happ (обновляется по имени)")
     p.add_argument("--with-geosite", action="store_true",
                    help="добавить теги geosite:* (нужен geosite.dat, иначе конфиг не загрузится)")
     p.add_argument("--socks-port", type=int, default=10808)
@@ -296,7 +273,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-o", "--out", help="каталог для файлов; без него — вывод в stdout")
     args = p.parse_args(argv)
 
-    files = build(args)
+    try:
+        files = build(args)
+    except ValueError as e:
+        raise SystemExit(str(e))
     if not args.out:
         for name, content in files.items():
             if len(files) > 1:

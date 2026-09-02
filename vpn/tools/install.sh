@@ -77,8 +77,10 @@ echo "✅ .env записан (права 600 — там приватный кл
 mkdir -p data
 if [[ ! -s data/users.json ]]; then
   FIRST_UUID="$(cat /proc/sys/kernel/random/uuid)"
+  # Токен подписки: тот же алфавит, что у secrets.token_urlsafe в боте.
+  SUB_TOKEN="$(openssl rand -base64 16 | tr '+/' '-_' | tr -d '=')"
   cat > data/users.json <<EOF
-{"users": [{"uuid": "$FIRST_UUID", "label": "admin", "tg_id": null, "created_at": null}]}
+{"users": [{"uuid": "$FIRST_UUID", "sub_token": "$SUB_TOKEN", "label": "admin", "tg_id": null, "created_at": null}]}
 EOF
 fi
 
@@ -111,8 +113,12 @@ $LINK
 Конфиг клиента с whitelist-маршрутизацией:
   python3 tools/gen_client_config.py --profile ru --link "$LINK" -o out/
 
+Для Happ — routing-профиль одной ссылкой:
+  python3 tools/gen_client_config.py --profile ru --format happ
+
 Дальше:
   • Ключи ботом:  VPN_ADMINS=<ваш tg id> в окружении бота
+    Тогда /vpn_new пришлёт ссылку подписки и QR для Happ
   • Добавить ключ вручную: правьте data/users.json → ./tools/apply.sh
   • Снять гео-фильтр:      ./tools/geofw.sh --flush
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

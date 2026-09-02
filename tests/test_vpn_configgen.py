@@ -80,13 +80,34 @@ def test_geosite_tags_only_with_flag():
 
 def test_unknown_group_fails_loudly():
     services = gen_client.load_services()
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         gen_client.collect_domains({}, services, groups=["нет-такой"])
 
 
 def test_unknown_profile_fails_loudly():
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         gen_client.load_profile("нет-такого")
+
+
+def test_cli_turns_bad_profile_into_exit_code():
+    with pytest.raises(SystemExit):
+        gen_client.main(["--profile", "нет-такого"])
+
+
+def test_happ_format_is_produced():
+    files = gen_client.main.__globals__["build"](
+        _Args(profile="ru", groups=None, link=LINK, format="happ",
+              with_geosite=False, socks_port=10808, http_port=10809,
+              happ_name="Тест", out=None))
+    assert "happ-routing-ru.json" in files
+    profile = json.loads(files["happ-routing-ru.json"])
+    assert profile["Name"] == "Тест" and profile["GlobalProxy"] == "false"
+    assert files["happ-routing-ru.link.txt"].startswith("happ://routing/onadd/")
+
+
+class _Args:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
 
 
 def test_singbox_config_declares_rulesets_for_geosite():

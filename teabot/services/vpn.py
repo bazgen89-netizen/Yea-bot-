@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import uuid as uuid_lib
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from urllib.parse import quote
 logger = logging.getLogger(__name__)
 
 RELOAD_TIMEOUT = 60
+SUB_TOKEN_BYTES = 16
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,9 @@ class VpnManager:
 
             user = {
                 "uuid": str(uuid_lib.uuid4()),
+                # Токен подписки живёт отдельно от uuid, чтобы менять адрес
+                # подписки, не выпуская новый ключ.
+                "sub_token": secrets.token_urlsafe(SUB_TOKEN_BYTES),
                 "label": label,
                 "tg_id": tg_id,
                 "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -155,6 +160,34 @@ class VpnManager:
             self._write(users)
 
         return True, await self._reload()
+
+    async def find_by_token(self, token: str) -> dict | None:
+        """Ищет активный ключ по токену подписки (для эндпоинта /sub/<token>)."""
+        if not token:
+            return None
+        async with self._lock:
+            users = self._read()
+        # compare_digest принимает строки только из ASCII, а токен приходит
+        # из URL и может быть любым, — сравниваем в байтах.
+        wanted = token.encode("utf-8")
+        return next(
+            (u for u in users
+             if not u.get("revoked")
+             and secrets.compare_digest(u.get("sub_token", "").encode("utf-8"), wanted)),
+            None,
+        )
+
+    async def ensure_token(self, key_uuid: str) -> str:
+        """Токен подписки для ключа; выдаёт новый, если его ещё нет."""
+        async with self._lock:
+            users = self._read()
+            user = next((u for u in users if u["uuid"] == key_uuid), None)
+            if user is None:
+                return ""
+            if not user.get("sub_token"):
+                user["sub_token"] = secrets.token_urlsafe(SUB_TOKEN_BYTES)
+                self._write(users)
+            return user["sub_token"]
 
     def link(self, user: dict) -> str:
         return self.server.link(user["uuid"], user.get("label", "vpn"))

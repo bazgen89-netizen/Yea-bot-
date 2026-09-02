@@ -1,0 +1,15 @@
+{
+  "country": "BY",
+  "title": "Беларусь",
+  "description": "Иностранные сервисы — через VPN, белорусские и российские ресурсы — напрямую.",
+  "groups": ["ai", "social", "messengers", "media", "google", "dev", "news", "shops", "privacy"],
+  "direct": {
+    "domains": [
+      "domain:by", "domain:xn--90ais", "domain:ru", "domain:su",
+      "domain:onliner.by", "domain:kufar.by", "domain:belarusbank.by",
+      "domain:tut.by", "domain:banki24.by", "domain:mts.by", "domain:a1.by",
+      "domain:yandex.by", "domain:yandex.ru", "domain:vk.com", "domain:mail.ru"
+    ],
+    "geoip": ["by", "ru", "private"]
+  }
+}

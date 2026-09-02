@@ -6,10 +6,10 @@ from telegram import Update
 from telegram.ext import Application
 
 from .cache import TTLCache
-from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
-from .handlers import register_handlers, SEARCH_KEY, AI_KEY
+from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE, VPN_MAX_KEYS_PER_USER
+from .handlers import register_handlers, SEARCH_KEY, AI_KEY, VPN_KEY
 from .http import create_session, close_session
-from .services import GroqClient, SerperClient
+from .services import GroqClient, SerperClient, VpnManager, VpnServer
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,20 @@ async def on_startup(app: web.Application):
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
     ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
+
+    # VPN-модуль поднимается только если задан сервер; иначе команды отвечают,
+    # что он не настроен, и остальной бот работает как раньше.
+    vpn_server = VpnServer.from_env()
+    if vpn_server.configured:
+        ptb.bot_data[VPN_KEY] = VpnManager(
+            vpn_server, settings.vpn_users_path,
+            reload_cmd=settings.vpn_reload_cmd,
+            max_keys_per_user=VPN_MAX_KEYS_PER_USER,
+        )
+        logger.info(f"VPN: {vpn_server.host}:{vpn_server.port}, "
+                    f"админов: {len(settings.vpn_admins)}")
+    ptb.bot_data["vpn_admins"] = set(settings.vpn_admins)
+    ptb.bot_data["vpn_profile"] = settings.vpn_profile
 
     await ptb.initialize()
     await ptb.start()

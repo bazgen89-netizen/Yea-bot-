@@ -1,4 +1,4 @@
-import type { SqlDriver } from './driver';
+import type { SqlDriver, SqlParam } from './driver';
 import { currentStaffId } from './staff';
 import { DOC_KIND_TYPE, type DocKind, type DocLine, type DocType, type Id, type StockMove } from '../domain/types';
 
@@ -520,4 +520,191 @@ export function listDocs(db: SqlDriver, limit = 50): DocSummary[] {
      LIMIT ?`,
     [limit],
   );
+}
+
+/**
+ * Движение товара по одному товару — его вкладка «История движения».
+ *
+ * Колонки взяты из их же шаблона
+ * (`js/pages/card/catalog/show/blocks/history.html`): дата, документ с
+ * автором под ним, себестоимость, цена, приход, расход и остаток после
+ * движения. Приход и расход — две отдельные колонки, а не одно число со
+ * знаком: так в кабинете видно, чего у товара было больше.
+ *
+ * Отбор — тот же, что и у него в этой вкладке: дата, магазин, тип
+ * документа, сотрудник. И та же листалка «показать еще» по двадцать строк.
+ */
+export interface ProductMove {
+  id: Id;
+  created_at: string;
+  /** Сколько прибавилось или убавилось, тысячные. */
+  qty_delta: number;
+  /** Остаток после этого движения, тысячные. */
+  qty_after: number;
+  /** Цена движения, копейки. */
+  price: number;
+  /** Себестоимость на момент чека. У складских документов её нет. */
+  cost: number | null;
+  /** Вид документа — им строка и подписана: «Продажа #45967». */
+  kind: JournalMoveKind;
+  /** Номер документа или чека — свой, если он есть. */
+  number: number | null;
+  /** Чем открыть: чек или складской документ. */
+  sale_id: Id | null;
+  doc_id: Id | null;
+  location_name: string | null;
+  author: string | null;
+}
+
+/** Виды, которыми подписана строка истории. Те же, что в журнале. */
+export type JournalMoveKind = DocKind | 'refund';
+
+export interface ProductMovesFilter {
+  from?: string;
+  to?: string;
+  location?: string;
+  kind?: JournalMoveKind;
+  author?: string;
+}
+
+/**
+ * Как собирается остаток после движения.
+ *
+ * Не хранится — считается тем же способом, что и весь остаток: суммой
+ * движений по этот момент включительно. Пара «время, номер строки» нужна
+ * потому, что за одну секунду движений бывает несколько: у чека на пять
+ * позиций время у всех пяти одно.
+ *
+ * Магазин — единственный отбор, который в этот подсчёт входит: остаток по
+ * магазину и остаток по всем магазинам — разные числа, и подписывать одно
+ * другим нельзя. Отбор по виду документа в подсчёт не входит вовсе: остаток
+ * не зависит от того, что мы решили показать.
+ */
+function movesWhere(filter: ProductMovesFilter): { sql: string; params: SqlParam[] } {
+  const where: string[] = [];
+  const params: SqlParam[] = [];
+
+  if (filter.from) {
+    where.push('date(m.created_at) >= ?');
+    params.push(filter.from);
+  }
+  if (filter.to) {
+    where.push('date(m.created_at) <= ?');
+    params.push(filter.to);
+  }
+  if (filter.location) {
+    where.push('(SELECT l.name FROM locations l WHERE l.id = m.location_id) = ?');
+    params.push(filter.location);
+  }
+  if (filter.author) {
+    where.push(`COALESCE(
+      (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+      (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
+      s.author
+    ) = ?`);
+    params.push(filter.author);
+  }
+  if (filter.kind) {
+    where.push(`CASE
+      WHEN m.sale_id IS NOT NULL
+        THEN (CASE WHEN s.is_return = 1 THEN 'refund' ELSE 'sale' END)
+      ELSE ${KIND_SQL} END = ?`);
+    params.push(filter.kind);
+  }
+
+  return { sql: where.length ? `AND ${where.join(' AND ')}` : '', params };
+}
+
+export function productMoves(
+  db: SqlDriver,
+  productId: Id,
+  filter: ProductMovesFilter = {},
+  limit = 20,
+  offset = 0,
+): ProductMove[] {
+  const { sql, params } = movesWhere(filter);
+
+  return db.all<ProductMove>(
+    `SELECT m.id, m.created_at, m.qty_delta, m.price,
+            -- Остаток после движения: сумма всех движений по этот момент.
+            (SELECT COALESCE(SUM(e.qty_delta), 0) FROM stock_moves e
+              WHERE e.product_id = m.product_id
+                ${filter.location ? 'AND e.location_id = m.location_id' : ''}
+                AND (e.created_at < m.created_at
+                     OR (e.created_at = m.created_at AND e.id <= m.id))) AS qty_after,
+            -- Себестоимость записана в строке чека: у складского документа
+            -- её нет вовсе, и подставлять нынешнюю из карточки нельзя —
+            -- она к тому дню не имеет отношения.
+            (SELECT i.cost_price FROM sale_items i
+              WHERE i.sale_id = m.sale_id AND i.product_id = m.product_id
+              LIMIT 1)                                                    AS cost,
+            CASE WHEN m.sale_id IS NOT NULL
+                 THEN (CASE WHEN s.is_return = 1 THEN 'refund' ELSE 'sale' END)
+                 ELSE ${KIND_SQL} END                                     AS kind,
+            COALESCE(s.number, CAST(NULLIF(d.number, '') AS INTEGER))     AS number,
+            m.sale_id, m.doc_id,
+            (SELECT l.name FROM locations l WHERE l.id = m.location_id)   AS location_name,
+            COALESCE(
+              (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+              (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
+              s.author
+            )                                                             AS author
+       FROM stock_moves m
+       LEFT JOIN docs  d ON d.id = m.doc_id
+       LEFT JOIN sales s ON s.id = m.sale_id
+      WHERE m.product_id = ? ${sql}
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT ? OFFSET ?`,
+    [productId, ...params, limit, offset],
+  );
+}
+
+/** Сколько всего движений у товара — его «Всего документов: 128». */
+export function productMovesCount(
+  db: SqlDriver,
+  productId: Id,
+  filter: ProductMovesFilter = {},
+): number {
+  const { sql, params } = movesWhere(filter);
+
+  return (
+    db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n
+         FROM stock_moves m
+         LEFT JOIN docs  d ON d.id = m.doc_id
+         LEFT JOIN sales s ON s.id = m.sale_id
+        WHERE m.product_id = ? ${sql}`,
+      [productId, ...params],
+    )?.n ?? 0
+  );
+}
+
+/** Что предложить в отборе истории: магазины и сотрудники этого товара. */
+export function productMoveOptions(
+  db: SqlDriver,
+  productId: Id,
+): { locations: string[]; authors: string[] } {
+  const list = (sql: string) =>
+    db
+      .all<{ value: string | null }>(sql, [productId])
+      .map((row) => row.value)
+      .filter((value): value is string => Boolean(value?.trim()));
+
+  return {
+    locations: list(
+      `SELECT DISTINCT (SELECT l.name FROM locations l WHERE l.id = m.location_id) AS value
+         FROM stock_moves m WHERE m.product_id = ? ORDER BY value COLLATE NOCASE`,
+    ),
+    authors: list(
+      `SELECT DISTINCT COALESCE(
+                (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+                (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
+                s.author
+              ) AS value
+         FROM stock_moves m
+         LEFT JOIN docs  d ON d.id = m.doc_id
+         LEFT JOIN sales s ON s.id = m.sale_id
+        WHERE m.product_id = ? ORDER BY value COLLATE NOCASE`,
+    ),
+  };
 }

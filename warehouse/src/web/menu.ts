@@ -1,6 +1,7 @@
 import type { Href } from 'expo-router';
 
 import { reportById } from '../db/reportTypes';
+import { DOC_KIND_LABEL } from '../domain/types';
 import type { Permission } from '../domain/permissions';
 import type { WebIcon } from '../ui/icons';
 
@@ -121,13 +122,15 @@ export const MENU_FOOTER: MenuEntry[] = [
   { label: 'Партнерская программа', icon: 'partners', href: '/partners' },
 ];
 
-/** Название документа в заголовке — то же, что на кнопке в списке создания. */
+/**
+ * Название документа в заголовке — то же, что на кнопке в списке создания.
+ *
+ * Складские виды берутся из общего словаря: свой список рядом с ним рано
+ * или поздно разойдётся — в нём уже не хватало инвентаризации и
+ * корректировки, и такой документ подписывался «Закупка».
+ */
 const DOC_TITLE: Record<string, string> = {
-  purchase: 'Закупка',
-  purchase_return: 'Возврат закупки',
-  stock_in: 'Оприходование',
-  writeoff: 'Списание',
-  transfer: 'Перемещение',
+  ...DOC_KIND_LABEL,
   income: 'Приход',
   expense: 'Расход',
   transfer_money: 'Перевод',
@@ -147,7 +150,15 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
     return `Движение денег / ${label ?? 'создание'}`;
   }
   if (pathname.startsWith('/doc')) {
-    return `Движение товара / ${DOC_TITLE[kind ?? 'purchase'] ?? 'создание'}`;
+    // Вид известен только когда его передали адресом — при создании
+    // документа и при переходе из истории товара. У открытого по ссылке
+    // документа вида в адресе нет, и подставлять сюда «Закупка» нельзя:
+    // корректировка открывалась подписанной закупкой. Заголовок обязан
+    // молчать о том, чего не знает.
+    if (kind) return `Движение товара / ${DOC_TITLE[kind] ?? 'документ'}`;
+    return pathname.startsWith('/doc/new')
+      ? 'Движение товара / создание'
+      : 'Движение товара / документ';
   }
   // Страница денежного документа. Название — их же: состояние
   // `card.money_show` подписано `VIEW_ORDER`, а это в их словаре

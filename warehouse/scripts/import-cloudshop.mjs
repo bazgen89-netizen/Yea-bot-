@@ -413,6 +413,10 @@ const prices = await costPrices(value('since', SINCE));
 async function costPrices(since) {
   const cost = new Map();
   const purchase = new Map();
+  // Сами документы корректировки — их же и показывает журнал. Раньше я
+  // проходил их только ради цен и выбрасывал: движение товара оставалось
+  // одними чеками, хотя в кабинете половина строк — корректировки.
+  const changes = [];
   let documents = 0;
 
   let to = new Date();
@@ -433,6 +437,8 @@ async function costPrices(since) {
       documents += rows.length;
 
       for (const document of rows) {
+        changes.push(document);
+
         for (const line of document.line_items ?? []) {
           const prices = line.legacy_line?.prices;
           const id = line.id ?? line.legacy_line?._id;
@@ -451,7 +457,7 @@ async function costPrices(since) {
   }
 
   process.stdout.write('\n');
-  return { cost, purchase };
+  return { cost, purchase, changes };
 }
 
 /**
@@ -521,7 +527,107 @@ const products = [
   ...(Array.isArray(rawDeleted) ? rawDeleted.map((item) => card(item, true)) : []),
 ];
 
+/**
+ * Чем строка чека опознаётся в справочнике.
+ *
+ * У нас товар ищется кодом, а в чеке лежит карточка целиком — и код в ней
+ * есть не всегда: у половины строк заполнен только артикул. Поэтому
+ * собираем несколько подходов к одному и тому же товару и пробуем их по
+ * очереди, от самого надёжного к самому приблизительному.
+ */
+// Снятые с продажи тоже считаются известными: их карточки теперь
+// переносятся, и строка чека трёхлетней давности находит настоящий товар,
+// а не заглушку с одним названием.
+const catalog = [...rawProducts, ...(Array.isArray(rawDeleted) ? rawDeleted : [])];
+const known = new Set(catalog.map((item) => item.code).filter(Boolean));
+const codeById = new Map();
+const codeBySku = new Map();
+const codeByBarcode = new Map();
+const codeByName = new Map();
+
+for (const item of catalog) {
+  if (!item.code) continue;
+  codeById.set(item.id, item.code);
+  if (item.sku) codeBySku.set(String(item.sku).trim(), item.code);
+  if (item.barcode) codeByBarcode.set(String(item.barcode).trim(), item.code);
+
+  const name = (item.options?.name ?? '').trim();
+  if (name && !codeByName.has(name)) codeByName.set(name, item.code);
+}
+
+/**
+ * Первое попадание из всего, что известно о строке.
+ *
+ * Названа не `resolve`: так называется разбор путей из `node:path`, и на
+ * верхнем уровне файла эти два имени сталкиваются.
+ */
+const codeOf = (product, line, name) => {
+  const code = product.code ? String(product.code).trim() : null;
+  if (code && known.has(code)) return code;
+
+  const sku = product.sku ? String(product.sku).trim() : null;
+  const barcode = product.barcode ? String(product.barcode).trim() : null;
+
+  return (
+    (sku && codeBySku.get(sku)) ||
+    (barcode && codeByBarcode.get(barcode)) ||
+    codeById.get(line.product_id) ||
+    codeByName.get(name) ||
+    // Товара в справочнике больше нет — оставляем код как есть: строка
+    // всё равно не найдётся, но по коду понятно, чего не хватает.
+    code ||
+    sku ||
+    null
+  );
+};
+
 writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
+
+/**
+ * Корректировки — складские документы журнала.
+ *
+ * У него склад ведётся именно ими: раздел закупок в кабинете пуст
+ * (`/documents/purchases` отдаёт ноль строк за все годы), а корректировок
+ * — тысячи. Пока я их выбрасывал, движение товара состояло из одних чеков.
+ *
+ * Пишутся здесь, а не вместе с историей: пройдены они уже выше, ради цен, —
+ * второй раз гонять те же годы незачем.
+ */
+const changeDocs = (prices.changes ?? []).map((doc) => ({
+  k: 'adjustment',
+  at: doc.processed_at ?? doc.created_at ?? null,
+  no: doc.order_number ?? null,
+  st: storeName.get(doc.location_id) ?? null,
+  cp: null,
+  cm: (doc.note ?? doc.comment ?? '').trim() || null,
+  au: (doc.actor?.name ?? '').trim() || null,
+  ok: doc.document_flags?.status === false ? 0 : 1,
+  ln: (doc.line_items ?? []).map((line) => {
+    const inner = line.legacy_line ?? {};
+    const product = inner.product ?? {};
+    const name = (product.name ?? line.title ?? '').trim();
+    // Кода в строке корректировки нет — только артикул: ищем товар тем же
+    // способом, что и строку чека.
+    const code = codeOf(product, line, name);
+
+    return {
+      code,
+      n: known.has(code) ? null : name || null,
+      // Знак сохраняем: корректировка бывает и в плюс, и в минус, и по
+      // нему в истории товара строка попадает в «Приход» или «Расход».
+      q: milli(inner.qty ?? line.quantity ?? 0),
+      p: kopecks(inner.price ?? line.price ?? 0),
+    };
+  }),
+}));
+
+console.log(`  корректировок в журнал: ${changeDocs.length}`);
+
+// Без истории складские документы всё равно должны лечь на место: склад у
+// него ведётся корректировками, и без них журнал снова окажется пустым.
+if (flag('no-history')) {
+  writeFileSync(`${out}/docs.json`, JSON.stringify(mergeDocs(changeDocs), skipEmpty));
+}
 
 // --- клиенты --------------------------------------------------------------
 
@@ -597,55 +703,6 @@ if (!flag('no-history')) {
   // чеками, а из выручки вычитаются.
   const refunds = cap === Infinity ? await returns(value('since', SINCE)) : [];
 
-  /**
-   * Чем строка чека опознаётся в справочнике.
-   *
-   * У нас товар ищется кодом, а в чеке лежит карточка целиком — и код в ней
-   * есть не всегда: у половины строк заполнен только артикул. Поэтому
-   * собираем несколько подходов к одному и тому же товару и пробуем их по
-   * очереди, от самого надёжного к самому приблизительному.
-   */
-  // Снятые с продажи тоже считаются известными: их карточки теперь
-  // переносятся, и строка чека трёхлетней давности находит настоящий товар,
-  // а не заглушку с одним названием.
-  const catalog = [...rawProducts, ...(Array.isArray(rawDeleted) ? rawDeleted : [])];
-  const known = new Set(catalog.map((item) => item.code).filter(Boolean));
-  const codeById = new Map();
-  const codeBySku = new Map();
-  const codeByBarcode = new Map();
-  const codeByName = new Map();
-
-  for (const item of catalog) {
-    if (!item.code) continue;
-    codeById.set(item.id, item.code);
-    if (item.sku) codeBySku.set(String(item.sku).trim(), item.code);
-    if (item.barcode) codeByBarcode.set(String(item.barcode).trim(), item.code);
-
-    const name = (item.options?.name ?? '').trim();
-    if (name && !codeByName.has(name)) codeByName.set(name, item.code);
-  }
-
-  /** Первое попадание из всего, что известно о строке. */
-  const resolve = (product, line, name) => {
-    const code = product.code ? String(product.code).trim() : null;
-    if (code && known.has(code)) return code;
-
-    const sku = product.sku ? String(product.sku).trim() : null;
-    const barcode = product.barcode ? String(product.barcode).trim() : null;
-
-    return (
-      (sku && codeBySku.get(sku)) ||
-      (barcode && codeByBarcode.get(barcode)) ||
-      codeById.get(line.product_id) ||
-      codeByName.get(name) ||
-      // Товара в справочнике больше нет — оставляем код как есть: строка
-      // всё равно не найдётся, но по коду понятно, чего не хватает.
-      code ||
-      sku ||
-      null
-    );
-  };
-
   // Чеки и возвраты идут одним списком: в журнале они стоят рядом, и
   // раскладывать их по двум файлам значило бы дважды писать одно и то же.
   sales = [
@@ -715,7 +772,7 @@ if (!flag('no-history')) {
       const product = inner.product ?? {};
       const name = (product.name ?? line.name ?? line.title ?? '').trim();
 
-      const code = resolve(product, line, name);
+      const code = codeOf(product, line, name);
 
       // Товара нет ни среди живых, ни среди снятых — запомним его
       // идентификатор: карточку можно попросить поштучно, `/product/{id}`
@@ -769,6 +826,7 @@ if (!flag('no-history')) {
 
     process.stdout.write(`\r  дозагружено: ${got}\n`);
     writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
+
   }
 
   /**
@@ -824,7 +882,7 @@ if (!flag('no-history')) {
       const inner = line.legacy_line ?? {};
       const product = inner.product ?? {};
       const name = (product.name ?? line.name ?? line.title ?? '').trim();
-      const code = resolve(product, line, name);
+      const code = codeOf(product, line, name);
 
       return {
         code,
@@ -838,9 +896,12 @@ if (!flag('no-history')) {
     });
 
   const docs = [
-    ...bought.map((doc) => ({ doc, k: 'purchase' })),
-    ...sentBack.map((doc) => ({ doc, k: 'purchase_return' })),
-  ].map(({ doc, k }) => ({
+    // Корректировки уже собраны выше, вместе с ценами.
+    ...changeDocs,
+    ...[
+      ...bought.map((doc) => ({ doc, k: 'purchase' })),
+      ...sentBack.map((doc) => ({ doc, k: 'purchase_return' })),
+    ].map(({ doc, k }) => ({
     k,
     at: doc.processed_at ?? doc.created_at ?? null,
     no: doc.order_number ?? null,
@@ -853,7 +914,8 @@ if (!flag('no-history')) {
     // «Отложен». Признак лежит в `document_flags.status`.
     ok: doc.document_flags?.status === false ? 0 : 1,
     ln: docLines(doc),
-  }));
+    })),
+  ];
 
   writeFileSync(`${out}/docs.json`, JSON.stringify(mergeDocs(docs), skipEmpty));
   console.log(`  закупок ${bought.length}, возвратов поставщику ${sentBack.length}`);

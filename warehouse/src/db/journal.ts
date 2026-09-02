@@ -199,7 +199,12 @@ export function listJournal(
               CASE WHEN d.subtype = 'transfer'
                    THEN (SELECT l.name FROM locations l WHERE l.id = d.location_to)
                    ELSE (SELECT l.name FROM locations l WHERE l.id = d.location_id) END,
-              (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+              -- Свой сотрудник, если документ заведён здесь; иначе учётная
+              -- запись, из которой он приехал при переносе.
+              COALESCE(
+                (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
+                d.author
+              ),
               d.note,
               0,
               d.posted

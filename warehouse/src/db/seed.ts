@@ -183,8 +183,12 @@ interface SeedSale {
  * товар, остаток вышел бы вдвое больше настоящего.
  */
 interface SeedDoc {
-  /** Вид: `purchase` — закупка, `purchase_return` — возврат поставщику. */
-  k: 'purchase' | 'purchase_return';
+  /**
+   * Вид: `purchase` — закупка, `purchase_return` — возврат поставщику,
+   * `adjustment` — корректировка. Склад у него ведётся именно
+   * корректировками: раздел закупок в кабинете пуст.
+   */
+  k: 'purchase' | 'purchase_return' | 'adjustment';
   /** Когда проведён. */
   at: string | null;
   /** Номер документа в CloudShop: «Закупка #128». */
@@ -195,6 +199,8 @@ interface SeedDoc {
   cp?: string | null;
   /** Комментарий к документу. */
   cm?: string | null;
+  /** Кто провёл — учётная запись кабинета: «waystea», «Чайный бар». */
+  au?: string | null;
   /** Проведён ли: отложенные документы склад не трогают и у него. */
   ok?: number;
   ln: {
@@ -929,11 +935,12 @@ function seedDocs(db: SqlDriver): void {
       db.run(
         `INSERT INTO docs
            (type, subtype, counterparty, counterparty_id, note, created_at, doc_date,
-            location_id, number, posted)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            location_id, number, posted, author)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          // Закупка кладёт товар на склад, возврат поставщику — снимает.
-          doc.k === 'purchase' ? 'receipt' : 'writeoff',
+          // Закупка кладёт товар на склад, возврат поставщику — снимает, а
+          // корректировка правит остаток и в ту, и в другую сторону.
+          doc.k === 'adjustment' ? 'adjust' : doc.k === 'purchase' ? 'receipt' : 'writeoff',
           doc.k,
           supplier || null,
           supplierId,
@@ -943,6 +950,7 @@ function seedDocs(db: SqlDriver): void {
           location,
           Number.isFinite(number) && number > 0 ? String(number) : null,
           doc.ok === 0 ? 0 : 1,
+          doc.au?.trim() || null,
         ],
       );
       const docId = db.lastInsertId();

@@ -600,7 +600,8 @@ function movesWhere(filter: ProductMovesFilter): { sql: string; params: SqlParam
     where.push(`COALESCE(
       (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
       (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
-      s.author
+      s.author,
+      d.author
     ) = ?`);
     params.push(filter.author);
   }
@@ -647,7 +648,8 @@ export function productMoves(
             COALESCE(
               (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
               (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
-              s.author
+              s.author,
+              d.author
             )                                                             AS author
        FROM stock_moves m
        LEFT JOIN docs  d ON d.id = m.doc_id
@@ -699,7 +701,8 @@ export function productMoveOptions(
       `SELECT DISTINCT COALESCE(
                 (SELECT f.name FROM staff f WHERE f.id = d.staff_id),
                 (SELECT f.name FROM staff f WHERE f.id = s.staff_id),
-                s.author
+                s.author,
+                d.author
               ) AS value
          FROM stock_moves m
          LEFT JOIN docs  d ON d.id = m.doc_id

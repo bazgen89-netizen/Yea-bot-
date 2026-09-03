@@ -13,6 +13,8 @@ import {
   type CompanySettings as Settings,
 } from '../../db/settings';
 import { seedCounts } from '../../db/seed';
+import { getServer, signOut } from '../../db/server';
+import { ServerError, register, signIn, syncNow } from '../../net/server';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { pickFile, saveFile } from '../../ui/download';
@@ -27,7 +29,7 @@ import { web, webText, WEB_FONT, FORM_BORDER } from '../../ui/webTheme';
  * и возвращался бы оттуда при следующем открытии.
  */
 
-type Tab = 'main' | 'legal' | 'taxes' | 'report' | 'data';
+type Tab = 'main' | 'legal' | 'taxes' | 'report' | 'data' | 'sync';
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'main', label: 'Основные' },
@@ -35,6 +37,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'taxes', label: 'Налоги' },
   { value: 'report', label: 'Email отчет' },
   { value: 'data', label: 'Данные' },
+  { value: 'sync', label: 'Синхронизация' },
 ];
 
 export function CompanySettings() {
@@ -324,14 +327,153 @@ export function CompanySettings() {
         ) : null}
 
         {tab === 'data' ? <DataTab /> : null}
+        {tab === 'sync' ? <SyncTab /> : null}
 
-        {tab === 'data' ? null : (
+        {tab === 'data' || tab === 'sync' ? null : (
           <View style={styles.actions}>
             <ToolButton label="Сохранить" tone="green" onPress={save} />
             <ToolButton label="Отменить" onPress={() => setDraft(saved)} />
           </View>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * Вкладка «Синхронизация»: учётная запись магазина и обмен с сервером.
+ *
+ * Программа работает и без неё — так и было задумано: касса не должна
+ * зависеть от связи. Сервер нужен для другого: чтобы товары, чеки и клиенты
+ * сходились между устройствами, и чтобы за одним складом работали вдвоём.
+ *
+ * Поэтому здесь нет ни одной обязательной строки на пустой базе: не вошёл —
+ * работай как работал.
+ */
+function SyncTab() {
+  const { db, refresh } = useDatabase();
+  const link = useQuery((database) => getServer(database));
+
+  const [url, setUrl] = useState(link?.url ?? '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [name, setName] = useState('');
+  const [mode, setMode] = useState<'in' | 'new'>('in');
+  const [busy, setBusy] = useState(false);
+
+  const вошли = Boolean(link?.token);
+
+  /** Одинаково для входа, регистрации и обмена: занять, сделать, отпустить. */
+  const run = async (what: string, action: () => Promise<string>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      say(what, await action());
+      refresh();
+    } catch (error) {
+      // Слова сервера показываем как есть: «неверная почта или пароль»
+      // полезнее, чем «не удалось».
+      say(what, error instanceof ServerError ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (вошли) {
+    return (
+      <View style={styles.block}>
+        <Text style={styles.note}>
+          Устройство связано с магазином «{link?.org_name ?? link?.org}». Вошли как{' '}
+          {link?.user_name} ({link?.role === 'owner' ? 'владелец' : link?.role}).
+          {link?.synced_at
+            ? ` Последний обмен: ${new Date(link.synced_at).toLocaleString('ru-RU')}.`
+            : ' Обмена ещё не было.'}
+        </Text>
+
+        <View style={styles.actions}>
+          <ToolButton
+            label={busy ? 'Обмен идёт…' : 'Синхронизировать'}
+            tone="green"
+            onPress={() =>
+              run('Синхронизация', async () => {
+                const report = await syncNow(db);
+                return (
+                  `Отправлено записей: ${report.sent}. ` +
+                  `Приехало новых: ${report.added}, обновлено: ${report.updated}.`
+                );
+              })
+            }
+          />
+          <ToolButton
+            label="Выйти из учётной записи"
+            onPress={() =>
+              confirm(
+                'Выйти из учётной записи?',
+                'Товары, чеки и клиенты останутся на этом устройстве. Обмен с сервером прекратится.',
+                'Выйти',
+                () => {
+                  signOut(db);
+                  refresh();
+                },
+              )
+            }
+          />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.block}>
+      <Text style={styles.note}>
+        Сервер нужен, чтобы товары, чеки и клиенты сходились между устройствами: касса, телефон
+        кладовщика, компьютер в кабинете. Без него программа работает как работала — всё лежит на
+        этом устройстве.
+      </Text>
+
+      <View style={styles.actions}>
+        <ToolButton
+          label="Вход"
+          tone={mode === 'in' ? 'blueOutline' : 'plain'}
+          onPress={() => setMode('in')}
+        />
+        <ToolButton
+          label="Завести магазин"
+          tone={mode === 'new' ? 'blueOutline' : 'plain'}
+          onPress={() => setMode('new')}
+        />
+      </View>
+
+      <WebField label="Адрес сервера" value={url} onChange={setUrl} />
+
+      {mode === 'new' ? (
+        <>
+          <WebField label="Название магазина" value={orgName} onChange={setOrgName} />
+          <WebField label="Ваше имя" value={name} onChange={setName} />
+        </>
+      ) : null}
+
+      <WebField label="Почта" value={email} onChange={setEmail} />
+      <WebField label="Пароль" value={password} onChange={setPassword} />
+
+      <View style={styles.actions}>
+        <ToolButton
+          label={busy ? 'Минуту…' : mode === 'in' ? 'Войти' : 'Завести магазин'}
+          tone="green"
+          onPress={() =>
+            run(mode === 'in' ? 'Вход' : 'Регистрация магазина', async () => {
+              if (mode === 'in') {
+                const who = await signIn(db, url, { email, password, device: 'Wayshop' });
+                return `Вошли как ${who.userName}. Теперь нажмите «Синхронизировать».`;
+              }
+
+              const who = await register(db, url, { orgName, name, email, password });
+              return `Магазин «${orgName}» заведён, вы его владелец (${who.userName}).`;
+            })
+          }
+        />
+      </View>
     </View>
   );
 }

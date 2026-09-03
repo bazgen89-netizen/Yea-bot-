@@ -62,6 +62,30 @@ const COLUMNS: Record<SyncTable, string[]> = {
   ],
 };
 
+/**
+ * Чем запись узнаётся, если общего имени не сошлось.
+ *
+ * Так бывает при первой встрече двух баз: магазин «Чайный бар» заведён и на
+ * кассе, и на сервере, но заведён порознь — и `uid` у них разные. Вставить
+ * второй «Чайный бар» нельзя: имя занято (`locations.name UNIQUE`), да и в
+ * жизни он один. Значит, запись надо узнать по существу — по названию, по
+ * штрихкоду, по телефону.
+ *
+ * Ключи перебираются по порядку, до первого, который есть в присланной
+ * строке. Штрихкод надёжнее названия, поэтому он первый; но у половины
+ * товаров его нет вовсе, и тогда остаётся название.
+ *
+ * Совпасть должна ровно одна местная строка. Если одинаковых две, то какая
+ * из них «та самая» — неизвестно, и угадывать нельзя: пусть лучше заведётся
+ * ещё одна, чем чужой товар молча сольётся не с тем.
+ */
+const NATURAL: Partial<Record<SyncTable, string[]>> = {
+  locations: ['name'],
+  categories: ['name'],
+  products: ['barcode', 'name'],
+  counterparties: ['phone'],
+};
+
 /** Ссылки на другие таблицы: наружу они уезжают чужим `uid`, а не номером. */
 const LINKS: Partial<Record<SyncTable, Record<string, SyncTable>>> = {
   products: { category_id: 'categories' },
@@ -165,6 +189,61 @@ export interface Applied {
   skipped: number;
 }
 
+/**
+ * Наш номер строки по имени, каким её знают снаружи.
+ *
+ * Имён у записи может быть два: своё, под которым её завели здесь, и чужое,
+ * под которым её знает другое устройство. Оба ведут к одной строке.
+ */
+export function localIdOf(db: SqlDriver, table: SyncTable, uid: string): Id | null {
+  const own = db.get<{ id: Id }>(`SELECT id FROM ${table} WHERE uid = ?`, [uid]);
+  if (own) return own.id;
+
+  const alias = db.get<{ row_id: Id }>(
+    'SELECT row_id FROM uid_alias WHERE table_name = ? AND uid = ?',
+    [table, uid],
+  );
+  return alias ? alias.row_id : null;
+}
+
+/**
+ * Узнать присланную запись по существу и связать её с нашей.
+ *
+ * Два случая, и они разные:
+ *
+ *   • у нашей строки имени ещё нет — берём присланное. Так проще всего:
+ *     дальше обе базы зовут её одинаково;
+ *   • имя у нашей строки уже есть, и другое — своё не трогаем (на него уже
+ *     ссылается сервер и наши же чеки), а чужое запоминаем как второе.
+ *
+ * Возвращает номер нашей строки или `null`, если такой у нас нет.
+ */
+function recognize(db: SqlDriver, table: SyncTable, row: Row, uid: string): Id | null {
+  for (const key of NATURAL[table] ?? []) {
+    const value = row[key];
+    if (value == null || value === '') continue;
+
+    const twins = db.all<{ id: Id; uid: string | null }>(
+      `SELECT id, uid FROM ${table} WHERE ${key} = ?`,
+      [value as SqlParam],
+    );
+    if (twins.length !== 1) continue;
+
+    const twin = twins[0];
+    if (twin.uid == null) db.run(`UPDATE ${table} SET uid = ? WHERE id = ?`, [uid, twin.id]);
+    else {
+      db.run('INSERT OR REPLACE INTO uid_alias (table_name, uid, row_id) VALUES (?, ?, ?)', [
+        table,
+        uid,
+        twin.id,
+      ]);
+    }
+    return twin.id;
+  }
+
+  return null;
+}
+
 export function applyPull(db: SqlDriver, changes: Payload): Applied {
   const result: Applied = { added: 0, updated: 0, skipped: 0 };
 
@@ -180,7 +259,12 @@ export function applyPull(db: SqlDriver, changes: Payload): Applied {
           continue;
         }
 
-        const known = db.get<{ id: Id }>(`SELECT id FROM ${table} WHERE uid = ?`, [uid]);
+        let id = localIdOf(db, table, uid);
+
+        // Под этим именем записи нет — но, может быть, она у нас есть под
+        // другим: магазин узнаётся по названию, товар по штрихкоду.
+        if (id === null) id = recognize(db, table, row, uid);
+        const known = id === null ? null : { id };
 
         // Событие правке не подлежит: чек, который уже лежит, второй раз не
         // переписывается — он случился ровно один раз.
@@ -233,6 +317,10 @@ const REQUIRED: Partial<Record<SyncTable, Record<string, SqlParam>>> = {
   locations: { created_at: '' },
   products: { created_at: '' },
   counterparties: { created_at: '', kind: 'customer' },
+  docs: { created_at: '', type: 'correction' },
+  sales: { created_at: '', total: 0, cost_total: 0 },
+  sale_items: { qty: 0, price: 0, cost_price: 0 },
+  stock_moves: { created_at: '', qty_delta: 0, reason: 'correction' },
 };
 
 /**
@@ -270,9 +358,9 @@ function fields(db: SqlDriver, table: SyncTable, row: Row): Record<string, SqlPa
       continue;
     }
 
-    const found = db.get<{ id: Id }>(`SELECT id FROM ${target} WHERE uid = ?`, [uid]);
-    if (!found) return null;
-    values[column] = found.id;
+    const found = localIdOf(db, target, uid);
+    if (found === null) return null;
+    values[column] = found;
   }
 
   return values;

@@ -51,9 +51,15 @@ const ПРИМЕРЫ = [
   'Кто из клиентов покупал больше всех за всё время?',
 ];
 
-/** Где взять ключ — ссылкой, чтобы не искать. */
+/**
+ * Где взять ключ — ссылкой, чтобы не искать.
+ *
+ * Адрес консоли Клода переехал с `console.anthropic.com` на
+ * `platform.claude.com`; старый пока переадресует, но вести человека надо
+ * сразу туда, где он окажется.
+ */
 const ГДЕ_КЛЮЧ: Record<AskKind, string> = {
-  claude: 'https://console.anthropic.com/settings/keys',
+  claude: 'https://platform.claude.com/settings/keys',
   openai: 'https://platform.deepseek.com/api_keys',
 };
 

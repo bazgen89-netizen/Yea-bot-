@@ -768,6 +768,68 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE docs ADD COLUMN author TEXT;
   `,
+
+  /**
+   * Общее имя записи для всех устройств.
+   *
+   * Внутренний номер строки (`id`) годится, пока база одна. Как только у
+   * магазина появляется второй телефон, номера начинают спорить: на кассе
+   * товар №417 — «Габа Алишань», а на телефоне кладовщика №417 — «Пиала».
+   * Слить такие базы нельзя: одно и то же имя у разных вещей.
+   *
+   * Поэтому у всего, что уезжает на сервер, есть второе имя — `uid`. Его
+   * придумывает то устройство, где запись завели, и оно уже не меняется
+   * никогда. Сервер знает записи по нему, а внутренний номер остаётся
+   * внутренним делом каждой базы.
+   *
+   * Существующим строкам `uid` проставляется здесь же: без этого первая же
+   * синхронизация отправила бы весь каталог как новый.
+   */
+  `
+  ALTER TABLE locations      ADD COLUMN uid TEXT;
+  ALTER TABLE categories     ADD COLUMN uid TEXT;
+  ALTER TABLE products       ADD COLUMN uid TEXT;
+  ALTER TABLE docs           ADD COLUMN uid TEXT;
+  ALTER TABLE sales          ADD COLUMN uid TEXT;
+  ALTER TABLE sale_items     ADD COLUMN uid TEXT;
+  ALTER TABLE stock_moves    ADD COLUMN uid TEXT;
+  ALTER TABLE counterparties ADD COLUMN uid TEXT;
+
+  CREATE UNIQUE INDEX idx_locations_uid      ON locations(uid)      WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_categories_uid     ON categories(uid)     WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_products_uid       ON products(uid)       WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_docs_uid           ON docs(uid)           WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_sales_uid          ON sales(uid)          WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_sale_items_uid     ON sale_items(uid)     WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_stock_moves_uid    ON stock_moves(uid)    WHERE uid IS NOT NULL;
+  CREATE UNIQUE INDEX idx_counterparties_uid ON counterparties(uid) WHERE uid IS NOT NULL;
+  `,
+
+  /**
+   * Связь с сервером: адрес, кто вошёл и до какого изменения мы дочитали.
+   *
+   * Строка ровно одна — устройство работает с одним магазином. Токен лежит
+   * здесь же: он живёт в базе устройства, а не в коде, и стирается выходом
+   * из учётной записи.
+   *
+   * `pulled` — номер изменения, до которого сервер уже пересказан нам. С
+   * него и продолжаем: время для этого не годится, часы на кассе врут, а
+   * счётчик — нет.
+   */
+  `
+  CREATE TABLE server (
+    id       INTEGER PRIMARY KEY CHECK (id = 1),
+    url      TEXT    NOT NULL,
+    token    TEXT,
+    org      TEXT,
+    org_name TEXT,
+    user_id  TEXT,
+    user_name TEXT,
+    role     TEXT,
+    pulled   INTEGER NOT NULL DEFAULT 0,
+    synced_at TEXT
+  );
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

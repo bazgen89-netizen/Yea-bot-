@@ -9,6 +9,7 @@ import {
   saveAskSettings,
   type AskKind,
 } from '../../db/askSettings';
+import { isMoneyColumn, type AskResult } from '../../db/ask';
 import { askWarehouse, askWay, type Ответ } from '../../net/assistant';
 import { ServerError } from '../../net/server';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -99,8 +100,8 @@ export function Assistant() {
       <View style={styles.card}>
         <Text style={styles.note}>
           Спросите обычными словами — помощник посчитает по вашему складу и покажет, чем считал.
-          Наружу уходит только вопрос и список таблиц: ни товаров, ни чеков, ни телефонов клиентов.
-          Считает само устройство.
+          Наружу уходит вопрос, список таблиц и служебные слова программы («cash», «шт», «receipt»).
+          Ни одного товара, чека или телефона клиента. Считает само устройство.
         </Text>
 
         <TextInput
@@ -277,50 +278,131 @@ function Настройка({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+/**
+ * Число так, как его читают глазами.
+ *
+ * Раньше в таблицу падало то, что вернула база: `186400.5`. Столбец с
+ * деньгами и столбец с граммами выглядели одинаково, разряды не отбиты, и
+ * чтобы понять, сто восемьдесят тысяч это или миллион, приходилось считать
+ * нули пальцем. Это и была та самая костыльность.
+ */
+function число(value: unknown, деньги: boolean): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+
+  const дробных = деньги ? 2 : Number.isInteger(value) ? 0 : 1;
+  const записано = value.toLocaleString('ru-RU', {
+    minimumFractionDigits: дробных,
+    maximumFractionDigits: дробных,
+  });
+
+  return деньги ? `${записано} ₽` : записано;
+}
+
+/**
+ * Итог наверху — то, зачем вопрос и задавали.
+ *
+ * «Сколько продано пуэра» — это одно число, а не двести строк. Строки нужны
+ * потом, чтобы посмотреть, из чего оно сложилось.
+ */
+function Итог({ result }: { result: AskResult }) {
+  const числовые = result.columns
+    .map((name, place) => ({ name, place, sum: result.totals[place] }))
+    .filter((one) => one.sum !== null && !/^(год|номер|№|месяц)/i.test(one.name));
+
+  if (числовые.length === 0) return null;
+
+  return (
+    <View style={styles.totals}>
+      {числовые.map((one) => (
+        <View key={one.name} style={styles.total}>
+          <Text style={styles.totalValue}>{число(one.sum, isMoneyColumn(one.name))}</Text>
+          <Text style={styles.totalLabel}>{one.name} — всего</Text>
+        </View>
+      ))}
+      <View style={styles.total}>
+        <Text style={styles.totalValue}>{result.total.toLocaleString('ru-RU')}</Text>
+        <Text style={styles.totalLabel}>строк нашлось</Text>
+      </View>
+    </View>
+  );
+}
+
 function Ответ_({ ответ }: { ответ: Ответ }) {
   const { result } = ответ;
+  const [видноЗапрос, setВидноЗапрос] = useState(false);
 
   return (
     <View style={styles.card}>
       {ответ.comment ? <Text style={styles.comment}>{ответ.comment}</Text> : null}
 
       {result === null ? null : result.total === 0 ? (
-        <Text style={styles.empty}>Ничего не нашлось — по этому вопросу в базе пусто.</Text>
+        <Text style={styles.empty}>
+          Ничего не нашлось — по этому вопросу в базе пусто. Если ждали другого, посмотрите
+          запрос ниже: может быть, помощник искал не то.
+        </Text>
       ) : (
         <>
-          <View style={styles.table}>
-            <View style={[styles.row, styles.head]}>
-              {result.columns.map((column) => (
-                <Text key={column} style={[styles.cell, styles.headCell]}>
-                  {column}
-                </Text>
-              ))}
-            </View>
-            {result.rows.map((row, index) => (
-              <View key={index} style={[styles.row, index % 2 === 1 && styles.stripe]}>
-                {row.map((value, place) => (
-                  <Text key={place} style={styles.cell}>
-                    {value === null || value === undefined ? '—' : String(value)}
+          <Итог result={result} />
+
+          <ScrollView horizontal showsHorizontalScrollIndicator style={styles.tableScroll}>
+            <View style={styles.table}>
+              <View style={[styles.row, styles.head]}>
+                {result.columns.map((column, place) => (
+                  <Text
+                    key={column}
+                    style={[
+                      styles.cell,
+                      styles.headCell,
+                      place === 0 ? styles.firstCell : styles.numCell,
+                      result.totals[place] !== null && place > 0 ? styles.right : null,
+                    ]}
+                  >
+                    {column}
                   </Text>
                 ))}
               </View>
-            ))}
-          </View>
+              {result.rows.map((row, index) => (
+                <View key={index} style={[styles.row, index % 2 === 1 && styles.stripe]}>
+                  {row.map((value, place) => (
+                    <Text
+                      key={place}
+                      style={[
+                        styles.cell,
+                        place === 0 ? styles.firstCell : styles.numCell,
+                        typeof value === 'number' ? styles.right : null,
+                      ]}
+                    >
+                      {число(value, isMoneyColumn(result.columns[place]))}
+                    </Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
 
           {result.total > result.rows.length ? (
             <Text style={styles.more}>
-              Показаны первые {result.rows.length} строк из {result.total}.
+              В таблице показаны первые {result.rows.length} строк из{' '}
+              {result.total.toLocaleString('ru-RU')} — итоги наверху посчитаны по всем.
             </Text>
           ) : null}
         </>
       )}
 
       {ответ.sql ? (
-        <View style={styles.sqlBox}>
-          <Text style={styles.sqlTitle}>
-            Чем он это посчитал {ответ.через === 'ключ' ? '(своим ключом)' : '(через сервер)'}
-          </Text>
-          <Text style={styles.sql}>{ответ.sql}</Text>
+        <View>
+          <Pressable accessibilityRole="button" onPress={() => setВидноЗапрос(!видноЗапрос)}>
+            <Text style={styles.link}>
+              {видноЗапрос ? 'Скрыть подсчёт' : 'Показать, как это посчитано'}
+              {ответ.через === 'ключ' ? '' : ' (через сервер)'}
+            </Text>
+          </Pressable>
+          {видноЗапрос ? (
+            <View style={styles.sqlBox}>
+              <Text style={styles.sql}>{ответ.sql}</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -365,21 +447,31 @@ const styles = StyleSheet.create({
   trouble: { borderColor: '#E0B4B4', backgroundColor: '#FFF6F6' },
   troubleText: { fontFamily: WEB_FONT, fontSize: 15, color: '#9F3A38', lineHeight: 22 },
 
-  comment: { fontFamily: WEB_FONT, fontSize: 16, color: web.text, lineHeight: 24 },
-  empty: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
+  comment: { fontFamily: WEB_FONT, fontSize: 17, color: web.text, lineHeight: 26 },
+  empty: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted, lineHeight: 23 },
 
-  table: { borderWidth: 1, borderColor: web.border, borderRadius: 3, overflow: 'hidden' },
+  totals: { flexDirection: 'row', flexWrap: 'wrap', gap: 30, paddingVertical: 4 },
+  total: { gap: 2 },
+  totalValue: { fontFamily: WEB_FONT, fontSize: 26, color: web.text, fontWeight: '500' },
+  totalLabel: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
+
+  tableScroll: { borderWidth: 1, borderColor: web.border, borderRadius: 3 },
+  table: { minWidth: '100%' },
   row: { flexDirection: 'row' },
   head: { backgroundColor: '#F9FAFB' },
   stripe: { backgroundColor: '#FCFCFD' },
   cell: {
-    flex: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 9,
     fontFamily: WEB_FONT,
     fontSize: 14,
     color: web.text,
   },
+  // Название — широкое и слева, числа — узкие и справа: так столбец цифр
+  // читается сверху вниз, а не рассыпается.
+  firstCell: { flex: 3, minWidth: 240 },
+  numCell: { flex: 1, minWidth: 110 },
+  right: { textAlign: 'right' },
   headCell: { fontWeight: '600', color: web.textMuted },
   more: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
 
@@ -389,8 +481,7 @@ const styles = StyleSheet.create({
     borderColor: web.border,
     borderRadius: 3,
     padding: 14,
-    gap: 8,
+    marginTop: 10,
   },
-  sqlTitle: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
   sql: { fontFamily: 'monospace', fontSize: 13, color: web.text, lineHeight: 20 },
 });

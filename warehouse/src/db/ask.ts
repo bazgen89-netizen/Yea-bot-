@@ -58,6 +58,26 @@ export interface AskResult {
   rows: unknown[][];
   /** Сколько строк нашлось всего — может быть больше показанных. */
   total: number;
+  /**
+   * Итог по числовым столбцам: их сумма по всем найденным строкам, а не
+   * только по показанным.
+   *
+   * Считается здесь, а не моделью, и не наружу: «сколько всего» — это первое,
+   * зачем задают такой вопрос, и получать его глазами по двумстам строкам
+   * человек не должен. `null` там, где столбец не числовой.
+   */
+  totals: (number | null)[];
+}
+
+/**
+ * Столбец с деньгами — по названию.
+ *
+ * Никакого волшебства: модель называет столбцы по-русски, и «Выручка, ₽» от
+ * «Продано» отличается знаком рубля в названии. Этого хватает, чтобы вывести
+ * деньги как деньги, а не как голое число.
+ */
+export function isMoneyColumn(name: string): boolean {
+  return /₽|руб|сумм|выручк|прибыл|себестоим|цена|оплач|долг/i.test(name);
 }
 
 /** Сколько строк показывать. Больше человек всё равно не прочтёт. */
@@ -73,12 +93,33 @@ export function runSql(db: SqlDriver, raw: string): AskResult {
   const sql = checkSql(raw);
   const rows = db.all<Record<string, unknown>>(sql);
 
-  if (rows.length === 0) return { columns: [], rows: [], total: 0 };
+  if (rows.length === 0) return { columns: [], rows: [], total: 0, totals: [] };
 
   const columns = Object.keys(rows[0]);
+
+  // Итог считаем по всем найденным строкам, а не по показанным двумстам:
+  // «показано 200 из 1043, итого 4 кг» было бы враньём.
+  const totals = columns.map((column) => {
+    let sum = 0;
+    let числовой = false;
+
+    for (const row of rows) {
+      const value = row[column];
+      if (value === null || value === undefined) continue;
+      if (typeof value !== 'number') return null;
+      числовой = true;
+      sum += value;
+    }
+
+    // Столбец с годом или номером складывать бессмысленно, но отличить его
+    // от количества нельзя — это решает уже экран, по названию столбца.
+    return числовой ? sum : null;
+  });
+
   return {
     columns,
     rows: rows.slice(0, ПОКАЗЫВАЕМ).map((row) => columns.map((column) => row[column])),
     total: rows.length,
+    totals,
   };
 }

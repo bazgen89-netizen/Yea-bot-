@@ -24,13 +24,13 @@ import type { SqlDriver } from './driver';
 const ТАБЛИЦЫ: { name: string; note: string }[] = [
   {
     name: 'products',
-    note: 'Товары. sale_price — цена продажи в копейках, cost_price — себестоимость в копейках. unit — единица измерения ИМЕННО ЭТОГО товара: у одних «шт», у других «гр» или «кг». archived=1 — товар убран из работы.',
+    note: 'Товары. sale_price — цена продажи в копейках, cost_price — себестоимость в копейках. unit — единица измерения ИМЕННО ЭТОГО товара: у одних «шт», у других «гр» или «кг». search_text — название, артикул, код и штрихкод строчными буквами: ИСКАТЬ ПО НАЗВАНИЮ ТОЛЬКО ЧЕРЕЗ НЕГО. archived=1 — товар убран из работы.',
   },
   { name: 'categories', note: 'Категории товаров. products.category_id ссылается сюда.' },
   { name: 'locations', note: 'Магазины (точки). archived=1 — точка закрыта.' },
   {
     name: 'counterparties',
-    note: "Клиенты и поставщики в одной таблице; kind — 'customer', 'supplier' или 'both'. bonus_balance — бонусы в копейках, birthday — дата рождения строкой.",
+    note: "Клиенты и поставщики в одной таблице; kind — 'customer', 'supplier' или 'both'. bonus_balance — бонусы в копейках, birthday — дата рождения строкой. search_text — имя и телефон строчными буквами: искать по имени только через него.",
   },
   {
     name: 'sales',
@@ -53,6 +53,32 @@ const ТАБЛИЦЫ: { name: string; note: string }[] = [
 ];
 
 /**
+ * Колонки, про которые полезно назвать сами слова, а не только имя колонки.
+ *
+ * Это служебный словарь программы, а не содержимое магазина. Оплата записана
+ * словом `cash` или `card`, приход — словом `receipt`, единица — «шт» или
+ * «гр». Не сказать этого — и помощник будет угадывать: писать
+ * `payment = 'наличные'` и получать пусто. Ошибка при этом выйдет тихая:
+ * запрос выполнится, таблица будет пустая, и человек решит, что за месяц
+ * ничего не продано.
+ *
+ * Список закрытый и короткий намеренно. Названия товаров, категорий, имена
+ * клиентов сюда не попадают и попасть не могут: наружу уходят слова самой
+ * программы, а не то, чем торгует магазин и кто у него покупает.
+ */
+const СЛОВАРИ: { table: string; column: string }[] = [
+  { table: 'products', column: 'unit' },
+  { table: 'sales', column: 'payment' },
+  { table: 'stock_moves', column: 'reason' },
+  { table: 'docs', column: 'type' },
+  { table: 'docs', column: 'subtype' },
+  { table: 'counterparties', column: 'kind' },
+];
+
+/** Больше — уже не словарь, а содержимое: такое наружу не отдаём. */
+const СЛОВ_НЕ_БОЛЬШЕ = 25;
+
+/**
  * Собрать описание базы для помощника.
  *
  * Таблица, которой в базе нет (программа старее, чем этот список), молча
@@ -66,10 +92,38 @@ export function describeSchema(db: SqlDriver): string {
     const columns = db.all<{ name: string; type: string }>(`PRAGMA table_info(${name})`);
     if (columns.length === 0) continue;
 
-    части.push(
-      `${name} — ${note}\n  колонки: ${columns.map((column) => column.name).join(', ')}`,
-    );
+    const кусок = [
+      `${name} — ${note}`,
+      `  колонки: ${columns.map((column) => column.name).join(', ')}`,
+      ...словари(db, name, new Set(columns.map((column) => column.name))),
+    ];
+
+    части.push(кусок.join('\n'));
   }
 
   return части.join('\n\n');
+}
+
+function словари(db: SqlDriver, table: string, есть: Set<string>): string[] {
+  const строки: string[] = [];
+
+  for (const { table: где, column } of СЛОВАРИ) {
+    if (где !== table || !есть.has(column)) continue;
+
+    const rows = db.all<{ value: unknown }>(
+      `SELECT DISTINCT ${column} AS value FROM ${table}
+        WHERE ${column} IS NOT NULL AND ${column} <> ''
+        LIMIT ${СЛОВ_НЕ_БОЛЬШЕ + 1}`,
+    );
+
+    // Значений больше, чем бывает у словаря, — значит это не словарь, а
+    // содержимое. Молчим: лучше не сказать, чем вынести наружу лишнее.
+    if (rows.length === 0 || rows.length > СЛОВ_НЕ_БОЛЬШЕ) continue;
+
+    строки.push(
+      `  ${column} бывает только такой: ${rows.map((row) => `'${String(row.value)}'`).join(', ')}`,
+    );
+  }
+
+  return строки;
 }

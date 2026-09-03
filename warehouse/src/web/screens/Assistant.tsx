@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '../Translated';
 
@@ -9,7 +9,14 @@ import {
   saveAskSettings,
   type AskKind,
 } from '../../db/askSettings';
-import { isMoneyColumn, type AskResult } from '../../db/ask';
+import type { AskResult } from '../../db/ask';
+import {
+  isMoneyColumn,
+  отобрать,
+  самСтолбец,
+  суммы,
+  упорядочить,
+} from '../../domain/askTable';
 import { askWarehouse, askWay, type Ответ } from '../../net/assistant';
 import { ServerError } from '../../net/server';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
@@ -299,70 +306,128 @@ function число(value: unknown, деньги: boolean): string {
   return деньги ? `${записано} ₽` : записано;
 }
 
-/**
- * Итог наверху — то, зачем вопрос и задавали.
- *
- * «Сколько продано пуэра» — это одно число, а не двести строк. Строки нужны
- * потом, чтобы посмотреть, из чего оно сложилось.
- */
-function Итог({ result }: { result: AskResult }) {
-  const числовые = result.columns
-    .map((name, place) => ({ name, place, sum: result.totals[place] }))
-    .filter((one) => one.sum !== null && !/^(год|номер|№|месяц)/i.test(one.name));
-
-  if (числовые.length === 0) return null;
-
-  return (
-    <View style={styles.totals}>
-      {числовые.map((one) => (
-        <View key={one.name} style={styles.total}>
-          <Text style={styles.totalValue}>{число(one.sum, isMoneyColumn(one.name))}</Text>
-          <Text style={styles.totalLabel}>{one.name} — всего</Text>
-        </View>
-      ))}
-      <View style={styles.total}>
-        <Text style={styles.totalValue}>{result.total.toLocaleString('ru-RU')}</Text>
-        <Text style={styles.totalLabel}>строк нашлось</Text>
-      </View>
-    </View>
-  );
-}
+/** Сколько строк показываем зараз. Больше человек глазами не осилит. */
+const ПОКАЗЫВАЕМ = 200;
 
 function Ответ_({ ответ }: { ответ: Ответ }) {
   const { result } = ответ;
   const [видноЗапрос, setВидноЗапрос] = useState(false);
+  const [отбор, setОтбор] = useState('');
+  const [порядок, setПорядок] = useState<{ place: number; убывание: boolean } | null>(null);
+
+  /**
+   * Отбор и порядок — на месте, без единого обращения к модели.
+   *
+   * Он спросил, не нужен ли фильтр. Нужен, и стоить он не должен ничего:
+   * строки уже посчитаны и лежат здесь, а переспрашивать модель ради другого
+   * порядка — платить за то, что и так есть.
+   */
+  const строки = useMemo(() => {
+    if (!result) return [];
+    const отобранные = отобрать(result.rows, отбор);
+    const по = порядок ?? { place: самСтолбец(отобранные, result.columns) ?? -1, убывание: true };
+    return по.place < 0 ? отобранные : упорядочить(отобранные, по.place, по.убывание);
+  }, [result, отбор, порядок]);
+
+  const итоги = useMemo(
+    () => (result ? суммы(строки, result.columns) : []),
+    [строки, result],
+  );
+
+  if (result === null) {
+    return (
+      <View style={styles.card}>
+        {ответ.comment ? <Text style={styles.comment}>{ответ.comment}</Text> : null}
+        <Запрос ответ={ответ} видно={видноЗапрос} переключить={() => setВидноЗапрос(!видноЗапрос)} />
+      </View>
+    );
+  }
+
+  const сортировать = (place: number) =>
+    setПорядок(
+      порядок?.place === place ? { place, убывание: !порядок.убывание } : { place, убывание: true },
+    );
+
+  const сейчас = порядок ?? {
+    place: самСтолбец(строки, result.columns) ?? -1,
+    убывание: true,
+  };
 
   return (
     <View style={styles.card}>
       {ответ.comment ? <Text style={styles.comment}>{ответ.comment}</Text> : null}
 
-      {result === null ? null : result.total === 0 ? (
+      {result.total === 0 ? (
         <Text style={styles.empty}>
           Ничего не нашлось — по этому вопросу в базе пусто. Если ждали другого, посмотрите
-          запрос ниже: может быть, помощник искал не то.
+          подсчёт: может быть, помощник искал не то.
         </Text>
       ) : (
         <>
-          <Итог result={result} />
+          <View style={styles.totals}>
+            {result.columns.map((name, place) =>
+              итоги[place] === null ? null : (
+                <View key={name} style={styles.total}>
+                  <Text style={styles.totalValue}>{число(итоги[place], isMoneyColumn(name))}</Text>
+                  <Text style={styles.totalLabel}>{name} — всего</Text>
+                </View>
+              ),
+            )}
+            <View style={styles.total}>
+              <Text style={styles.totalValue}>{строки.length.toLocaleString('ru-RU')}</Text>
+              <Text style={styles.totalLabel}>
+                {отбор.trim() ? `строк из ${result.total.toLocaleString('ru-RU')}` : 'строк нашлось'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.tools}>
+            <TextInput
+              value={отбор}
+              onChangeText={setОтбор}
+              placeholder="Отобрать строки: слово из названия"
+              placeholderTextColor={web.textMuted}
+              style={styles.filter}
+            />
+            {отбор || порядок ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setОтбор('');
+                  setПорядок(null);
+                }}
+              >
+                <Text style={styles.link}>Сбросить</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.hint}>Столбец — заголовок, чтобы упорядочить</Text>
+          </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator style={styles.tableScroll}>
             <View style={styles.table}>
               <View style={[styles.row, styles.head]}>
                 {result.columns.map((column, place) => (
-                  <Text
+                  <Pressable
                     key={column}
-                    style={[
-                      styles.cell,
-                      styles.headCell,
-                      place === 0 ? styles.firstCell : styles.numCell,
-                      result.totals[place] !== null && place > 0 ? styles.right : null,
-                    ]}
+                    accessibilityRole="button"
+                    onPress={() => сортировать(place)}
+                    style={place === 0 ? styles.firstCell : styles.numCell}
                   >
-                    {column}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.cell,
+                        styles.headCell,
+                        итоги[place] !== null && place > 0 ? styles.right : null,
+                      ]}
+                    >
+                      {column}
+                      {сейчас.place === place ? (сейчас.убывание ? '  ↓' : '  ↑') : ''}
+                    </Text>
+                  </Pressable>
                 ))}
               </View>
-              {result.rows.map((row, index) => (
+
+              {строки.slice(0, ПОКАЗЫВАЕМ).map((row, index) => (
                 <View key={index} style={[styles.row, index % 2 === 1 && styles.stripe]}>
                   {row.map((value, place) => (
                     <Text
@@ -381,28 +446,49 @@ function Ответ_({ ответ }: { ответ: Ответ }) {
             </View>
           </ScrollView>
 
+          {строки.length > ПОКАЗЫВАЕМ ? (
+            <Text style={styles.more}>
+              Показаны первые {ПОКАЗЫВАЕМ} строк из {строки.length.toLocaleString('ru-RU')} — итоги
+              наверху посчитаны по всем.
+            </Text>
+          ) : null}
+
           {result.total > result.rows.length ? (
             <Text style={styles.more}>
-              В таблице показаны первые {result.rows.length} строк из{' '}
-              {result.total.toLocaleString('ru-RU')} — итоги наверху посчитаны по всем.
+              Найдено {result.total.toLocaleString('ru-RU')} строк, в работу взяты первые{' '}
+              {result.rows.length.toLocaleString('ru-RU')}. Спросите поуже — например, за месяц.
             </Text>
           ) : null}
         </>
       )}
 
-      {ответ.sql ? (
-        <View>
-          <Pressable accessibilityRole="button" onPress={() => setВидноЗапрос(!видноЗапрос)}>
-            <Text style={styles.link}>
-              {видноЗапрос ? 'Скрыть подсчёт' : 'Показать, как это посчитано'}
-              {ответ.через === 'ключ' ? '' : ' (через сервер)'}
-            </Text>
-          </Pressable>
-          {видноЗапрос ? (
-            <View style={styles.sqlBox}>
-              <Text style={styles.sql}>{ответ.sql}</Text>
-            </View>
-          ) : null}
+      <Запрос ответ={ответ} видно={видноЗапрос} переключить={() => setВидноЗапрос(!видноЗапрос)} />
+    </View>
+  );
+}
+
+function Запрос({
+  ответ,
+  видно,
+  переключить,
+}: {
+  ответ: Ответ;
+  видно: boolean;
+  переключить: () => void;
+}) {
+  if (!ответ.sql) return null;
+
+  return (
+    <View>
+      <Pressable accessibilityRole="button" onPress={переключить}>
+        <Text style={styles.link}>
+          {видно ? 'Скрыть подсчёт' : 'Показать, как это посчитано'}
+          {ответ.через === 'ключ' ? '' : ' (через сервер)'}
+        </Text>
+      </Pressable>
+      {видно ? (
+        <View style={styles.sqlBox}>
+          <Text style={styles.sql}>{ответ.sql}</Text>
         </View>
       ) : null}
     </View>
@@ -449,6 +535,20 @@ const styles = StyleSheet.create({
 
   comment: { fontFamily: WEB_FONT, fontSize: 17, color: web.text, lineHeight: 26 },
   empty: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted, lineHeight: 23 },
+
+  tools: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  filter: {
+    width: 320,
+    borderWidth: 1,
+    borderColor: FORM_BORDER,
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontFamily: WEB_FONT,
+    fontSize: 14,
+    color: web.text,
+  },
+  hint: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
 
   totals: { flexDirection: 'row', flexWrap: 'wrap', gap: 30, paddingVertical: 4 },
   total: { gap: 2 },

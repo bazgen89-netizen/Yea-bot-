@@ -1,0 +1,117 @@
+/**
+ * Таблица ответа: отбор, порядок и итоги.
+ *
+ * Здесь нет ни React, ни базы — только арифметика над тем, что уже посчитано.
+ * Так и надо: перебирать строки заново, спрашивая модель, значило бы платить
+ * деньги за то, что можно сделать на месте и мгновенно.
+ *
+ * Отбор и порядок работают по всем найденным строкам, а не по показанным
+ * двумстам. Иначе «отсортировать по убыванию» переставляло бы первые двести
+ * между собой, а самое большое так и осталось бы за краем.
+ */
+
+export type Cell = unknown;
+export type Row = Cell[];
+
+/** Столбец с деньгами — по названию: «Выручка, ₽» отличается знаком рубля. */
+export function isMoneyColumn(name: string): boolean {
+  return /₽|руб|сумм|выручк|прибыл|себестоим|цена|оплач|долг/i.test(name);
+}
+
+/** Названия, сумма по которым бессмысленна: год, номер чека, месяц. */
+const НЕ_СКЛАДЫВАЕМ = new Set([
+  'год', 'номер', '№', 'месяц', 'дата', 'день', 'неделя', 'id', 'код', 'артикул',
+]);
+
+/**
+ * Столбец, который складывать бессмысленно.
+ *
+ * Год, номер чека, месяц — числа, но сумма по ним ничего не значит. Отличить
+ * их можно только по названию: в базе это такие же целые.
+ *
+ * Сравнивается первое слово, а не образец с `\b`. Граница слова в регулярных
+ * выражениях знает только латиницу, и после «Год» её попросту нет — ровно та
+ * же природа, что у `lower()`, который не трогает русские буквы.
+ */
+export function isCountedColumn(name: string): boolean {
+  const первое = name.trim().toLowerCase().split(/[\s,.(]/)[0];
+  return !НЕ_СКЛАДЫВАЕМ.has(первое);
+}
+
+/** Строки, где хоть в одной ячейке есть искомое. Пустой запрос — все. */
+export function отобрать(rows: Row[], искомое: string): Row[] {
+  const слово = искомое.trim().toLowerCase();
+  if (!слово) return rows;
+
+  return rows.filter((row) =>
+    row.some((cell) => String(cell ?? '').toLowerCase().includes(слово)),
+  );
+}
+
+/**
+ * Порядок по столбцу.
+ *
+ * Числа сравниваются числами, слова — по-русски (иначе «Я» окажется раньше
+ * «а»). Пустые ячейки всегда внизу: пустота — это не «самое маленькое», её
+ * просто нет, и место ей в конце при любом порядке.
+ */
+export function упорядочить(rows: Row[], place: number, убывание: boolean): Row[] {
+  const знак = убывание ? -1 : 1;
+
+  return [...rows].sort((left, right) => {
+    const a = left[place];
+    const b = right[place];
+
+    const пустоA = a === null || a === undefined || a === '';
+    const пустоB = b === null || b === undefined || b === '';
+    if (пустоA && пустоB) return 0;
+    if (пустоA) return 1;
+    if (пустоB) return -1;
+
+    if (typeof a === 'number' && typeof b === 'number') return (a - b) * знак;
+    return String(a).localeCompare(String(b), 'ru') * знак;
+  });
+}
+
+/**
+ * Сумма по каждому столбцу — или `null`, если столбец не числовой.
+ *
+ * Считается по тем строкам, что передали: отобрал половину — итог по
+ * половине. Иначе итог противоречил бы таблице под ним.
+ */
+export function суммы(rows: Row[], columns: string[]): (number | null)[] {
+  return columns.map((name, place) => {
+    if (!isCountedColumn(name)) return null;
+
+    let sum = 0;
+    let числовой = false;
+
+    for (const row of rows) {
+      const value = row[place];
+      if (value === null || value === undefined) continue;
+      if (typeof value !== 'number') return null;
+      числовой = true;
+      sum += value;
+    }
+
+    return числовой ? sum : null;
+  });
+}
+
+/**
+ * Столбец, по которому упорядочить ответ, пока человек не выбрал сам.
+ *
+ * Берётся последний числовой: модель ставит его в конце — «Товар, Ед.,
+ * Продано, Выручка», — и упорядочить по выручке нужнее, чем по количеству.
+ * Числового нет — порядок оставляем как есть, его выбрала модель.
+ */
+export function самСтолбец(rows: Row[], columns: string[]): number | null {
+  if (rows.length === 0) return null;
+
+  for (let place = columns.length - 1; place >= 0; place -= 1) {
+    if (!isCountedColumn(columns[place])) continue;
+    if (rows.some((row) => typeof row[place] === 'number')) return place;
+  }
+
+  return null;
+}

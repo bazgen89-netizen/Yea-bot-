@@ -5,7 +5,9 @@ import { ZodError } from 'zod';
 import type { SqlDb } from './db/driver.ts';
 import { ApiError } from './core/errors.ts';
 import { OutOfStockError } from './core/sales.ts';
+import { askFromEnv, type Ask } from './core/assistant.ts';
 import { authenticate } from './http/principal.ts';
+import { assistantRoutes } from './http/routes/assistant.ts';
 import { authRoutes } from './http/routes/auth.ts';
 import { counterpartyRoutes } from './http/routes/counterparties.ts';
 import { docsRoutes } from './http/routes/docs.ts';
@@ -18,6 +20,13 @@ export interface ServerOptions {
   /** Разрешить самостоятельную регистрацию новых организаций. */
   allowRegistration?: boolean;
   logger?: boolean;
+  /**
+   * Кто отвечает помощнику. По умолчанию берётся из окружения; в проверках
+   * подменяется, чтобы не ходить к настоящей модели за деньги.
+   *
+   * `null` — помощник выключен, и он честно об этом говорит.
+   */
+  model?: Ask | null;
 }
 
 /** Пути, доступные без токена. */
@@ -95,6 +104,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   counterpartyRoutes(app, db);
   importRoutes(app, db);
   syncRoutes(app, db);
+  assistantRoutes(app, options.model === undefined ? askFromEnv() : options.model);
   docsRoutes(app);
 
   return app;

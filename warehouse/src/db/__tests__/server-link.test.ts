@@ -298,12 +298,43 @@ describe('связь с сервером магазина', () => {
     ).rejects.toThrow(/Нет связи/);
   });
 
+  /**
+   * Настоящий сервер говорит об ошибке объектом: `{ error: { code, message } }`.
+   *
+   * Проверка стояла здесь и раньше, но подставной сервер отвечал строкой — и
+   * всё сходилось, пока я не завёл магазин на живом сервере: там программа
+   * упала с «(p.error ?? …).trim is not a function» вместо того, чтобы сказать,
+   * что не так. Поэтому теперь оба вида проверяются оба, и первым — настоящий.
+   */
   it('передаёт слова сервера, а не свои', async () => {
-    globalThis.fetch = (async () => answer({ error: 'Неверная почта или пароль' }, 401)) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      answer(
+        { error: { code: 'unauthorized', message: 'Неверная почта или пароль' } },
+        401,
+      )) as unknown as typeof fetch;
 
     await expect(
       signIn(db, 'https://склад.рф', { email: 'a@b.ru', password: 'не тот' }),
     ).rejects.toThrow('Неверная почта или пароль');
+  });
+
+  it('понимает и сервер, который говорит об ошибке строкой', async () => {
+    globalThis.fetch = (async () =>
+      answer({ error: 'Такая почта уже занята' }, 409)) as unknown as typeof fetch;
+
+    await expect(
+      signIn(db, 'https://склад.рф', { email: 'a@b.ru', password: '123' }),
+    ).rejects.toThrow('Такая почта уже занята');
+  });
+
+  /** Ошибка при показе ошибки оставляет человека без обеих. */
+  it('на непонятный вид ошибки не падает сам', async () => {
+    globalThis.fetch = (async () =>
+      answer({ error: { code: 'oops' } }, 500)) as unknown as typeof fetch;
+
+    await expect(
+      signIn(db, 'https://склад.рф', { email: 'a@b.ru', password: '123' }),
+    ).rejects.toThrow(/Сервер ответил ошибкой 500/);
   });
 
   it('без входа обмен не притворяется удачным', async () => {

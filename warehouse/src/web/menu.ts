@@ -41,6 +41,9 @@ export interface MenuEntry {
 
 export const MENU: MenuEntry[] = [
   { label: 'Главная', icon: 'home', href: '/', needs: 'dashboard' },
+  // Вторым пунктом, а не в конце списка: спрашивать словами — это то, за чем
+  // приходят чаще, чем за любым отчётом, и найтись оно должно сразу.
+  { label: 'Спросить у склада', icon: 'assistant', href: '/assistant' },
   { label: 'Товары и услуги', icon: 'products', href: '/catalog', needs: 'catalog' },
   {
     label: 'Кассы и смены',
@@ -196,6 +199,7 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   if (pathname.startsWith('/print-forms')) return 'Компания / печатные формы';
   if (pathname.startsWith('/storefront')) return 'Интернет-витрина';
   if (pathname.startsWith('/integrations')) return 'Интеграции';
+  if (pathname.startsWith('/assistant')) return 'Спросить у склада';
   if (pathname.startsWith('/lab')) return 'Лаборатория';
   if (pathname.startsWith('/billing')) return 'Тарифы и оплата';
   if (pathname.startsWith('/trash')) return 'Корзина';

@@ -159,6 +159,9 @@ export const WebIcon = {
   storefront: (p: Props) => <Ionicons name="globe-outline" size={p.size ?? 21} color={p.color} />,
   integrations: (p: Props) => <Ionicons name="attach" size={p.size ?? 21} color={p.color} />,
   lab: (p: Props) => <MaterialCommunityIcons name="flask" size={p.size ?? 21} color={p.color} />,
+  assistant: (p: Props) => (
+    <MaterialCommunityIcons name="comment-question-outline" size={p.size ?? 21} color={p.color} />
+  ),
   billing: (p: Props) => (
     <MaterialCommunityIcons name="credit-card-outline" size={p.size ?? 21} color={p.color} />
   ),

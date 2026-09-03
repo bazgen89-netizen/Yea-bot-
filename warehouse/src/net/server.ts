@@ -27,12 +27,33 @@ export interface Session {
 interface UserAnswer {
   token?: string;
   user?: { id?: string; org_id?: string; name?: string; email?: string; role?: string };
-  error?: string;
+  /**
+   * Про ошибку сервер говорит объектом: `{ error: { code, message } }`. Но
+   * сервер бывает и другой — свой, старый, чужой, — и там это просто строка.
+   */
+  error?: string | { code?: string; message?: string };
   message?: string;
 }
 
 /** Ошибка, которую не стыдно показать человеку целиком. */
 export class ServerError extends Error {}
+
+/**
+ * Что сказал сервер — одной строкой.
+ *
+ * Написано отдельно потому, что на этом я и попался. Проверки ходили к
+ * подставному серверу, который отвечал `{ error: 'строка' }`, и всё сходилось.
+ * А настоящий отвечает `{ error: { code, message } }` — и на первой же
+ * настоящей ошибке программа падала с «(p.error ?? …).trim is not a function»,
+ * вместо того чтобы сказать, что не так с регистрацией. Ошибка при показе
+ * ошибки — худший вид: человек остаётся без обеих.
+ */
+function saidBy(answer: UserAnswer): string {
+  const one = answer.error;
+  if (typeof one === 'string') return one.trim();
+  if (one && typeof one === 'object' && typeof one.message === 'string') return one.message.trim();
+  return typeof answer.message === 'string' ? answer.message.trim() : '';
+}
 
 async function call(
   url: string,
@@ -65,7 +86,7 @@ async function call(
   }
 
   if (!response.ok) {
-    const said = (answer.error ?? answer.message ?? '').trim();
+    const said = saidBy(answer);
     if (said) throw new ServerError(said);
 
     if (response.status === 401) throw new ServerError('Сервер не принял вход. Войдите заново.');

@@ -573,6 +573,41 @@ export const openapi = {
         responses: { 200: ok(ref('PullResult')) },
       },
     },
+    '/api/v1/assistant/ask': {
+      post: {
+        tags: ['Помощник'],
+        summary: 'Превратить вопрос словами в запрос к своему складу',
+        description: [
+          'Данные магазина здесь не читаются вовсе: наружу, к модели, уходит только вопрос',
+          'и описание таблиц, которое присылает само устройство. Считает по возвращённому',
+          'запросу устройство, у себя. Ключ модели живёт на сервере (ASSISTANT_KEY);',
+          'без него ручка отвечает 503 и говорит, чего не хватает.',
+        ].join(' '),
+        requestBody: json({
+          type: 'object',
+          required: ['question', 'schema'],
+          properties: {
+            question: { type: 'string', maxLength: 2000, description: 'Вопрос обычными словами.' },
+            schema: {
+              type: 'string',
+              maxLength: 20000,
+              description: 'Описание таблиц устройства: названия таблиц и колонок.',
+            },
+          },
+        }),
+        responses: {
+          200: ok({
+            type: 'object',
+            properties: {
+              sql: { type: 'string', description: 'Запрос SQLite. Пусто, если помощник отказался.' },
+              comment: { type: 'string', description: 'Что он считает — одной строкой.' },
+            },
+          }),
+          400: errorResponse,
+          503: errorResponse,
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {

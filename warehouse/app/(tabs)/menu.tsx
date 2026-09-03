@@ -41,6 +41,12 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
   const { allowed } = usePermissions();
 
   const sections: { title: string; rows: MenuRow[] }[] = [
+    // Первым разделом, а не среди прочего: спрашивать словами — это то, за чем
+    // с телефона заходят чаще всего, и искать это не должно приходиться.
+    {
+      title: 'Помощник',
+      rows: [{ label: 'Спросить у склада', icon: 'question', href: '/assistant' }],
+    },
     {
       title: 'Компания',
       rows: [

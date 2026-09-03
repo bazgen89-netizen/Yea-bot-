@@ -34,6 +34,7 @@
  *   --history=N       сколько последних чеков брать (по умолчанию все)
  *   --since=ГГГГ-ММ-ДД  с какого дня история (по умолчанию 2019-01-01)
  *   --into-repo       положить в сборочную папку, которая лежит в git
+ *   --shrink          разрешить выгрузке уменьшиться (обычно это ошибка)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -185,6 +186,42 @@ async function get(path) {
 
     return response.json();
   }
+}
+
+/**
+ * Записать список — и не дать выгрузке похудеть молча.
+ *
+ * Так я и испортил её однажды: запустил перенос с `--since=2026-08-01`,
+ * и `products.json` вместо полутора тысяч карточек стал шестьюстами —
+ * ключ отдаёт снятые с продажи только с указанной даты. Файл переписался
+ * без единого слова, а заметил я это лишь потому, что считал строки руками.
+ *
+ * Теперь так: если новый список короче прежнего больше чем на десятую
+ * часть, файл **не переписывается**, а перенос говорит, что случилось.
+ * Осознанно ужать выгрузку можно ключом `--shrink`.
+ */
+function writeList(file, rows, label) {
+  const path = `${out}/${file}`;
+  let before = 0;
+  try {
+    const old = JSON.parse(readFileSync(path, 'utf8'));
+    if (Array.isArray(old)) before = old.length;
+  } catch {
+    before = 0;
+  }
+
+  if (before > 0 && rows.length < before * 0.9 && !flag('shrink')) {
+    console.error(
+      `\n${label}: было ${before}, стало бы ${rows.length} — файл не переписан.\n` +
+        `Так бывает, когда перенос запущен с --since: ключ отдаёт часть данных\n` +
+        `только с указанной даты. Запустите без --since, а если ужать надо\n` +
+        `нарочно — добавьте --shrink.`,
+    );
+    return false;
+  }
+
+  writeFileSync(path, JSON.stringify(rows, ...(file === 'sales.json' || file === 'docs.json' ? [skipEmpty] : [null, 1])));
+  return true;
 }
 
 /** Постранично, пока страница приходит полной. */
@@ -581,7 +618,7 @@ const codeOf = (product, line, name) => {
   );
 };
 
-writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
+writeList('products.json', products, 'Товары');
 
 /**
  * Корректировки — складские документы журнала.
@@ -626,7 +663,7 @@ console.log(`  корректировок в журнал: ${changeDocs.length}`
 // Без истории складские документы всё равно должны лечь на место: склад у
 // него ведётся корректировками, и без них журнал снова окажется пустым.
 if (flag('no-history')) {
-  writeFileSync(`${out}/docs.json`, JSON.stringify(mergeDocs(changeDocs), skipEmpty));
+  writeList('docs.json', mergeDocs(changeDocs), 'Складские документы');
 }
 
 // --- клиенты --------------------------------------------------------------
@@ -685,7 +722,7 @@ const customers = rawCustomers.map((item) => {
   };
 });
 
-writeFileSync(`${out}/clients.json`, JSON.stringify(customers, null, 1));
+writeList('clients.json', customers, 'Клиенты');
 
 // --- история покупок ------------------------------------------------------
 
@@ -825,7 +862,7 @@ if (!flag('no-history')) {
     }
 
     process.stdout.write(`\r  дозагружено: ${got}\n`);
-    writeFileSync(`${out}/products.json`, JSON.stringify(products, null, 1));
+    writeList('products.json', products, 'Товары');
 
   }
 
@@ -864,7 +901,7 @@ if (!flag('no-history')) {
   // стоит недорого на пятистах строках и дорого — на сорока пяти тысячах
   // чеков: он один прибавляет к файлу мегабайты, а читать эту выгрузку
   // глазами всё равно никто не будет.
-  writeFileSync(`${out}/sales.json`, JSON.stringify(sales, skipEmpty));
+  writeList('sales.json', sales, 'История чеков');
 
   /**
    * Складские документы: закупки и возвраты поставщику.
@@ -917,7 +954,7 @@ if (!flag('no-history')) {
     })),
   ];
 
-  writeFileSync(`${out}/docs.json`, JSON.stringify(mergeDocs(docs), skipEmpty));
+  writeList('docs.json', mergeDocs(docs), 'Складские документы');
   console.log(`  закупок ${bought.length}, возвратов поставщику ${sentBack.length}`);
 }
 
@@ -955,8 +992,12 @@ function mergeDocs(fresh) {
   }
   if (!Array.isArray(old) || old.length === 0) return fresh;
 
-  const seen = new Set(fresh.filter((doc) => doc.no != null).map((doc) => `${doc.k}#${doc.no}`));
-  const kept = old.filter((doc) => doc.no == null || !seen.has(`${doc.k}#${doc.no}`));
+  // Тем же ключом, что и чеки, и по той же причине: номер документа свой у
+  // каждого магазина, и один номер не значит один документ.
+  const name = (doc) => `${doc.k}|${doc.at ?? ''}|${doc.no ?? ''}|${doc.st ?? ''}`;
+
+  const seen = new Set(fresh.filter((doc) => doc.no != null || doc.at != null).map(name));
+  const kept = old.filter((doc) => (doc.no == null && doc.at == null) || !seen.has(name(doc)));
 
   return [...kept, ...fresh].sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')));
 }
@@ -974,9 +1015,14 @@ function mergeDocs(fresh) {
  * запускать перенос раз в несколько дней, и каждый раз новые чеки будут
  * ложиться к уже собранным. Поэтому файл не переписывается, а дополняется.
  *
- * Чеки различаются номером документа: он у CloudShop сквозной и не
- * повторяется. Чек без номера считаем новым — потерять его хуже, чем
- * задвоить.
+ * Чем чек отличается от чека: временем, номером и магазином — всеми тремя
+ * сразу. Номер у CloudShop **не сквозной**: он свой у каждого магазина, и
+ * «Продажа #3321» есть и в «Чайном баре», и в «Черёмушках». Пока я считал
+ * номер единственным именем чека, свежая продажа с номером 3321 выкидывала
+ * из файла все прежние чеки с тем же номером — за один запуск пропало 290
+ * чеков. Ровно на это я и напоролся.
+ *
+ * Чек без времени и номера считаем новым — потерять его хуже, чем задвоить.
  */
 function mergeHistory(fresh) {
   let old = [];
@@ -987,8 +1033,14 @@ function mergeHistory(fresh) {
   }
   if (!Array.isArray(old) || old.length === 0) return fresh;
 
-  const seen = new Set(fresh.map((sale) => sale.no).filter((no) => no !== null));
-  const kept = old.filter((sale) => sale.no === null || !seen.has(sale.no));
+  const name = (sale) =>
+    sale.at == null && sale.no == null ? null : `${sale.at ?? ''}|${sale.no ?? ''}|${sale.st ?? ''}`;
+
+  const seen = new Set(fresh.map(name).filter((key) => key !== null));
+  const kept = old.filter((sale) => {
+    const key = name(sale);
+    return key === null || !seen.has(key);
+  });
 
   // По времени, от старых к новым: журнал читается сверху вниз.
   return [...kept, ...fresh].sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')));

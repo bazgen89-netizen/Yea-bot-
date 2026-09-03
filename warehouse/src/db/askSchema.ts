@@ -24,7 +24,7 @@ import type { SqlDriver } from './driver';
 const ТАБЛИЦЫ: { name: string; note: string }[] = [
   {
     name: 'products',
-    note: 'Товары. sale_price — цена продажи в копейках, cost_price — себестоимость в копейках. archived=1 — товар убран из работы.',
+    note: 'Товары. sale_price — цена продажи в копейках, cost_price — себестоимость в копейках. unit — единица измерения ИМЕННО ЭТОГО товара: у одних «шт», у других «гр» или «кг». archived=1 — товар убран из работы.',
   },
   { name: 'categories', note: 'Категории товаров. products.category_id ссылается сюда.' },
   { name: 'locations', note: 'Магазины (точки). archived=1 — точка закрыта.' },

@@ -55,10 +55,12 @@ export async function askWarehouse(db: SqlDriver, question: string): Promise<О�
   }
 
   const schema = describeSchema(db);
-  const { sql, comment } =
+  const спросить = (вопрос: string) =>
     way === 'ключ'
-      ? await спроситьСвоимКлючом(getAskSettings(db), schema, question)
-      : await спроситьСервер(db, schema, question);
+      ? спроситьСвоимКлючом(getAskSettings(db), schema, вопрос)
+      : спроситьСервер(db, schema, вопрос);
+
+  let { sql, comment } = await спросить(question);
 
   // Помощник отказался — так и скажем. Это честнее пустой таблицы.
   if (!sql) {
@@ -73,11 +75,50 @@ export async function askWarehouse(db: SqlDriver, question: string): Promise<О�
   try {
     return { comment, sql, result: runSql(db, sql), через: way };
   } catch (error) {
+    // Запрос, который меняет базу, не переспрашиваем: это не описка, а то,
+    // чего делать нельзя вовсе.
     if (error instanceof UnsafeSql) throw new ServerError(error.message);
-    // Ошибка самой базы: помощник придумал колонку, которой нет. Говорим об
-    // этом прямо — по запросу видно, где он ошибся.
+
+    /**
+     * База отказала — переспросим один раз, показав, на чём.
+     *
+     * Так и вышло на первом же живом вопросе: модель написала
+     * `s.refunded_at`, а такой колонки у чеков нет. Человеку в этот момент
+     * показывалась ошибка базы — то есть его просили самому разобраться в
+     * чужом запросе. А достаточно сказать модели, что не так: ошибку она
+     * исправляет сама почти всегда.
+     *
+     * Переспрашиваем ровно один раз. Второй промах — уже не описка, и
+     * крутить это по кругу значит молча жечь деньги на счёте.
+     */
     const сказала = error instanceof Error ? error.message : String(error);
-    throw new ServerError(`Запрос не выполнился: ${сказала}\n\n${sql}`);
+    const второй = await спросить(
+      `${question}\n\nПредыдущая попытка не сработала. Вот запрос:\n${sql}\n\n` +
+        `База ответила: ${сказала}\n\n` +
+        'Исправь запрос. Колонок, которых нет в описании таблиц, не используй — ' +
+        'сверься с ним заново. Ответь только исправленным запросом.',
+    );
+
+    if (!второй.sql) {
+      throw new ServerError(`Запрос не выполнился: ${сказала}\n\n${sql}`);
+    }
+
+    try {
+      return {
+        comment: второй.comment || comment,
+        sql: второй.sql,
+        result: runSql(db, второй.sql),
+        через: way,
+      };
+    } catch (снова) {
+      if (снова instanceof UnsafeSql) throw new ServerError(снова.message);
+      const опять = снова instanceof Error ? снова.message : String(снова);
+      throw new ServerError(
+        `Помощник дважды ошибся в запросе, и я его не выполнил.\n\n` +
+          `Сперва: ${сказала}\nПотом: ${опять}\n\n${второй.sql}\n\n` +
+          'Попробуйте спросить другими словами — или другой моделью.',
+      );
+    }
   }
 }
 

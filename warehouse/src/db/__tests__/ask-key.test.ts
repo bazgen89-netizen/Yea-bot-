@@ -172,6 +172,78 @@ describe('помощник со своим ключом', () => {
     expect(askWay(db)).toBe('сервер');
   });
 
+  /**
+   * Промах в колонке.
+   *
+   * Первый же живой вопрос кончился так: модель написала `s.refunded_at`, а
+   * такой колонки у чеков нет — я сам про неё соврал в описании. Человеку в
+   * этот момент показывалась ошибка базы, то есть его просили разобраться в
+   * чужом запросе. А достаточно сказать модели, на чём она села.
+   */
+  describe('когда запрос не выполнился', () => {
+    /** Модель, которая отвечает по очереди — как в жизни, вторым разом. */
+    const модельПоОчереди = (ответы: string[]) => {
+      let раз = 0;
+      globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+        calls.push({
+          url: String(url),
+          headers: (init.headers ?? {}) as Record<string, string>,
+          body: init.body ? JSON.parse(String(init.body)) : undefined,
+        });
+        const текст = ответы[Math.min(раз, ответы.length - 1)];
+        раз += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ content: [{ type: 'text', text: текст }] }),
+        };
+      }) as unknown as typeof fetch;
+    };
+
+    beforeEach(() => {
+      saveAskSettings(db, { kind: 'claude', key: 'sk-ant-api03-mine', model: '' });
+    });
+
+    it('переспрашивает один раз, показав ошибку, и отвечает со второй попытки', async () => {
+      модельПоОчереди([
+        'Считаю проданное.\n```sql\nSELECT name FROM sales WHERE refunded_at IS NULL\n```',
+        'Возвраты помечены иначе.\n```sql\nSELECT name AS "Товар" FROM products\n```',
+      ]);
+
+      const ответ = await askWarehouse(db, 'сколько продалось пуэра за август');
+
+      expect(ответ.result?.rows[0]).toEqual(['Шу Пуэр Золотой Бутон']);
+      expect(ответ.comment).toBe('Возвраты помечены иначе.');
+
+      // Спросили дважды, и во второй раз сказали, на чём сели.
+      expect(calls).toHaveLength(2);
+      const второй = JSON.stringify(calls[1].body);
+      expect(второй).toContain('refunded_at');
+      expect(второй).toContain('no such column');
+      // Исходный вопрос тоже на месте — иначе исправлять нечего.
+      expect(второй).toContain('сколько продалось пуэра за август');
+    });
+
+    /**
+     * Второй промах — уже не описка. Крутить это по кругу значит молча жечь
+     * деньги на счёте владельца.
+     */
+    it('на второй промах сдаётся и говорит об этом, а не спрашивает третий раз', async () => {
+      модельПоОчереди(['```sql\nSELECT nope FROM sales\n```']);
+
+      await expect(askWarehouse(db, 'вопрос')).rejects.toThrow(/дважды ошибся/);
+      expect(calls).toHaveLength(2);
+    });
+
+    /** Правку базы не переспрашивают: это не описка, а то, чего нельзя. */
+    it('за правку базы не переспрашивает вовсе', async () => {
+      модельПоОчереди(['```sql\nDELETE FROM products\n```']);
+
+      await expect(askWarehouse(db, 'удали товары')).rejects.toThrow(/только чтение/);
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   describe('ошибки модели — словами, а не кодами', () => {
     beforeEach(() => {
       saveAskSettings(db, { kind: 'claude', key: 'sk-ant-api03-wrong', model: '' });

@@ -52,7 +52,7 @@ const COLUMNS: Record<SyncTable, string[]> = {
     'name', 'sku', 'barcode', 'category_id', 'unit',
     'cost_price', 'sale_price', 'min_qty', 'photo_uri', 'archived', 'created_at',
   ],
-  counterparties: ['name', 'kind', 'phone', 'email', 'note', 'created_at'],
+  counterparties: ['name', 'kind', 'phone', 'email', 'note', 'archived', 'created_at'],
   docs: ['type', 'subtype', 'counterparty', 'note', 'created_at', 'location_id', 'location_to'],
   sales: ['discount', 'total', 'cost_total', 'payment', 'created_at', 'location_id'],
   sale_items: ['sale_id', 'product_id', 'qty', 'price', 'cost_price'],
@@ -143,16 +143,28 @@ export function fillUids(db: SqlDriver): number {
   return touched;
 }
 
+/** Что уже помечено к отправке: по этим меткам потом и вычёркиваем. */
+export interface Marks {
+  table: SyncTable;
+  row_id: Id;
+}
+
 /**
  * Что отправить серверу.
  *
- * Пока отправляется всё: у устройства нет своего счётчика изменений, и
- * заводить его — отдельная работа. Сервер к повторам готов: справочник он
- * сливает по времени правки, событие узнаёт по `uid` и второй раз не
- * вставляет. Хуже отправить лишнее, чем потерять чек.
+ * Только изменённое. Раньше уезжало всё подряд — пять тысяч строк в каждый
+ * обмен; на столе незаметно, а с телефона по мобильному интернету это
+ * мегабайт туда и столько же обратно, потому что сервер честно пересказывает
+ * нам наши же правки.
+ *
+ * Что изменилось, помнит сама база (`sync_outbox`, заполняется триггерами).
+ * Вычёркивается это не здесь, а после удачной отправки — и вычёркиваются
+ * именно те строки, что уехали, а не таблица целиком: пока идёт обмен, на
+ * кассе могли пробить чек, и он должен уехать следующим разом, а не пропасть.
  */
-export function outbox(db: SqlDriver): Payload {
+export function outbox(db: SqlDriver): { payload: Payload; marks: Marks[] } {
   const payload: Payload = {};
+  const marks: Marks[] = [];
 
   for (const table of SYNC_TABLES) {
     const links = LINKS[table] ?? {};
@@ -167,14 +179,35 @@ export function outbox(db: SqlDriver): Payload {
       })
       .join(', ');
 
-    const rows = db.all<Row>(
-      `SELECT t.uid AS id${select ? `, ${select}` : ''} FROM ${table} t WHERE t.uid IS NOT NULL`,
+    const rows = db.all<Row & { row_id: Id }>(
+      `SELECT t.id AS row_id, t.uid AS id${select ? `, ${select}` : ''}
+         FROM ${table} t
+         JOIN sync_outbox o ON o.table_name = ? AND o.row_id = t.id
+        WHERE t.uid IS NOT NULL`,
+      [table],
     );
 
-    if (rows.length > 0) payload[table] = rows;
+    if (rows.length === 0) continue;
+
+    for (const row of rows) marks.push({ table, row_id: row.row_id });
+    payload[table] = rows.map(({ row_id: _, ...rest }) => rest);
   }
 
-  return payload;
+  return { payload, marks };
+}
+
+/** Вычеркнуть отправленное — после того, как сервер сказал «принял». */
+export function forgetOutbox(db: SqlDriver, marks: Marks[]): void {
+  if (marks.length === 0) return;
+
+  db.tx(() => {
+    for (const mark of marks) {
+      db.run('DELETE FROM sync_outbox WHERE table_name = ? AND row_id = ?', [
+        mark.table,
+        mark.row_id,
+      ]);
+    }
+  });
 }
 
 /**
@@ -248,6 +281,10 @@ export function applyPull(db: SqlDriver, changes: Payload): Applied {
   const result: Applied = { added: 0, updated: 0, skipped: 0 };
 
   db.tx(() => {
+    // Тихо: принятое с сервера обратно не отправляется. Иначе обмен гонял бы
+    // одни и те же строки по кругу и никогда не затихал.
+    db.run('INSERT OR REPLACE INTO sync_quiet (id) VALUES (1)');
+
     for (const table of SYNC_TABLES) {
       const rows = changes[table];
       if (!rows?.length) continue;
@@ -300,6 +337,8 @@ export function applyPull(db: SqlDriver, changes: Payload): Applied {
         }
       }
     }
+
+    db.run('DELETE FROM sync_quiet');
   });
 
   return result;
@@ -341,7 +380,10 @@ function fields(db: SqlDriver, table: SyncTable, row: Row): Record<string, SqlPa
 
     if (!target) {
       if (incoming !== undefined && incoming !== null) {
-        values[column] = incoming as SqlParam;
+        // На сервере «в архиве» — это да/нет, у нас 1 и 0. Оставить как есть
+        // нельзя: часть драйверов такое значение просто не примет.
+        values[column] =
+          typeof incoming === 'boolean' ? (incoming ? 1 : 0) : (incoming as SqlParam);
       } else if (column in required) {
         // Обязательное поле: пустое значение — не «ничего», а «сегодня».
         values[column] = required[column] === '' ? new Date().toISOString() : required[column];

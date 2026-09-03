@@ -103,12 +103,12 @@ describe('связь с сервером магазина', () => {
     });
 
     await signIn(db, 'https://склад.рф', { email: 'waystea@gmail.com', password: 'секрет' });
-    габа();
 
     // Первый обмен — знакомство, он идёт наоборот; порядок «отдать первым»
     // проверяется на втором, обычном.
     await syncNow(db);
     calls = [];
+    габа();
     const report = await syncNow(db);
 
     const paths = calls.map((one) => one.path);
@@ -185,6 +185,72 @@ describe('связь с сервером магазина', () => {
 
     expect(report.added).toBe(1);
     expect(db.get<{ name: string }>('SELECT name FROM products')?.name).toBe('Пуэр Шу');
+  });
+
+  /**
+   * Обмен, которому нечего сказать, должен молчать.
+   *
+   * Раньше уезжал весь склад целиком — каждый раз. С телефона по мобильному
+   * интернету это мегабайт туда и столько же обратно каждые пять минут, и
+   * половина возвращалась назад же: сервер честно пересказывал нам наши
+   * собственные правки.
+   */
+  it('второй раз подряд не отправляет ничего и не получает своё же назад', async () => {
+    fakeServer({
+      '/api/v1/auth/login': вход,
+      '/api/v1/sync/push': { cursor: 1, applied: {} },
+      '/api/v1/sync/pull': { cursor: 1, changes: {} },
+    });
+
+    await signIn(db, 'https://склад.рф', { email: 'waystea@gmail.com', password: 'секрет' });
+    габа();
+
+    expect((await syncNow(db)).sent).toBeGreaterThan(0);
+
+    calls = [];
+    const тишина = await syncNow(db);
+
+    expect(тишина.sent).toBe(0);
+    expect(тишина.added).toBe(0);
+    expect(тишина.updated).toBe(0);
+    // Отправлять нечего — и в сеть за этим никто не ходил.
+    expect(calls.some((one) => one.path === '/api/v1/sync/push')).toBe(false);
+  });
+
+  /**
+   * Принятое с сервера обратно не отправляется.
+   *
+   * Иначе получается круг: приняли товар, отправили его назад, сервер отдал
+   * его снова — и так до разряженной батареи.
+   */
+  it('присланное с сервера не уезжает обратно', async () => {
+    fakeServer({
+      '/api/v1/auth/login': вход,
+      '/api/v1/sync/push': { cursor: 5, applied: {} },
+      '/api/v1/sync/pull': (path: string) => {
+        const since = Number(new URL(`https://x${path}`).searchParams.get('since'));
+        if (since === 0) {
+          return {
+            cursor: 5,
+            changes: {
+              products: [
+                { id: 'чужой-товар', name: 'Пуэр Шу', unit: 'гр', sale_price: 5_000, cost_price: 2_000 },
+              ],
+            },
+          };
+        }
+        return { cursor: 5, changes: {} };
+      },
+    });
+
+    await signIn(db, 'https://склад.рф', { email: 'waystea@gmail.com', password: 'секрет' });
+    await syncNow(db);
+
+    calls = [];
+    const второй = await syncNow(db);
+
+    expect(второй.sent).toBe(0);
+    expect(calls.some((one) => one.path === '/api/v1/sync/push')).toBe(false);
   });
 
   /**

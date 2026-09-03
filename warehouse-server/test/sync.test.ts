@@ -208,6 +208,50 @@ describe('push', () => {
     assert.equal(saved.body.name, 'Свежее');
   });
 
+  /**
+   * Клиентская база — не мелочь: у чайной лавки её три тысячи, с телефонами,
+   * днями рождения и бонусами. Сервер про эту таблицу не знал вовсе и молча
+   * выбрасывал её, а телефон бодро отчитывался «отправлено 4690».
+   */
+  it('принимает покупателей, заведённых на телефоне', async () => {
+    const customer = {
+      id: randomUUID(),
+      kind: 'customer',
+      name: 'Пётр Иванович',
+      phone: '+79161234567',
+      created_at: now(),
+      updated_at: now(),
+    };
+
+    const response = await call('POST', '/api/v1/sync/push', {
+      token: ownerToken,
+      body: { counterparties: [customer] },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(Number(response.body.applied.counterparties), 1);
+    assert.deepEqual(response.body.ignored, []);
+
+    const back = await call('GET', '/api/v1/sync/pull?since=0', { token: ownerToken });
+    const приехали = back.body.changes.counterparties as { id: string; phone: string }[];
+    assert.equal(приехали.length, 1);
+    assert.equal(приехали[0].phone, '+79161234567');
+  });
+
+  /**
+   * Молчаливая потеря — худшее, что может сделать сервер: человек уверен,
+   * что данные уехали, а их там нет. Не знаешь таблицы — скажи об этом.
+   */
+  it('о непринятом говорит вслух, а не выбрасывает молча', async () => {
+    const response = await call('POST', '/api/v1/sync/push', {
+      token: ownerToken,
+      body: { счета: [{ id: randomUUID(), name: 'Касса' }] },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.ignored, ['счета']);
+  });
+
   it('игнорирует поля, которых клиенту менять нельзя', async () => {
     const product = offlineProduct();
     await call('POST', '/api/v1/sync/push', {

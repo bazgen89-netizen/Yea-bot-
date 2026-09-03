@@ -855,6 +855,54 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (table_name, uid)
   );
   `,
+
+  /**
+   * Что осталось отдать серверу.
+   *
+   * До сих пор отдавалось всё подряд: пять тысяч строк в каждый обмен. На
+   * столе это незаметно, а с телефона по мобильному интернету — мегабайт
+   * туда и обратно каждые пять минут, и половина из них возвращается назад
+   * же, потому что сервер честно пересказывает нам наши собственные правки.
+   *
+   * Теперь помечается только изменённое. Помечает база сама, триггером: если
+   * оставить это на совести кода, рано или поздно найдётся путь, где про
+   * пометку забыли, — и чек не уедет, а человек об этом не узнает.
+   *
+   * `sync_quiet` — на время приёма чужого. Строку, которую мы только что
+   * приняли с сервера, помечать нельзя: она уедет обратно, сервер отдаст её
+   * снова, и обмен будет гонять одно и то же по кругу, никогда не затихая.
+   */
+  `
+  CREATE TABLE sync_outbox (
+    table_name TEXT    NOT NULL,
+    row_id     INTEGER NOT NULL,
+    PRIMARY KEY (table_name, row_id)
+  );
+
+  CREATE TABLE sync_quiet (id INTEGER PRIMARY KEY CHECK (id = 1));
+
+  ${[
+    'locations',
+    'categories',
+    'products',
+    'counterparties',
+    'docs',
+    'sales',
+    'sale_items',
+    'stock_moves',
+  ]
+    .flatMap((table) =>
+      ['INSERT', 'UPDATE'].map(
+        (event) => `
+  CREATE TRIGGER out_${table}_${event.toLowerCase()} AFTER ${event} ON ${table}
+  WHEN NOT EXISTS (SELECT 1 FROM sync_quiet)
+  BEGIN
+    INSERT OR REPLACE INTO sync_outbox (table_name, row_id) VALUES ('${table}', NEW.id);
+  END;`,
+      ),
+    )
+    .join('\n')}
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

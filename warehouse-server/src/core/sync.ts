@@ -25,6 +25,7 @@ export interface PushPayload {
   locations?: Row[];
   categories?: Row[];
   products?: Row[];
+  counterparties?: Row[];
   docs?: Row[];
   sales?: Row[];
   sale_items?: Row[];
@@ -37,6 +38,14 @@ export interface PushResult {
   /** Номер, до которого сервер учёл изменения. */
   cursor: number;
   applied: Record<string, number>;
+  /**
+   * Что в посылке было, а сервер этого не знает.
+   *
+   * Молчать об этом нельзя. Ровно так и пропала клиентская база: телефон
+   * честно отправлял три тысячи покупателей, сервер про таблицу не знал и
+   * тихо их выбрасывал, а человеку показывалось «отправлено 4690».
+   */
+  ignored: string[];
 }
 
 /** Колонки, которые клиент вправе прислать. Остальное игнорируется. */
@@ -46,6 +55,9 @@ const WRITABLE: Record<keyof PushPayload, string[]> = {
   products: [
     'id', 'name', 'sku', 'barcode', 'category_id', 'unit',
     'cost_price', 'sale_price', 'min_qty', 'photo_uri', 'archived', 'updated_at',
+  ],
+  counterparties: [
+    'id', 'kind', 'name', 'phone', 'email', 'note', 'archived', 'created_at', 'updated_at',
   ],
   docs: ['id', 'location_id', 'type', 'to_location_id', 'counterparty', 'note', 'created_at'],
   sales: ['id', 'location_id', 'discount', 'total', 'cost_total', 'payment', 'created_at', 'refunded_at'],
@@ -57,16 +69,17 @@ const WRITABLE: Record<keyof PushPayload, string[]> = {
 };
 
 /** Справочники сливаются по времени правки, события — только вставляются. */
-const MUTABLE = new Set(['locations', 'categories', 'products']);
+const MUTABLE = new Set(['locations', 'categories', 'products', 'counterparties']);
 
 /**
  * Порядок важен: движение ссылается на товар, точку и документ, поэтому
  * справочники и документы должны попасть в базу раньше.
  */
-const ORDER: (keyof PushPayload)[] = [
+export const ORDER: (keyof PushPayload)[] = [
   'locations',
   'categories',
   'products',
+  'counterparties',
   'docs',
   'sales',
   'sale_items',
@@ -79,10 +92,18 @@ export async function push(
   userId: string | null,
   payload: PushPayload,
 ): Promise<PushResult> {
+  // Чего сервер не знает — о том надо сказать вслух, а не выбросить молча.
+  const ignored = Object.keys(payload).filter(
+    (table) =>
+      !(ORDER as string[]).includes(table) &&
+      Array.isArray((payload as Record<string, unknown>)[table]) &&
+      ((payload as Record<string, Row[]>)[table]).length > 0,
+  );
+
   const total = ORDER.reduce((sum, table) => sum + (payload[table]?.length ?? 0), 0);
   if (total === 0) {
     const current = await db.one<{ seq: number }>('SELECT seq FROM orgs WHERE id = $1', [orgId]);
-    return { cursor: Number(current?.seq ?? 0), applied: {} };
+    return { cursor: Number(current?.seq ?? 0), applied: {}, ignored };
   }
 
   return db.tx(async (tx) => {
@@ -105,7 +126,7 @@ export async function push(
     }
 
     const current = await tx.one<{ seq: number }>('SELECT seq FROM orgs WHERE id = $1', [orgId]);
-    return { cursor: Number(current?.seq ?? 0), applied };
+    return { cursor: Number(current?.seq ?? 0), applied, ignored };
   });
 }
 
@@ -231,6 +252,7 @@ const PULL_TABLES = [
   'locations',
   'categories',
   'products',
+  'counterparties',
   'docs',
   'sales',
   'sale_items',

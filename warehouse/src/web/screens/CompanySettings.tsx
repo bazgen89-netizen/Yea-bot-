@@ -398,10 +398,24 @@ function SyncTab() {
             onPress={() =>
               run('Синхронизация', async () => {
                 const report = await syncNow(db);
-                return (
-                  `Отправлено записей: ${report.sent}. ` +
-                  `Приехало новых: ${report.added}, обновлено: ${report.updated}.`
-                );
+                const строки =
+                  report.sent === 0 && report.added === 0 && report.updated === 0
+                    ? ['Всё уже сошлось — отправлять и забирать нечего.']
+                    : [
+                        `Отправлено записей: ${report.sent}.`,
+                        `Приехало новых: ${report.added}, обновлено: ${report.updated}.`,
+                      ];
+
+                // О непринятом молчать нельзя: иначе человек уверен, что
+                // клиентская база уехала, а её там нет.
+                if (report.ignored.length > 0) {
+                  строки.push(
+                    `Сервер не принял и не знает, что это: ${report.ignored.join(', ')}. ` +
+                      'Обновите сервер склада.',
+                  );
+                }
+
+                return строки.join(' ');
               })
             }
           />

@@ -54,7 +54,7 @@ describe('синхронизация с сервером', () => {
     заводимТовар(касса, 'Габа Алишань', 10_000);
     fillUids(касса);
 
-    const итог = applyPull(телефон, outbox(касса));
+    const итог = applyPull(телефон, outbox(касса).payload);
 
     expect(итог.added).toBeGreaterThan(0);
     const товар = телефон.get<{ name: string; sale_price: number }>(
@@ -69,8 +69,8 @@ describe('синхронизация с сервером', () => {
     заводимТовар(касса, 'Габа Алишань', 10_000);
     fillUids(касса);
 
-    applyPull(телефон, outbox(касса));
-    applyPull(телефон, outbox(касса));
+    applyPull(телефон, outbox(касса).payload);
+    applyPull(телефон, outbox(касса).payload);
 
     expect(телефон.get<{ n: number }>('SELECT COUNT(*) AS n FROM products')?.n).toBe(1);
   });
@@ -102,7 +102,7 @@ describe('синхронизация с сервером', () => {
     });
     fillUids(касса);
 
-    applyPull(телефон, outbox(касса));
+    applyPull(телефон, outbox(касса).payload);
 
     // Чек на месте…
     expect(телефон.get<{ n: number }>('SELECT COUNT(*) AS n FROM sales')?.n).toBe(1);
@@ -132,7 +132,7 @@ describe('синхронизация с сервером', () => {
       allowNegative: true,
     });
     fillUids(касса);
-    applyPull(телефон, outbox(касса));
+    applyPull(телефон, outbox(касса).payload);
 
     // Справочник правится — правка должна доехать.
     касса.run('UPDATE products SET sale_price = 12000, name = ? WHERE id = ?', [
@@ -143,7 +143,7 @@ describe('синхронизация с сервером', () => {
     // случилось один раз, и переписывать его нельзя.
     касса.run('UPDATE sales SET total = 999999 WHERE id = 1');
 
-    applyPull(телефон, outbox(касса));
+    applyPull(телефон, outbox(касса).payload);
 
     const товар = телефон.get<{ name: string; sale_price: number }>(
       'SELECT name, sale_price FROM products',

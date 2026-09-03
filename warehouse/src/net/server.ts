@@ -1,6 +1,6 @@
 import type { SqlDriver } from '../db/driver';
 import { getServer, markSynced, saveSignIn } from '../db/server';
-import { applyPull, fillUids, outbox, type Payload } from '../db/sync';
+import { applyPull, fillUids, forgetOutbox, outbox, type Payload } from '../db/sync';
 
 /**
  * Разговор с сервером магазина.
@@ -142,6 +142,15 @@ export interface SyncReport {
   updated: number;
   skipped: number;
   cursor: number;
+  /**
+   * Что мы отправили, а сервер этого не знает.
+   *
+   * Так однажды и потерялась клиентская база: телефон честно отправлял три
+   * тысячи покупателей, сервер про такую таблицу не знал и выбрасывал их
+   * молча, а человеку показывалось бодрое «отправлено 4690». Теперь это
+   * видно, и видно сразу.
+   */
+  ignored: string[];
 }
 
 /**
@@ -215,16 +224,27 @@ export async function syncNow(db: SqlDriver): Promise<SyncReport> {
   // Записи, заведённые до синхронизации, своего имени не имеют — дадим.
   fillUids(db);
 
-  const payload = outbox(db);
+  const { payload, marks } = outbox(db);
   const sent = Object.values(payload).reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
 
-  await call(link.url, '/api/v1/sync/push', {
-    method: 'POST',
-    token: link.token,
-    body: payload,
-  });
+  let ignored: string[] = [];
+
+  if (sent > 0) {
+    const answer = (await call(link.url, '/api/v1/sync/push', {
+      method: 'POST',
+      token: link.token,
+      body: payload,
+    })) as { ignored?: string[] };
+
+    ignored = Array.isArray(answer.ignored) ? answer.ignored : [];
+
+    // Вычёркиваем только после того, как сервер сказал «принял». Если связь
+    // оборвалась на полпути, отправим то же самое ещё раз — сервер к
+    // повторам готов, а вот потерянный чек не вернёт никто.
+    forgetOutbox(db, marks);
+  }
 
   if (!первый) await забрать();
 
-  return { sent, cursor, ...applied };
+  return { sent, cursor, ignored, ...applied };
 }

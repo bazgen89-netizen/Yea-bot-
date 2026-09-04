@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ECO_VERSION', '1.0.0' );
+define( 'ECO_VERSION', '1.0.1' );
 define( 'ECO_DIR', get_template_directory() );
 define( 'ECO_URI', get_template_directory_uri() );
 

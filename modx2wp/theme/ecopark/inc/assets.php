@@ -62,6 +62,7 @@ function eco_assets() {
 		'spanimotion',
 		'script',
 		'html5-3.6-respond-1.1.0.min',
+		'reveal-failsafe',
 	);
 	$dep = 'jquery';
 	foreach ( $js as $handle ) {

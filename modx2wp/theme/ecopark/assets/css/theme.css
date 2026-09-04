@@ -119,3 +119,27 @@
 	border: solid 1px #ccc;
 	border-radius: 10px;
 }
+
+/* ------------------------------------------------------------------ *
+ * Отказоустойчивость показа контента.
+ * Исходная вёрстка прячет блоки (.anim.frombottom / .anim.opac =>
+ * opacity:0) и показывает их скриптом на jQuery (класс .sh). Если на
+ * боевом окружении тот скрипт не отрабатывает (конфликт jQuery от
+ * сторонних виджетов, ошибка внешнего скрипта), блоки остаются
+ * невидимыми и страница выглядит пустой. Показываем контент средствами
+ * CSS — тогда он виден всегда, независимо от JavaScript. Анимация
+ * появления при рабочем скрипте продолжает добавлять .sh; параллакс
+ * (.move, через transform в JS) не затрагиваем — трогаем только opacity,
+ * а transform сбрасываем лишь у неподвижных блоков.
+ * ------------------------------------------------------------------ */
+.anim.frombottom,
+.anim.fromleft,
+.anim.fromright,
+.anim.frombottomright,
+.anim.frombottomleft { opacity: 1 !important; }
+.anim.frombottom:not(.move),
+.anim.fromleft:not(.move),
+.anim.fromright:not(.move),
+.anim.frombottomright:not(.move),
+.anim.frombottomleft:not(.move) { transform: none !important; }
+.anim.opac { opacity: 1 !important; }

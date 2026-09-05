@@ -36,7 +36,9 @@ function eco_handle_form_request( $wp ) {
 		eco_list_feed( $_POST['events'], 'event', 'ev_animg' );
 	}
 	if ( isset( $_POST['services'] ) ) {
-		eco_list_feed( $_POST['services'], 'service', 'usl_animg' );
+		// Только прямые услуги страницы /uslugi/ (включая саму «Спа-уходы»),
+		// без вложенных спа-программ /uslugi/spa/<...>.
+		eco_list_feed( $_POST['services'], 'service', 'usl_animg', '#^uslugi/[^/]+/?$#' );
 	}
 
 	$handlers = array(
@@ -208,22 +210,32 @@ function eco_register_leads() {
  * @param string $post_type  Тип записи (event | service).
  * @param string $img_field  Поле с картинкой анонса (ev_animg | usl_animg).
  */
-function eco_list_feed( $raw, $post_type, $img_field ) {
+function eco_list_feed( $raw, $post_type, $img_field, $uri_regex = '' ) {
 	$decoded = json_decode( wp_unslash( $raw ), true );
 	$offset  = ( is_array( $decoded ) && isset( $decoded['s'] ) ) ? max( 0, (int) $decoded['s'] ) : 0;
 	$per     = 9;
 
-	$q = new WP_Query( array(
+	$posts = get_posts( array(
 		'post_type'      => $post_type,
 		'post_status'    => 'publish',
-		'orderby'        => 'date',
-		'order'          => 'DESC',
-		'posts_per_page' => $per,
-		'offset'         => $offset,
+		'orderby'        => array( 'menu_order' => 'ASC', 'date' => 'DESC' ),
+		'posts_per_page' => -1,
 	) );
 
+	// На /uslugi/ выводим только прямых детей страницы услуг, а не вложенные
+	// спа-программы: отбираем по адресу страницы (_eco_uri).
+	if ( '' !== $uri_regex ) {
+		$posts = array_values( array_filter( $posts, function ( $p ) use ( $uri_regex ) {
+			$uri = (string) get_post_meta( $p->ID, '_eco_uri', true );
+			return (bool) preg_match( $uri_regex, $uri );
+		} ) );
+	}
+
+	$total = count( $posts );
+	$slice = array_slice( $posts, $offset, $per );
+
 	$items = array();
-	foreach ( $q->posts as $p ) {
+	foreach ( $slice as $p ) {
 		$items[] = array(
 			'l' => get_permalink( $p ),
 			'i' => eco_image_url( $img_field, 'eco_card', $p->ID ),
@@ -233,6 +245,6 @@ function eco_list_feed( $raw, $post_type, $img_field ) {
 
 	wp_send_json( array(
 		'r'   => $items,
-		'cnt' => (int) $q->found_posts,
+		'cnt' => (int) $total,
 	) );
 }

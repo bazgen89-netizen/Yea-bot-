@@ -1,0 +1,46 @@
+/* Оформление своих метабоксов (inc/meta-boxes.php). */
+
+.eco-fields { display: flex; flex-direction: column; gap: 16px; }
+
+.eco-field__label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+.eco-field__hint { margin: 4px 0 0; }
+.eco-field__cb { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Поле-картинка */
+.eco-image { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.eco-image__preview {
+	width: 120px;
+	min-height: 80px;
+	border: 1px dashed #c3c4c7;
+	background: #f6f7f7;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+.eco-image__preview img { max-width: 100%; height: auto; display: block; }
+.eco-image__preview:empty::after {
+	content: 'нет файла';
+	color: #8c8f94;
+	font-size: 11px;
+}
+
+/* Повторитель */
+.eco-repeater__row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	border: 1px solid #dcdcde;
+	background: #fff;
+	padding: 12px 12px 12px 8px;
+	margin-bottom: 8px;
+}
+.eco-repeater__handle { cursor: move; color: #8c8f94; padding-top: 2px; }
+.eco-repeater__body { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.eco-repeater__remove { color: #b32d2e; }
+.eco-repeater__row.ui-sortable-helper { box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }

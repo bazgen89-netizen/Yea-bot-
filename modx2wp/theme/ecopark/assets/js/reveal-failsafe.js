@@ -43,7 +43,7 @@
 		setTimeout(revealInView, 1000);
 		// Крайняя мера: раскрыть всё, что осталось скрытым, чтобы страница
 		// не оставалась пустой, если основной скрипт показа не отработал.
-		setTimeout(revealAll, 2200);
+		setTimeout(revealAll, 6000);
 	}
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', start);

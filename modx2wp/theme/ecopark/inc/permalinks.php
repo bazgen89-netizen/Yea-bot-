@@ -242,3 +242,42 @@ function eco_find_by_modx_id( $modx_id ) {
 	) );
 	return $found ? (int) $found[0] : 0;
 }
+
+/**
+ * Нормализация схемы внутренних ссылок в контенте.
+ *
+ * Страницы импортировались, когда адрес сайта в WordPress был https, поэтому
+ * абсолютные ссылки внутри контента (Контактная информация, «Подробнее» и
+ * т. п.) забились как https://bogoslovo.beget.tech/... На техническом
+ * поддомене SSL-сертификата нет, и переход по такой ссылке обрывается
+ * (ERR_CONNECTION_CLOSED) — страница выглядит недоступной.
+ *
+ * Приводим схему ссылок на хост сайта к текущей (http на поддомене без SSL,
+ * https — когда сайт откроется по защищённому боевому домену). Правка
+ * делается на выводе и не меняет сохранённый контент.
+ */
+function eco_normalize_link_scheme( $html ) {
+	if ( ! is_string( $html ) || '' === $html ) {
+		return $html;
+	}
+	$host = wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+	if ( ! $host ) {
+		return $html;
+	}
+	$scheme = is_ssl() ? 'https' : 'http';
+	$wrong  = ( 'https' === $scheme ) ? 'http' : 'https';
+	return str_ireplace( $wrong . '://' . $host, $scheme . '://' . $host, $html );
+}
+/*
+ * Ссылки на хост сайта встречаются не только в контенте, но и в меню,
+ * подвале и других местах шаблона. Чтобы поправить их все разом, чиним
+ * схему на выводе всей страницы через буфер. Правка касается только
+ * хоста сайта и не трогает внешние ссылки.
+ */
+add_action( 'template_redirect', 'eco_start_scheme_buffer', 1 );
+function eco_start_scheme_buffer() {
+	if ( is_admin() ) {
+		return;
+	}
+	ob_start( 'eco_normalize_link_scheme' );
+}

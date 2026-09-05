@@ -279,5 +279,22 @@ function eco_start_scheme_buffer() {
 	if ( is_admin() ) {
 		return;
 	}
-	ob_start( 'eco_normalize_link_scheme' );
+	ob_start( 'eco_page_output_filter' );
+}
+
+/**
+ * Единый фильтр вывода страницы: чинит схему внутренних ссылок и
+ * подменяет сломанный загрузчик ленты на страницах-списках.
+ */
+function eco_page_output_filter( $html ) {
+	$orig = $html;
+	$html = eco_normalize_link_scheme( $html );
+	if ( function_exists( 'eco_fix_feed_loader' ) ) {
+		$html = eco_fix_feed_loader( $html );
+	}
+	// Страховка: при любой неожиданной пустоте отдаём исходную страницу.
+	if ( ! is_string( $html ) || '' === $html ) {
+		return $orig;
+	}
+	return $html;
 }

@@ -33,7 +33,10 @@ function eco_handle_form_request( $wp ) {
 	// Лента публикаций для страницы /publication/ (AJAX «Показать больше»).
 	// Ответ иного вида, чем у форм: { r: [ {l,i,t}, ... ], cnt: всего }.
 	if ( isset( $_POST['events'] ) ) {
-		eco_events_feed();
+		eco_list_feed( $_POST['events'], 'event', 'ev_animg' );
+	}
+	if ( isset( $_POST['services'] ) ) {
+		eco_list_feed( $_POST['services'], 'service', 'usl_animg' );
 	}
 
 	$handlers = array(
@@ -195,17 +198,23 @@ function eco_register_leads() {
 }
 
 /**
- * Порция публикаций для бесконечной подгрузки на /publication/.
- * Повторяет MODX-обработчик req=events: отдаёт по 9 карточек от смещения s
- * и общее количество, чтобы фронтенд знал, когда остановиться.
+ * Порция карточек для бесконечной подгрузки на страницах-списках
+ * (/publication/ — публикации, /uslugi/ — услуги). Повторяет MODX-обработчик
+ * req=events/req=services: отдаёт по 9 карточек от смещения s и общее
+ * количество, чтобы фронтенд знал, когда остановиться. Ответ:
+ *   { r: [ { l: ссылка, i: картинка, t: заголовок }, ... ], cnt: всего }.
+ *
+ * @param string $raw        JSON из запроса, вида {"s":<смещение>}.
+ * @param string $post_type  Тип записи (event | service).
+ * @param string $img_field  Поле с картинкой анонса (ev_animg | usl_animg).
  */
-function eco_events_feed() {
-	$raw    = json_decode( wp_unslash( $_POST['events'] ), true );
-	$offset = ( is_array( $raw ) && isset( $raw['s'] ) ) ? max( 0, (int) $raw['s'] ) : 0;
-	$per    = 9;
+function eco_list_feed( $raw, $post_type, $img_field ) {
+	$decoded = json_decode( wp_unslash( $raw ), true );
+	$offset  = ( is_array( $decoded ) && isset( $decoded['s'] ) ) ? max( 0, (int) $decoded['s'] ) : 0;
+	$per     = 9;
 
 	$q = new WP_Query( array(
-		'post_type'      => 'event',
+		'post_type'      => $post_type,
 		'post_status'    => 'publish',
 		'orderby'        => 'date',
 		'order'          => 'DESC',
@@ -217,7 +226,7 @@ function eco_events_feed() {
 	foreach ( $q->posts as $p ) {
 		$items[] = array(
 			'l' => get_permalink( $p ),
-			'i' => eco_image_url( 'ev_animg', 'eco_card', $p->ID ),
+			'i' => eco_image_url( $img_field, 'eco_card', $p->ID ),
 			't' => get_the_title( $p ),
 		);
 	}

@@ -30,6 +30,12 @@ function eco_handle_form_request( $wp ) {
 		return;
 	}
 
+	// Лента публикаций для страницы /publication/ (AJAX «Показать больше»).
+	// Ответ иного вида, чем у форм: { r: [ {l,i,t}, ... ], cnt: всего }.
+	if ( isset( $_POST['events'] ) ) {
+		eco_events_feed();
+	}
+
 	$handlers = array(
 		'msend'     => 'eco_form_message',
 		'msendtel'  => 'eco_form_callback',
@@ -185,5 +191,39 @@ function eco_register_leads() {
 		'capabilities'    => array( 'create_posts' => 'do_not_allow' ),
 		'map_meta_cap'    => true,
 		'supports'        => array( 'title', 'editor' ),
+	) );
+}
+
+/**
+ * Порция публикаций для бесконечной подгрузки на /publication/.
+ * Повторяет MODX-обработчик req=events: отдаёт по 9 карточек от смещения s
+ * и общее количество, чтобы фронтенд знал, когда остановиться.
+ */
+function eco_events_feed() {
+	$raw    = json_decode( wp_unslash( $_POST['events'] ), true );
+	$offset = ( is_array( $raw ) && isset( $raw['s'] ) ) ? max( 0, (int) $raw['s'] ) : 0;
+	$per    = 9;
+
+	$q = new WP_Query( array(
+		'post_type'      => 'event',
+		'post_status'    => 'publish',
+		'orderby'        => 'date',
+		'order'          => 'DESC',
+		'posts_per_page' => $per,
+		'offset'         => $offset,
+	) );
+
+	$items = array();
+	foreach ( $q->posts as $p ) {
+		$items[] = array(
+			'l' => get_permalink( $p ),
+			'i' => eco_image_url( 'ev_animg', 'eco_card', $p->ID ),
+			't' => get_the_title( $p ),
+		);
+	}
+
+	wp_send_json( array(
+		'r'   => $items,
+		'cnt' => (int) $q->found_posts,
 	) );
 }

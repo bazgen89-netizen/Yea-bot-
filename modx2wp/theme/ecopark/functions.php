@@ -17,11 +17,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ECO_VERSION', '1.0.6' );
+define( 'ECO_VERSION', '1.0.7' );
 define( 'ECO_DIR', get_template_directory() );
 define( 'ECO_URI', get_template_directory_uri() );
 
 require_once ECO_DIR . '/inc/setup.php';
+require_once ECO_DIR . '/inc/no-cache.php';
 require_once ECO_DIR . '/inc/assets.php';
 require_once ECO_DIR . '/inc/post-types.php';
 require_once ECO_DIR . '/inc/meta-boxes.php';

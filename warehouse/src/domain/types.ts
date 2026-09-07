@@ -126,6 +126,8 @@ export interface Counterparty {
   bank_details: string;
   account_number: string | null;
   legal_address: string | null;
+  /** Метки CRM строкой через запятую: «опт, бар». */
+  tags: string;
   archived: number;
   created_at: string;
 }
@@ -138,7 +140,8 @@ export interface CounterpartyWithTotals extends Counterparty {
   debt_sales: Kopecks;
   /** Сколько чеков пробито. */
   receipts: number;
-  /** Дата последней покупки или null. */
+  /** Даты первой и последней покупки или null. */
+  first_sale_at: string | null;
   last_sale_at: string | null;
   /** Сколько чеков вернули и на какую сумму. */
   returns: number;

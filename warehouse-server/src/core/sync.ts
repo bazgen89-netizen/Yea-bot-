@@ -57,7 +57,8 @@ const WRITABLE: Record<keyof PushPayload, string[]> = {
     'cost_price', 'sale_price', 'min_qty', 'photo_uri', 'archived', 'updated_at',
   ],
   counterparties: [
-    'id', 'kind', 'name', 'phone', 'email', 'note', 'archived', 'created_at', 'updated_at',
+    'id', 'kind', 'name', 'phone', 'email', 'note', 'tags',
+    'archived', 'created_at', 'updated_at',
   ],
   docs: ['id', 'location_id', 'type', 'to_location_id', 'counterparty', 'note', 'created_at'],
   sales: ['id', 'location_id', 'discount', 'total', 'cost_total', 'payment', 'created_at', 'refunded_at'],

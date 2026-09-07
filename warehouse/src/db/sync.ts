@@ -52,7 +52,7 @@ const COLUMNS: Record<SyncTable, string[]> = {
     'name', 'sku', 'barcode', 'category_id', 'unit',
     'cost_price', 'sale_price', 'min_qty', 'photo_uri', 'archived', 'created_at',
   ],
-  counterparties: ['name', 'kind', 'phone', 'email', 'note', 'archived', 'created_at'],
+  counterparties: ['name', 'kind', 'phone', 'email', 'note', 'tags', 'archived', 'created_at'],
   docs: ['type', 'subtype', 'counterparty', 'note', 'created_at', 'location_id', 'location_to'],
   sales: ['discount', 'total', 'cost_total', 'payment', 'created_at', 'location_id'],
   sale_items: ['sale_id', 'product_id', 'qty', 'price', 'cost_price'],

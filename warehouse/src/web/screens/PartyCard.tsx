@@ -27,6 +27,7 @@ import { getSettings } from '../../db/settings';
 import { formatMoneyWeb } from '../../domain/money';
 import { formatQty } from '../../domain/qty';
 import type { CounterpartyWithTotals, Id, PartyKind } from '../../domain/types';
+import { ClientCrm } from './ClientCrm';
 import { useDatabase, useQuery } from '../../state/DatabaseProvider';
 import { confirm, say } from '../../ui/alert';
 import { WebIcon } from '../../ui/icons';
@@ -220,12 +221,13 @@ const KIND_LABEL: Record<PartyKind, string> = {
   both: 'Клиент и поставщик',
 };
 
-type HistoryTab = 'documents' | 'money' | 'bonus';
+type HistoryTab = 'documents' | 'money' | 'bonus' | 'crm';
 
 const HISTORY_TABS: { value: HistoryTab; label: string }[] = [
   { value: 'documents', label: 'Движение товара' },
   { value: 'money', label: 'Движение денег' },
   { value: 'bonus', label: 'История бонусов' },
+  { value: 'crm', label: 'Заметки и дела' },
 ];
 
 export function PartyCard({
@@ -556,6 +558,8 @@ function PartyView({ party }: { party: CounterpartyWithTotals }) {
           )}
         </>
       ) : null}
+
+      {tab === 'crm' ? <ClientCrm party={party} /> : null}
     </ScrollView>
   );
 }

@@ -57,6 +57,11 @@ export const MENU: MenuEntry[] = [
   { label: 'Движение товара', icon: 'goods', href: '/journal', needs: 'movements' },
   { label: 'Движение денег', icon: 'money', href: '/money', needs: 'money' },
   { label: 'Отчеты', icon: 'reports', href: '/reports', needs: 'reports' },
+  // Отдельным пунктом, а не подпунктом «Контрагентов»: в справочник заходят
+  // найти человека, которого уже знают по имени, а сюда — узнать, кого
+  // потеряли. Разные вопросы, и прятать второй внутрь первого значит, что
+  // его не откроют.
+  { label: 'CRM — работа с клиентами', icon: 'parties', href: '/crm', needs: 'clients' },
   {
     label: 'Контрагенты',
     icon: 'parties',

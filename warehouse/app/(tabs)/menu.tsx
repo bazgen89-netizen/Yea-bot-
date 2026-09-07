@@ -45,7 +45,10 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
     // с телефона заходят чаще всего, и искать это не должно приходиться.
     {
       title: 'Помощник',
-      rows: [{ label: 'Спросить у склада', icon: 'question', href: '/assistant' }],
+      rows: [
+        { label: 'Спросить у склада', icon: 'question', href: '/assistant' },
+        { label: 'CRM — работа с клиентами', icon: 'customers', href: '/crm', needs: 'clients' },
+      ],
     },
     {
       title: 'Компания',

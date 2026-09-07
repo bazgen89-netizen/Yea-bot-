@@ -20,6 +20,7 @@ function selectParties(where: string[], params: SqlParam[], order = 'p.name COLL
              -- колонкой, и складывается тем же соединением, что и покупки.
              COALESCE(SUM(s.debt), 0)  AS debt_sales,
              COUNT(s.id)               AS receipts,
+             MIN(s.created_at)         AS first_sale_at,
              MAX(s.created_at)         AS last_sale_at,
              -- Возвраты и деньги — подзапросами, а не ещё двумя соединениями:
              -- две таблицы «многие ко многим» в одном GROUP BY перемножили бы

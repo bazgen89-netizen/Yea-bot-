@@ -19,6 +19,22 @@ import {
   type JournalEntry,
   type MoneyEntry,
 } from '../../src/db/journal';
+import {
+  addNote,
+  addTask,
+  listNotes,
+  listTasks,
+  setTaskDone,
+  tagsOf,
+  today,
+} from '../../src/db/crm';
+import {
+  SEGMENT_LABEL,
+  SEGMENT_NOTE,
+  standingOf,
+  whatsappLink,
+  сроком,
+} from '../../src/domain/crm';
 import { formatMoney } from '../../src/domain/money';
 import { pluralize } from '../../src/domain/plural';
 import type { CounterpartyWithTotals, PartyKind } from '../../src/domain/types';
@@ -71,12 +87,13 @@ export default function CounterpartyScreen() {
   return <PartyView party={party} onEdit={() => setEditing(true)} />;
 }
 
-type HistoryTab = 'documents' | 'money' | 'bonus';
+type HistoryTab = 'documents' | 'money' | 'bonus' | 'crm';
 
 const HISTORY_TABS: { value: HistoryTab; label: string }[] = [
   { value: 'documents', label: 'Покупки' },
   { value: 'money', label: 'Деньги' },
   { value: 'bonus', label: 'Бонусы' },
+  { value: 'crm', label: 'Заметки' },
 ];
 
 function PartyView({
@@ -181,6 +198,14 @@ function PartyView({
             </>
           ) : null}
           {party.discount_card ? <Label>Карта {party.discount_card}</Label> : null}
+          {/* К какой группе относится — то же, что в CRM, и считается тем же
+              правилом: экран не судит о клиенте по-своему. */}
+          <Label tone={где(party).segment === 'sleeping' ? 'warning' : undefined}>
+            {SEGMENT_LABEL[где(party).segment]}
+          </Label>
+          {tagsOf(party.tags).map((one) => (
+            <Label key={one}>{one}</Label>
+          ))}
         </View>
 
         <View style={styles.stats}>
@@ -249,6 +274,7 @@ function PartyView({
         {tab === 'documents' ? <Documents rows={documents} /> : null}
         {tab === 'money' ? <Money rows={money} /> : null}
         {tab === 'bonus' ? <Bonuses party={party} rows={bonusRows} /> : null}
+        {tab === 'crm' ? <Crm party={party} /> : null}
       </Card>
 
       <Card>
@@ -425,6 +451,121 @@ function when(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })}`;
+}
+
+/** Группа клиента — тем же правилом, что и в CRM. */
+function где(party: CounterpartyWithTotals) {
+  return standingOf(
+    {
+      receipts: party.receipts,
+      purchases: party.purchases,
+      first_sale_at: party.first_sale_at,
+      last_sale_at: party.last_sale_at,
+    },
+    Date.now(),
+  );
+}
+
+/**
+ * Заметки и дела по клиенту — с телефона.
+ *
+ * Здесь их и пишут: продавец стоит за прилавком с телефоном в руке, а не за
+ * компьютером. Поэтому поле для заметки открыто сразу, а не прячется за
+ * кнопкой «добавить».
+ */
+function Crm({ party }: { party: CounterpartyWithTotals }) {
+  const { db, refresh } = useDatabase();
+  const [note, setNote] = useState('');
+  const [task, setTask] = useState('');
+
+  const notes = useQuery((database) => listNotes(database, party.id), [party.id]);
+  const tasks = useQuery(
+    (database) => listTasks(database, { partyId: party.id, state: 'all' }),
+    [party.id],
+  );
+
+  const место = где(party);
+  const ссылка = whatsappLink(party.phone, `${party.name.trim().split(/\s+/)[0]}, здравствуйте! `);
+
+  return (
+    <View style={styles.opList}>
+      <Text style={text.muted}>
+        {SEGMENT_NOTE[место.segment]}. Последняя покупка {сроком(место.idle)}
+        {место.overdue ? `, опоздал на ${место.overdue} дн.` : ''}
+      </Text>
+
+      {ссылка ? (
+        <Button title="Написать в WhatsApp" onPress={() => void Linking.openURL(ссылка)} />
+      ) : null}
+
+      <Field
+        label="Заметка"
+        value={note}
+        onChangeText={setNote}
+        placeholder="Пьёт только шу, дочь Аня"
+        multiline
+      />
+      <Button
+        title="Записать"
+        variant="secondary"
+        onPress={() => {
+          if (!note.trim()) return;
+          addNote(db, party.id, note);
+          setNote('');
+          refresh();
+        }}
+      />
+
+      {notes.map((one) => (
+        <View key={one.id} style={styles.op}>
+          <Text style={styles.opTitle}>{one.body}</Text>
+          <Text style={text.muted}>{new Date(one.created_at).toLocaleDateString('ru-RU')}</Text>
+        </View>
+      ))}
+      {notes.length === 0 ? <Text style={styles.empty}>Заметок пока нет</Text> : null}
+
+      <Field
+        label="Дело"
+        value={task}
+        onChangeText={setTask}
+        placeholder="Позвонить про пуэр"
+      />
+      <Button
+        title="Поставить на сегодня"
+        variant="secondary"
+        onPress={() => {
+          if (!task.trim()) return;
+          addTask(db, { partyId: party.id, title: task });
+          setTask('');
+          refresh();
+        }}
+      />
+
+      {tasks.map((one) => (
+        <Pressable
+          key={one.id}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: Boolean(one.done_at) }}
+          accessibilityLabel={one.title}
+          onPress={() => {
+            setTaskDone(db, one.id, !one.done_at);
+            refresh();
+          }}
+          style={styles.op}
+        >
+          <Text style={styles.opTitle}>
+            {one.done_at ? '✓ ' : '□ '}
+            {one.title}
+          </Text>
+          <Text style={text.muted}>
+            до {one.due_date}
+            {!one.done_at && one.due_date <= today() ? ' · пора' : ''}
+          </Text>
+        </Pressable>
+      ))}
+      {tasks.length === 0 ? <Text style={styles.empty}>Дел по нему нет</Text> : null}
+    </View>
+  );
 }
 
 function PartyForm({

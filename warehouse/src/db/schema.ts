@@ -903,6 +903,54 @@ export const MIGRATIONS: string[] = [
     )
     .join('\n')}
   `,
+
+  /**
+   * CRM: заметки о клиенте, дела по нему и метки.
+   *
+   * Заметка отдельными строками, а не одним полем `note`, которое уже есть:
+   * поле переписывают поверх, и «пьёт только шу» стирается тем, кто дописал
+   * «просил позвонить». История разговоров — это список, а не строка.
+   *
+   * Дело может быть и без клиента (`counterparty_id` пустой): «заказать
+   * коробки» — тоже дело, и заводить ради него карточку никто не станет.
+   *
+   * Срок делом хранится днём, `ГГГГ-ММ-ДД`, а не временем: «позвонить
+   * 15 сентября» не означает «в 14:32», и час, придуманный за человека,
+   * потом сдвинется на другой при смене часового пояса.
+   *
+   * Метки — строкой через запятую в самой карточке, а не отдельной таблицей
+   * связей. Их у клиента две-три («опт», «бар»), а карточка уже ездит на
+   * сервер и обратно: так метки синхронизируются вместе с ней и без новой
+   * таблицы на той стороне.
+   */
+  `
+  ALTER TABLE counterparties ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+
+  CREATE TABLE client_notes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    counterparty_id INTEGER NOT NULL REFERENCES counterparties(id) ON DELETE CASCADE,
+    body            TEXT    NOT NULL,
+    author          TEXT,
+    created_at      TEXT    NOT NULL
+  );
+
+  CREATE INDEX idx_client_notes_party ON client_notes(counterparty_id, created_at DESC);
+
+  CREATE TABLE client_tasks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    counterparty_id INTEGER REFERENCES counterparties(id) ON DELETE CASCADE,
+    title           TEXT    NOT NULL,
+    due_date        TEXT    NOT NULL,
+    done_at         TEXT,
+    author          TEXT,
+    created_at      TEXT    NOT NULL
+  );
+
+  -- Список «на сегодня» читается по сроку среди невыполненных, поэтому
+  -- порядок полей в указателе именно такой.
+  CREATE INDEX idx_client_tasks_due ON client_tasks(done_at, due_date);
+  CREATE INDEX idx_client_tasks_party ON client_tasks(counterparty_id);
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

@@ -1,8 +1,10 @@
 import { listCounterparties } from './counterparties';
+import type { CrmClient } from './crm';
 import type { SqlDriver } from './driver';
 import { listProducts } from './products';
 import { formatMoney } from '../domain/money';
 import { formatQty } from '../domain/qty';
+import { SEGMENT_LABEL } from '../domain/crm';
 import type { PartyKind } from '../domain/types';
 
 /**
@@ -118,6 +120,59 @@ export function partiesCsv(db: SqlDriver, kind: PartyKind): string {
       formatMoney(party.purchases),
       party.receipts,
       day(party.last_sale_at),
+    ]);
+  }
+
+  return toCsv(rows);
+}
+
+/**
+ * Список CRM — ровно тот, что на экране.
+ *
+ * Выгружается отобранное, а не вся база: «кто не вернулся» скачивают затем,
+ * чтобы обзвонить именно этих людей, и подложить им остальные три тысячи
+ * значило бы отдать не то, о чём просили.
+ *
+ * Принимает готовые строки, а не читает базу заново: отбор уже сделан на
+ * экране, и повторять его здесь вторым, отдельно написанным способом — верный
+ * путь к тому, что выгрузка разойдётся с тем, что человек видел.
+ */
+export function crmCsv(clients: CrmClient[]): string {
+  const rows: (string | number | null)[][] = [
+    [
+      'Клиент',
+      'Телефон',
+      'Метки',
+      'Группа',
+      'Купил на, ₽',
+      'Чеков',
+      'Первая покупка',
+      'Последняя покупка',
+      'Дней не был',
+      'Ходит раз в, дней',
+      'Опоздал на, дней',
+      'День рождения',
+      'Бонусы',
+      'Крупный',
+    ],
+  ];
+
+  for (const one of clients) {
+    rows.push([
+      one.name,
+      one.phone,
+      one.tags,
+      SEGMENT_LABEL[one.standing.segment],
+      formatMoney(one.purchases),
+      one.receipts,
+      day(one.first_sale_at),
+      day(one.last_sale_at),
+      one.standing.idle ?? '',
+      one.receipts ? one.standing.cadence : '',
+      one.standing.overdue || '',
+      one.birthday ?? '',
+      formatMoney(one.bonus_balance),
+      one.vip ? 'да' : '',
     ]);
   }
 

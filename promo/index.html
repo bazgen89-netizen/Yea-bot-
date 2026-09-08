@@ -1,0 +1,705 @@
+<title>Tea Expert Reel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prata&family=Onest:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&family=Noto+Serif+SC:wght@400;600&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Tea Expert Reel — анимационный ролик Telegram-бота о чае.
+   Палитра: настой пуэра, селадоновая глазурь, киноварная печать.
+   ───────────────────────────────────────────────────────────── */
+
+:root{
+  /* Экран ролика — всегда тёмный, как киноплёнка. Значения явные. */
+  --ink:        #17110C;
+  --ink-2:      #221913;
+  --ink-3:      #2E231A;
+  --porcelain:  #F4EBDB;
+  --celadon:    #8FBFA2;
+  --amber:      #D9963F;
+  --seal:       #B0472F;
+  --dust:       #A08D77;
+
+  /* Обвязка страницы — подстраивается под тему зрителя. */
+  --page-bg:    #EBE3D5;
+  --page-fg:    #2B231A;
+  --page-dim:   #786A58;
+  --page-line:  #D5C9B5;
+  --page-panel: #F6F1E7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page-bg:    #100C09;
+    --page-fg:    #EFE6D6;
+    --page-dim:   #9A8B76;
+    --page-line:  #2C231B;
+    --page-panel: #1A130E;
+  }
+}
+:root[data-theme="dark"]{
+  --page-bg:    #100C09;
+  --page-fg:    #EFE6D6;
+  --page-dim:   #9A8B76;
+  --page-line:  #2C231B;
+  --page-panel: #1A130E;
+}
+
+*{ box-sizing:border-box; }
+
+body{
+  margin:0;
+  background:var(--page-bg);
+  color:var(--page-fg);
+  font-family:"Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{
+  min-height:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:18px;
+  padding:22px 16px 34px;
+}
+
+/* ── Шапка страницы ───────────────────────────────────────── */
+.masthead{
+  width:min(560px, 100%);
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:14px;
+  border-bottom:1px solid var(--page-line);
+  padding-bottom:10px;
+}
+.masthead h1{
+  margin:0;
+  font-family:"Prata", Georgia, serif;
+  font-weight:400;
+  font-size:20px;
+  letter-spacing:.01em;
+}
+.masthead p{
+  margin:0;
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--page-dim);
+}
+
+/* ── Экран ────────────────────────────────────────────────── */
+.stage{
+  position:relative;
+  width:min(94vw, 420px, calc(74vh * 9 / 16));
+  aspect-ratio:9 / 16;
+  background:var(--ink);
+  border-radius:20px;
+  overflow:hidden;
+  container-type:size;
+  box-shadow:0 26px 60px -28px rgba(23,17,12,.85), 0 0 0 1px rgba(160,141,119,.22);
+  isolation:isolate;
+}
+
+/* Зерно и виньетка — экран, а не веб-страница */
+.stage::after{
+  content:"";
+  position:absolute; inset:0;
+  pointer-events:none;
+  z-index:9;
+  background:
+    radial-gradient(120% 80% at 50% 40%, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%);
+}
+
+/* ── Постоянная накладка плеера ───────────────────────────── */
+.hud{
+  position:absolute; inset:0;
+  z-index:8;
+  pointer-events:none;
+  padding:4.5cqw;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:2.7cqw;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:rgba(244,235,219,.5);
+}
+.hud .row{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.hud .brand{ color:rgba(244,235,219,.82); letter-spacing:.16em; }
+.hud .chapter{ color:var(--celadon); }
+.hud .rec{ display:inline-block; width:1.6cqw; height:1.6cqw; border-radius:50%; background:var(--seal); margin-right:.8cqw; vertical-align:baseline; }
+
+/* ── Сцены ────────────────────────────────────────────────── */
+.scene{
+  position:absolute; inset:0;
+  display:none;
+  padding:13cqw 8cqw;
+  z-index:2;
+}
+.scene.on{
+  display:flex;
+  flex-direction:column;
+  animation:sceneIn .62s ease both;
+}
+@keyframes sceneIn{ from{ opacity:0; transform:scale(1.02); } to{ opacity:1; transform:none; } }
+
+.center{ justify-content:center; }
+.between{ justify-content:space-between; }
+
+/* Общая типографика внутри экрана */
+.kicker{
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:2.8cqw;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--dust);
+}
+.lede{
+  font-family:"Prata", Georgia, serif;
+  font-size:8.2cqw;
+  line-height:1.16;
+  color:var(--porcelain);
+  text-wrap:balance;
+  margin:0;
+}
+.sub{
+  font-size:4cqw;
+  line-height:1.45;
+  font-weight:300;
+  color:rgba(244,235,219,.72);
+  margin:0;
+}
+.hanzi{ font-family:"Noto Serif SC", "Prata", serif; }
+
+/* ── 1. Вопрос ────────────────────────────────────────────── */
+.steam{ position:absolute; inset:0; overflow:hidden; z-index:1; pointer-events:none; }
+.steam i{
+  position:absolute;
+  bottom:-18cqw;
+  width:34cqw; height:34cqw;
+  border-radius:50%;
+  background:radial-gradient(circle at 50% 50%, rgba(143,191,162,.30), rgba(143,191,162,0) 70%);
+  filter:blur(6px);
+  animation:rise 9s linear infinite;
+}
+.steam i:nth-child(1){ left:10%;  animation-delay:0s; }
+.steam i:nth-child(2){ left:38%;  animation-delay:-3.2s; width:44cqw; height:44cqw; }
+.steam i:nth-child(3){ left:64%;  animation-delay:-6.1s; }
+@keyframes rise{
+  0%   { transform:translate3d(0,0,0) scale(.7);  opacity:0; }
+  18%  { opacity:.9; }
+  100% { transform:translate3d(6cqw,-130cqh,0) scale(1.5); opacity:0; }
+}
+
+.gaiwan{
+  width:26cqw; height:26cqw;
+  border-radius:50% 50% 46% 46% / 40% 40% 60% 60%;
+  border:1px solid rgba(244,235,219,.35);
+  background:linear-gradient(180deg, rgba(143,191,162,.16), rgba(217,150,63,.20));
+  margin-bottom:6cqw;
+  position:relative;
+}
+.gaiwan::before{
+  content:""; position:absolute; left:12%; right:12%; top:-6%;
+  height:16%; border-radius:50%;
+  border:1px solid rgba(244,235,219,.5);
+}
+
+.q-word{ display:inline-block; animation:wordIn .5s cubic-bezier(.2,.7,.3,1) backwards; }
+.caret{
+  display:inline-block; width:.5em; height:.92em;
+  background:var(--amber); vertical-align:-.06em;
+  animation:blink 1s steps(1) infinite, wordIn .4s backwards;
+}
+@keyframes wordIn{ from{ opacity:0; transform:translateY(.5em); filter:blur(4px);} to{ opacity:1; transform:none; filter:none;} }
+@keyframes blink{ 50%{ opacity:0; } }
+
+/* ── 2. Проблема ──────────────────────────────────────────── */
+.scatter{ position:relative; flex:1; margin:5cqw 0; }
+.scrap{
+  position:absolute;
+  font-size:3.2cqw;
+  font-weight:300;
+  padding:1.6cqw 3cqw;
+  border:1px solid rgba(160,141,119,.4);
+  border-radius:2px;
+  color:rgba(244,235,219,.62);
+  background:rgba(46,35,26,.55);
+  white-space:nowrap;
+  animation:scrapIn .7s ease backwards;
+}
+.scrap.s1{ top:6%;  left:0;    transform:rotate(-4deg);  animation-delay:.15s; }
+.scrap.s2{ top:26%; right:-2%; transform:rotate(3deg);   animation-delay:.35s; }
+.scrap.s3{ top:48%; left:6%;   transform:rotate(-2deg);  animation-delay:.55s; }
+.scrap.s4{ top:70%; right:4%;  transform:rotate(5deg);   animation-delay:.75s; }
+.scrap.s5{ top:88%; left:0;    transform:rotate(-3deg);  animation-delay:.95s; }
+@keyframes scrapIn{ from{ opacity:0; transform:translateY(2cqw) rotate(0); } }
+
+.strike{ position:relative; display:inline-block; }
+.strike::after{
+  content:""; position:absolute; left:-2%; right:-2%; top:56%;
+  height:.14em; background:var(--seal);
+  transform-origin:left center;
+  animation:strike .5s cubic-bezier(.6,0,.3,1) 1.2s backwards;
+}
+@keyframes strike{ from{ transform:scaleX(0); } }
+
+/* ── 3. Поиск ─────────────────────────────────────────────── */
+.beams{ flex:1; display:grid; grid-template-columns:1fr 1px 1fr; gap:4cqw; align-content:center; margin:6cqw 0; }
+.rail{ background:linear-gradient(180deg, transparent, rgba(160,141,119,.55), transparent); position:relative; }
+.rail::after{
+  content:""; position:absolute; left:-1.2cqw; width:2.6cqw; height:2.6cqw; border-radius:50%;
+  background:var(--amber); box-shadow:0 0 12px var(--amber);
+  animation:travel 1.9s ease-in-out infinite;
+}
+@keyframes travel{ 0%{ top:-2%; opacity:0;} 15%{opacity:1;} 85%{opacity:1;} 100%{ top:98%; opacity:0;} }
+
+.col{ display:flex; flex-direction:column; gap:2.4cqw; }
+.col .flag{
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:2.6cqw; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--celadon); margin-bottom:1cqw;
+}
+.src{
+  border-left:2px solid var(--celadon);
+  padding:1.8cqw 2.2cqw;
+  background:rgba(143,191,162,.08);
+  font-size:3.1cqw; line-height:1.3;
+  color:rgba(244,235,219,.9);
+  animation:srcIn .5s ease backwards;
+}
+.src small{ display:block; font-size:2.4cqw; color:var(--dust); margin-top:.5cqw; letter-spacing:.04em; }
+.col.ru .src{ border-left-color:var(--amber); background:rgba(217,150,63,.08); }
+.col.ru .flag{ color:var(--amber); }
+.src:nth-child(2){ animation-delay:.35s; }
+.src:nth-child(3){ animation-delay:.65s; }
+.src:nth-child(4){ animation-delay:.95s; }
+.col.ru .src:nth-child(2){ animation-delay:.5s; }
+.col.ru .src:nth-child(3){ animation-delay:.8s; }
+.col.ru .src:nth-child(4){ animation-delay:1.1s; }
+@keyframes srcIn{ from{ opacity:0; transform:translateX(-1.5cqw); } }
+
+/* ── 4. Ответ ─────────────────────────────────────────────── */
+.answer{
+  flex:1; margin:5cqw 0;
+  border:1px solid rgba(160,141,119,.3);
+  border-radius:3px;
+  background:linear-gradient(180deg, rgba(46,35,26,.7), rgba(34,25,19,.7));
+  padding:4.5cqw;
+  display:flex; flex-direction:column; gap:2.6cqw;
+  animation:answerIn .6s ease backwards;
+}
+@keyframes answerIn{ from{ opacity:0; transform:translateY(2cqw); } }
+.answer p{ margin:0; font-size:3.4cqw; line-height:1.5; font-weight:300; color:rgba(244,235,219,.88); }
+.answer p b{ font-weight:500; color:var(--celadon); }
+.answer .line{ animation:lineIn .5s ease backwards; }
+.answer .line:nth-of-type(1){ animation-delay:.5s; }
+.answer .line:nth-of-type(2){ animation-delay:.9s; }
+.answer .line:nth-of-type(3){ animation-delay:1.3s; }
+@keyframes lineIn{ from{ opacity:0; transform:translateY(1cqw); filter:blur(3px); } }
+
+.chips{ display:flex; flex-wrap:wrap; gap:2cqw; }
+.chip{
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:2.5cqw; letter-spacing:.08em;
+  padding:1.2cqw 2.2cqw;
+  border:1px solid rgba(160,141,119,.45);
+  border-radius:99px;
+  color:var(--dust);
+  animation:chipIn .4s ease backwards;
+}
+.chip.hot{ color:var(--amber); border-color:rgba(217,150,63,.6); }
+.chip:nth-child(2){ animation-delay:.12s; }
+.chip:nth-child(3){ animation-delay:.24s; }
+@keyframes chipIn{ from{ opacity:0; transform:scale(.9); } }
+
+/* ── 5. Умеет ─────────────────────────────────────────────── */
+.grid{ flex:1; display:grid; grid-template-columns:1fr 1fr; gap:3cqw; margin:6cqw 0; }
+.tile{
+  border-top:1px solid rgba(160,141,119,.4);
+  padding:3cqw 0 0;
+  display:flex; flex-direction:column; gap:1.4cqw;
+  animation:tileIn .55s ease backwards;
+}
+.tile b{ font-family:"Prata", Georgia, serif; font-weight:400; font-size:4.6cqw; color:var(--porcelain); }
+.tile span{ font-size:2.9cqw; font-weight:300; line-height:1.35; color:rgba(244,235,219,.6); }
+.tile:nth-child(1){ animation-delay:.2s; }
+.tile:nth-child(2){ animation-delay:.36s; }
+.tile:nth-child(3){ animation-delay:.52s; }
+.tile:nth-child(4){ animation-delay:.68s; }
+@keyframes tileIn{ from{ opacity:0; transform:translateY(2cqw); } }
+
+/* ── 6. Waystea ───────────────────────────────────────────── */
+.shopcard{
+  border:1px solid rgba(143,191,162,.5);
+  background:linear-gradient(150deg, rgba(143,191,162,.14), rgba(23,17,12,.2));
+  padding:5cqw;
+  display:flex; flex-direction:column; gap:2.4cqw;
+  animation:shopIn .6s cubic-bezier(.2,.7,.3,1) .6s backwards;
+}
+@keyframes shopIn{ from{ opacity:0; transform:translateY(3cqw) scale(.97); } }
+.shopcard .name{ font-family:"Prata", Georgia, serif; font-size:9cqw; color:var(--porcelain); letter-spacing:.01em; }
+.shopcard .note{ font-size:3.2cqw; font-weight:300; color:rgba(244,235,219,.7); line-height:1.45; }
+
+.bubble{
+  align-self:flex-end;
+  max-width:76%;
+  background:rgba(46,35,26,.85);
+  border:1px solid rgba(160,141,119,.3);
+  border-radius:12px 12px 3px 12px;
+  padding:2.6cqw 3.2cqw;
+  font-size:3.4cqw; font-weight:300; color:rgba(244,235,219,.9);
+  animation:bubbleIn .5s ease backwards;
+}
+
+@keyframes bubbleIn{ from{ opacity:0; transform:translateY(1.5cqw); } }
+
+/* ── 7. Финал ─────────────────────────────────────────────── */
+.seal{
+  width:20cqw; height:20cqw;
+  display:grid; place-items:center;
+  background:var(--seal);
+  border-radius:3px;
+  color:#F7EFE2;
+  font-family:"Noto Serif SC", serif;
+  font-size:11cqw; line-height:1;
+  animation:sealIn .7s cubic-bezier(.2,.8,.3,1) backwards;
+}
+@keyframes sealIn{ from{ opacity:0; transform:rotate(-12deg) scale(.7); } }
+.finale{ display:flex; flex-direction:column; align-items:flex-start; gap:4cqw; }
+.finale .name{ font-family:"Prata", Georgia, serif; font-size:9.5cqw; line-height:1.05; color:var(--porcelain); }
+.finale .handle{
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:3.6cqw; letter-spacing:.1em; color:var(--celadon);
+  border-bottom:1px solid rgba(143,191,162,.4); padding-bottom:1cqw;
+}
+
+/* ── Панель управления под экраном ────────────────────────── */
+.controls{
+  width:min(94vw, 420px, calc(74vh * 9 / 16));
+  display:flex; flex-direction:column; gap:12px;
+}
+.track{ display:flex; gap:4px; }
+.seg{
+  flex:1 1 auto;
+  background:none; border:0; padding:0;
+  cursor:pointer;
+  display:flex; flex-direction:column; gap:6px;
+  text-align:left;
+  font:inherit;
+  color:var(--page-dim);
+}
+.seg .bar{ height:3px; border-radius:2px; background:var(--page-line); overflow:hidden; }
+.seg .bar i{ display:block; height:100%; width:0; background:var(--page-fg); }
+.seg .lbl{
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:9px; letter-spacing:.1em; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.seg[aria-current="true"] .lbl{ color:var(--page-fg); }
+.seg:focus-visible{ outline:2px solid var(--page-fg); outline-offset:3px; border-radius:3px; }
+
+.buttons{ display:flex; align-items:center; gap:10px; }
+.btn{
+  font:inherit;
+  font-size:13px;
+  padding:8px 16px;
+  border-radius:99px;
+  border:1px solid var(--page-line);
+  background:var(--page-panel);
+  color:var(--page-fg);
+  cursor:pointer;
+}
+.btn:hover{ border-color:var(--page-fg); }
+.btn:focus-visible{ outline:2px solid var(--page-fg); outline-offset:2px; }
+.time{
+  margin-left:auto;
+  font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+  color:var(--page-dim);
+}
+
+.footnote{
+  width:min(560px, 100%);
+  font-size:12px; line-height:1.6; color:var(--page-dim);
+  border-top:1px solid var(--page-line);
+  padding-top:12px;
+}
+.footnote code{ font-family:"JetBrains Mono", ui-monospace, monospace; font-size:11px; }
+
+@media (prefers-reduced-motion: reduce){
+  .steam{ display:none; }
+  .rail::after{ animation:none; top:48%; }
+  .scene.on,
+  .scene.on *{ animation-duration:.001s !important; animation-delay:0s !important; }
+  .caret{ animation:none; }
+}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>Tea Expert Bot</h1>
+    <p>Рекламный ролик · 0:38</p>
+  </header>
+
+  <main class="stage" id="stage" aria-label="Рекламный ролик Tea Expert Bot">
+
+    <!-- Постоянная накладка -->
+    <div class="hud">
+      <div class="row">
+        <span class="brand">🍵 Tea Expert Bot</span>
+        <span><i class="rec"></i><span id="tc">00:00</span></span>
+      </div>
+      <div class="row">
+        <span class="chapter" id="chapterLabel">Вопрос</span>
+        <span>Telegram</span>
+      </div>
+    </div>
+
+    <!-- 1. Вопрос -->
+    <section class="scene center" id="s1">
+      <div class="steam" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="gaiwan" aria-hidden="true"></div>
+      <p class="lede">
+        <span class="q-word" style="animation-delay:.5s">Какой</span>
+        <span class="q-word" style="animation-delay:.72s">шен</span>
+        <span class="q-word" style="animation-delay:.94s">пуэр</span>
+        <span class="q-word" style="animation-delay:1.16s">взять</span>
+        <span class="q-word" style="animation-delay:1.38s">новичку?</span><span class="caret" style="animation-delay:0s, 1.6s"></span>
+      </p>
+      <p class="sub" style="margin-top:5cqw">Вы спрашиваете это в Telegram. В любое время суток.</p>
+    </section>
+
+    <!-- 2. Проблема -->
+    <section class="scene between" id="s2">
+      <span class="kicker">Как это обычно бывает</span>
+      <div class="scatter" aria-hidden="false">
+        <span class="scrap s1">форум, последний ответ — 2013 год</span>
+        <span class="scrap s2">17 вкладок</span>
+        <span class="scrap s3">машинный перевод с китайского</span>
+        <span class="scrap s4">«напишите в директ»</span>
+        <span class="scrap s5">четыре часа</span>
+      </div>
+      <p class="lede">Всё лучшее о чае написано <span class="strike hanzi">на китайском</span>.</p>
+    </section>
+
+    <!-- 3. Поиск -->
+    <section class="scene between" id="s3">
+      <span class="kicker">Шаг 1 · Поиск</span>
+      <div class="beams">
+        <div class="col">
+          <span class="flag">中国 · zh-cn</span>
+          <span class="src"><span class="hanzi">生普洱 新手 推荐</span><small>chaxun · zhihu</small></span>
+          <span class="src"><span class="hanzi">冲泡 水温 克数</span><small>teanet.cn</small></span>
+          <span class="src"><span class="hanzi">2024 春茶 行情</span><small>puercn</small></span>
+        </div>
+        <div class="rail" aria-hidden="true"></div>
+        <div class="col ru">
+          <span class="flag">Россия · ru</span>
+          <span class="src">шен пуэр для начинающих<small>обзоры, 2025</small></span>
+          <span class="src">цена за 357 г блина<small>прайсы магазинов</small></span>
+          <span class="src">сроки доставки из Юньнани<small>логистика</small></span>
+        </div>
+      </div>
+      <p class="sub">Бот ищет в китайских и российских источниках — <b style="color:var(--porcelain);font-weight:400">одновременно</b>, а не по очереди.</p>
+    </section>
+
+    <!-- 4. Ответ -->
+    <section class="scene between" id="s4">
+      <span class="kicker">Шаг 2 · Ответ</span>
+      <div class="answer">
+        <p class="line"><b>Начните с молодого шена 2023–2024 годов</b> — он мягче и прощает ошибки в проливах.</p>
+        <p class="line">Вода 95 °C, 5 г на 100 мл гайвани, первые проливы по 8–10 секунд.</p>
+        <p class="line">Ориентир по цене: 2 800–4 500 ₽ за блин 357 г.</p>
+        <div class="chips">
+          <span class="chip">Llama 3.3 70B · Groq</span>
+          <span class="chip hot">⚡ 2,4 с</span>
+          <span class="chip">кэш 5 мин</span>
+        </div>
+      </div>
+      <p class="sub">Ответ собирается из свежих источников и приходит на русском.</p>
+    </section>
+
+    <!-- 5. Умеет -->
+    <section class="scene between" id="s5">
+      <span class="kicker">Что умеет бот</span>
+      <div class="grid">
+        <div class="tile"><b>Заваривание</b><span>Температура, навеска, проливы под конкретный сорт</span></div>
+        <div class="tile"><b>Новости</b><span>Юньнань, Фуцзянь, Тайвань — по регионам</span></div>
+        <div class="tile"><b>Доставка</b><span>Сроки и способы из Китая в Россию</span></div>
+        <div class="tile"><b>Цены</b><span>Назовите чай — бот найдёт актуальный прайс</span></div>
+      </div>
+      <p class="sub">Четыре кнопки в меню и свободный вопрос в любой момент.</p>
+    </section>
+
+    <!-- 6. Waystea -->
+    <section class="scene between" id="s6">
+      <span class="kicker">Когда дело доходит до покупки</span>
+      <div style="display:flex;flex-direction:column;gap:4cqw;margin:5cqw 0;">
+        <span class="bubble" style="animation-delay:.2s">Где всё-таки купить такой шен?</span>
+        <div class="shopcard">
+          <span class="name">Waystea</span>
+          <span class="note">Бот распознаёт вопрос о покупке и рекомендует магазин — без навязчивой рекламы в остальных ответах.</span>
+        </div>
+      </div>
+      <p class="sub">Промо появляется только там, где оно уместно.</p>
+    </section>
+
+    <!-- 7. Финал -->
+    <section class="scene center" id="s7">
+      <div class="finale">
+        <div class="seal" aria-hidden="true">茶</div>
+        <div class="name">Спросите<br>о чае</div>
+        <span class="handle">@TeaExpertBot · Telegram</span>
+        <p class="sub" style="margin-top:1cqw">Поиск по Китаю и России, ответ на русском, ссылка на магазин. Бесплатно.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="controls">
+    <div class="track" id="track" role="group" aria-label="Сцены ролика"></div>
+    <div class="buttons">
+      <button class="btn" id="playBtn" type="button">Пауза</button>
+      <button class="btn" id="replayBtn" type="button">Сначала</button>
+      <span class="time"><span id="tcTotal">00:00</span> / 00:38</span>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Ролик собран из реального поведения бота: параллельный поиск в китайских и российских
+    источниках через Serper, генерация ответа на Llama 3.3 70B через Groq, кэш на 5 минут,
+    промо магазина только для вопросов о покупке. Исходник — <code>promo/index.html</code>,
+    архитектура — <code>ARCHITECTURE.md</code>. Для записи видео откройте страницу и снимите
+    область экрана: кадр вертикальный, 9:16.
+  </p>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SCENES = [
+    { id:"s1", label:"Вопрос",   dur:5200 },
+    { id:"s2", label:"Проблема", dur:5200 },
+    { id:"s3", label:"Поиск",    dur:7000 },
+    { id:"s4", label:"Ответ",    dur:6400 },
+    { id:"s5", label:"Умеет",    dur:5600 },
+    { id:"s6", label:"Waystea",  dur:5000 },
+    { id:"s7", label:"Финал",    dur:4200 }
+  ];
+
+  var TOTAL = SCENES.reduce(function(a,s){ return a + s.dur; }, 0);
+  var OFFSETS = [];
+  SCENES.reduce(function(a,s,i){ OFFSETS[i] = a; return a + s.dur; }, 0);
+
+  var track      = document.getElementById("track");
+  var playBtn    = document.getElementById("playBtn");
+  var replayBtn  = document.getElementById("replayBtn");
+  var chapterEl  = document.getElementById("chapterLabel");
+  var tcEl       = document.getElementById("tc");
+  var tcTotalEl  = document.getElementById("tcTotal");
+
+  // Сегменты дорожки — ширина пропорциональна длительности сцены.
+  var segs = SCENES.map(function(s, i){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg";
+    b.style.flexGrow = String(s.dur);
+    b.setAttribute("aria-label", "Сцена " + (i+1) + ": " + s.label);
+    b.innerHTML = '<span class="bar"><i></i></span><span class="lbl"></span>';
+    b.querySelector(".lbl").textContent = s.label;
+    b.addEventListener("click", function(){ jump(i); });
+    track.appendChild(b);
+    return { el:b, fill:b.querySelector(".bar i") };
+  });
+
+  var index   = -1;
+  var start   = 0;      // момент начала текущей сцены
+  var playing = true;
+
+  function fmt(ms){
+    var t = Math.max(0, Math.round(ms / 1000));
+    return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  }
+
+  function show(i){
+    if (index === i) return;
+    if (index >= 0) document.getElementById(SCENES[index].id).classList.remove("on");
+    index = i;
+    var el = document.getElementById(SCENES[i].id);
+    void el.offsetWidth;              // перезапуск CSS-анимаций сцены
+    el.classList.add("on");
+    chapterEl.textContent = SCENES[i].label;
+    segs.forEach(function(s, k){ s.el.setAttribute("aria-current", k === i ? "true" : "false"); });
+  }
+
+  function jump(i){
+    show(i);
+    start = performance.now();
+    if (!playing) setPlaying(true);
+  }
+
+  function setPlaying(v){
+    playing = v;
+    playBtn.textContent = v ? "Пауза" : "Смотреть";
+  }
+
+  var last = performance.now();
+  function frame(now){
+    var dt = now - last;
+    last = now;
+    // На паузе сдвигаем точку отсчёта вместе со временем — прогресс замирает.
+    if (!playing) start += dt;
+    var e = now - start;
+    var cur = SCENES[index];
+    if (e >= cur.dur){
+      var next = (index + 1) % SCENES.length;
+      show(next);
+      start = now;
+      e = 0;
+    }
+    var p = Math.min(1, e / SCENES[index].dur);
+    segs.forEach(function(s, k){
+      s.fill.style.width = (k < index ? 100 : k > index ? 0 : p * 100) + "%";
+    });
+    var elapsed = OFFSETS[index] + e;
+    tcEl.textContent = fmt(elapsed);
+    tcTotalEl.textContent = fmt(elapsed);
+    requestAnimationFrame(frame);
+  }
+
+  playBtn.addEventListener("click", function(){
+    setPlaying(!playing);
+    // Пауза замораживает и CSS-анимации внутри сцены.
+    document.getElementById("stage").querySelectorAll(".scene.on, .scene.on *").forEach(function(n){
+      n.style.animationPlayState = playing ? "running" : "paused";
+    });
+  });
+
+  replayBtn.addEventListener("click", function(){
+    index = -1;
+    document.querySelectorAll(".scene").forEach(function(n){ n.classList.remove("on"); });
+    show(0);
+    start = performance.now();
+    setPlaying(true);
+  });
+
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === " " ){ ev.preventDefault(); playBtn.click(); }
+    if (ev.key === "ArrowRight") jump((index + 1) % SCENES.length);
+    if (ev.key === "ArrowLeft")  jump((index - 1 + SCENES.length) % SCENES.length);
+  });
+
+  tcTotalEl.textContent = fmt(0);
+  show(0);
+  start = performance.now();
+  requestAnimationFrame(frame);
+})();
+</script>

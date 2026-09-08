@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ECO_VERSION', '1.1.5' );
+define( 'ECO_VERSION', '1.1.6' );
 define( 'ECO_DIR', get_template_directory() );
 define( 'ECO_URI', get_template_directory_uri() );
 
@@ -31,6 +31,7 @@ require_once ECO_DIR . '/inc/fields.php';
 require_once ECO_DIR . '/inc/permalinks.php';
 require_once ECO_DIR . '/inc/template-tags.php';
 require_once ECO_DIR . '/inc/seo.php';
+require_once ECO_DIR . '/inc/schema.php';
 require_once ECO_DIR . '/inc/sitemap.php';
 require_once ECO_DIR . '/inc/robots.php';
 require_once ECO_DIR . '/inc/importer.php';

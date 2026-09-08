@@ -27,6 +27,8 @@ function eco_no_html_cache() {
 		return;
 	}
 	nocache_headers();
-	header( 'Cache-Control: no-cache, no-store, must-revalidate, max-age=0' );
-	header( 'Pragma: no-cache' );
+	// no-cache = браузер каждый раз перепроверяет актуальность (свежая
+	// версия гарантирована), но без no-store — чтобы работал bfcache
+	// (мгновенные «назад/вперёд») и условные запросы.
+	header( 'Cache-Control: private, no-cache, must-revalidate' );
 }

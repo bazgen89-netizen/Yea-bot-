@@ -1,0 +1,165 @@
+
+/*Messangers*/
+
+.mesblock {
+	display: block;
+	position: relative;
+	overflow: hidden;
+	height: 150px;
+}
+
+.tgblock, .mxblock {
+	width: 220px;
+	height: 55px;
+    border-radius: 40px;
+    border: 2px solid #669933;
+    position: relative;
+    padding: 0 20px 0 60px;
+    display: flex;
+    align-items:center;
+	float: left;
+	transition: background-color 0.3s ease; 
+}
+
+.mxblock {
+	margin-top: 20px;
+}
+
+.tgblock:hover, .mxblock:hover {
+	background-color: #f1fbe7;
+}
+
+.tgblock a, .mxblock a {
+    display: block;
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    z-index:5
+}
+.tgblock .ico, .mxblock .ico {
+	position: absolute;
+	width: 30px;
+	height: 30px;
+	left: 15px;
+	top: 50%;
+	transform: translateY(-50%);
+}
+
+.tgblock .ico:before {
+    display: block;
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size:contain;
+	background-image: url(../img/tgico.svg);
+	width: 32px;
+	height: 32px;
+}
+
+.mxblock .ico:before {
+    display: block;
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size:contain;
+	background-image: url(../img/mxico.svg);
+	width: 32px;
+	height: 32px;
+}
+
+.tgblock .txt, .mxblock .txt {
+	color: #669933;
+	height:40px;
+}
+
+.tgblock .txt p, .mxblock .txt p {
+	font-size: 16px;
+	font-family: museosanscyrl-bold;
+	color: #669933;
+}
+
+.tgblock .txt span, .mxblock .txt span {
+	font-size: 10px;
+	font-family: museosanscyrl-light;
+	color: #3D3D3D;
+}
+
+.tgblocktxt {
+	float: left;
+	margin-top: 20px;
+    margin-left: 20px;
+	color: #669933;
+}
+.tgblocktxt p {
+	color: #3D3D3D;
+	font-family: museosanscyrl-light;
+	font-size: 16px;
+	line-height: 18px;
+	margin-bottom: 20px;
+}
+
+.personaltg {
+	width: 100%;
+	height: 90px;
+}
+
+/*Mobile*/
+@media only screen and (max-width: 767px) {
+	.calendar .news .tbl {
+		padding-top: 180px; 
+	}
+	.tgblocktxt {
+		margin-left:0;
+		margin-top:15px;
+	}
+	.tgblocktxt p {
+		font-size: 12px;
+	}
+}
+
+/*Table*/
+@media only screen and (min-width: 768px) {
+	.calendar .news .tbl {
+		padding-top: 300px; 
+	}
+	.tgblocktxt {
+		margin-left:20px;
+		margin-top:15px;
+		width: 50%;
+	}
+	.tgblocktxt p {
+		font-size: 12px;
+	}
+
+	
+}
+/*Desktop*/
+@media only screen and (min-width: 1200px) {
+	.calendar .news .tbl {
+		padding-top: 145px;
+    }
+	.tgblocktxt p {
+		font-size: 16px;
+	}
+	.mesblock {
+		height: 90px;
+	}
+	.tgblock, .mxblock {
+		margin-top: 0;
+	}
+	.mxblock {
+	margin-left: 20px;
+	}
+}

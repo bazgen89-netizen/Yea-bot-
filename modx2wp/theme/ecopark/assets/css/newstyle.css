@@ -1,0 +1,294 @@
+/*NEW STYLES*/
+/*NEW COLOR* #669933 */
+
+.footer .contact p.cr {
+	color:#669933;
+}
+
+
+.btn.brown2 {
+	background-color: transparent;
+	border-color: #3D3D3D;
+	color: #3D3D3D;
+}
+.btn.brown2 span {
+	color: inherit !important;
+}
+.btn.brown2:hover {
+	color: #fff;
+	background-color: #3D3D3D;
+}
+
+.roombig {
+	width: 100%;
+	margin-bottom: 40px;
+	background: #fff;
+	border-radius: 10px;
+	padding: 25px;
+}
+.roombig p {
+	color: #3D3D3D;
+	font-family: museosanscyrl-light;
+	font-size: 12px;
+	line-height: 14px;
+}
+
+.roombig .wr {
+	width: 100%;
+	display: table;
+	padding-top: 15px;
+	padding-bottom: 20px;
+}
+.roombig .price {
+	float: left;
+	
+}
+.roombig .price p.p {
+	font-size: 20px;
+	line-height: 24px;
+	color: #3D3D3D;
+	font-family: museosanscyrl-boldbold;
+}
+.roombig .price p.p + p {
+	font-size: 12px;
+	line-height: 12px;
+	color: #8A8A8A;
+}
+.roombig .sq {
+	float: right;
+}
+
+.roombig .img {
+	width: 100%;
+	overflow:hidden;
+	border-radius: 10px;
+	position: relative;
+	margin-bottom: 0;
+}
+.roombig .img a {
+	display: block;
+	position:absolute;
+	z-index:1;
+	left:0;
+	top:0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+}
+.roombig .img div {
+	background-position: center center;
+	background-repeat: no-repeat;
+	background-size: cover;
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	-webkit-transition: 0.5s;
+	-moz-transition: 0.5s;
+	-ms-transition: 0.5s;
+	-o-transition: 0.5s;
+	transition: 0.5s;
+}
+.roombig .img:before {
+	display: block;
+	content: "";
+	width: 100%;
+	padding-top: 80%;
+}
+.roombig .img:hover div {
+	transform: scale(1.1);
+}
+.roombig .tx {
+	width: 100%;
+	padding-top: 20px;
+	display: table;
+}
+.roombig .tx .lf {
+	width: 100%;
+}
+.roombig .tx .rg {
+	width: 100%;
+}
+
+.roombig p.pre {
+	font-size: 10px;
+	line-height: 16px;
+	color: #000;
+	margin-bottom: 5px;
+	text-transform: uppercase;
+}
+.roombig a.h {
+	display: inline-block;
+	font-size: 20px;
+	line-height: 20px;
+	margin-bottom: 10px;
+	color: #669933;
+	font-family: museosanscyrl-boldbold;
+}
+
+
+.roombig .sq p {
+	padding-left: 33px;
+	display: flex;
+	min-height: 29px;
+	align-items: center;
+	font-size: 14px;
+	line-height: 14px;
+	color:#3D3D3D;
+	position: relative;
+}
+.roombig .sq p:before {
+	display:block;
+	content:"";
+	position:absolute;
+	left: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	background: url(/template/img/door.svg) no-repeat;
+	background-size:contain;
+	width: 25px;
+	height: 29px;
+}
+
+.roombig .btn {
+	width: 100%;
+}
+.roombig .btn.brown2 {
+	margin-bottom: 15px;
+}
+.roombig .btn span {
+	margin: 0 auto;
+}
+
+
+.video {
+  width: 100%;
+  position: relative;
+}
+
+.video video {
+  width: 100%;
+}
+
+.video div {
+  display: block;
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.video div:before {
+  display: block;
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%,-50%);
+  width: 40px;
+  height: 40px;
+  background: url(../img/play.svg) no-repeat;
+  background-size: contain;
+  transition: 0.5s;
+}
+
+.video i {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  z-index: 2;
+}
+
+@media only screen and (min-width: 768px) {
+	.roombig .img:before {
+		padding-top: 64.56140351%;
+	}
+	.roombig .wr {
+		padding-bottom: 0;
+	}
+	.roombig .tx .lf {
+		width: 315px;
+		float:left;
+	}
+	.roombig .tx .rg {
+		width: 200px;
+		float:right;
+	}
+	.roombig .btn {
+		width: 200px;
+	}
+}
+@media only screen and (min-width: 1200px) {
+	.roombig {
+		display: flex;
+		height: 460px;
+	}
+	.roombig p {
+		font-size: 14px;
+		line-height: 16px;
+	}
+	.roombig .img {
+		width: 635px;
+		min-width: 635px;
+	}
+	.roombig .img:before {
+		display: none;
+	}
+	
+	.roombig .tx {
+		padding-left: 100px;
+		padding-right: 60px;
+		padding-top: 40px;
+	}
+	
+	.roombig .tx .rg {
+		width: 100%;
+	}
+	.roombig .tx .rg {
+		width: 100%;
+	}
+	
+	.roombig .wr {
+		margin-bottom: 30px;
+	}
+	
+	.roombig a.h {
+		font-size: 28px;
+		line-height: 24px;
+	}
+	.roombig a.h:hover {
+		color:#3D3D3D;
+	}
+	
+	.roombig .sq p {
+		
+	}
+	
+
+	.roombig .price p.p {
+		font-size: 22px;
+		line-height: 28px;
+	}
+	
+	.video div:before {
+        width: 70px;
+        height: 70px;
+      }
+    
+      .video div:hover:before {
+          width: 80px;
+          height: 80px;
+      }
+	
+}

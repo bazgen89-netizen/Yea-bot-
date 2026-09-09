@@ -41,12 +41,12 @@ function useSections(): { title: string; rows: MenuRow[] }[] {
   const { allowed } = usePermissions();
 
   const sections: { title: string; rows: MenuRow[] }[] = [
-    // Первым разделом, а не среди прочего: спрашивать словами — это то, за чем
-    // с телефона заходят чаще всего, и искать это не должно приходиться.
+    // «Спросить у склада» временно снято по просьбе Вазгена — вернём
+    // переделанным. Раздел остался ради CRM: за ней с телефона заходят
+    // не реже, и прятать её в справочники значит, что её не откроют.
     {
-      title: 'Помощник',
+      title: 'Клиенты',
       rows: [
-        { label: 'Спросить у склада', icon: 'question', href: '/assistant' },
         { label: 'CRM — работа с клиентами', icon: 'customers', href: '/crm', needs: 'clients' },
       ],
     },

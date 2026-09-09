@@ -1,5 +1,39 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(npm run typecheck)",
+      "Bash(npm install)",
+      "Bash(npx jest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node scripts/import-cloudshop.mjs:*)",
+      "Bash(node scripts/build-demo.mjs:*)",
+      "Bash(node scripts/build-mine.mjs:*)",
+      "Bash(node scripts/build-artifact.mjs:*)",
+      "Bash(node scripts/refresh-photos.mjs:*)",
+      "Bash(node scripts/mix-photos.mjs:*)",
+      "Bash(CLOUDSHOP_TOKEN=*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "Artifact",
+      "SendUserFile"
+    ]
   }
 }

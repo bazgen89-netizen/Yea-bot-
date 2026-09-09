@@ -1,0 +1,34 @@
+# Вход по паролю и запрет на попадание в поиск.
+#
+# Кладётся рядом с index.html — в ту же папку поддомена.
+#
+# ВАЖНО: в строке AuthUserFile нужен ПОЛНЫЙ путь к файлу .htpasswd на
+# сервере, а не относительный. Панель хостинга обычно показывает его как
+# «Корневая директория» или «Домашняя директория» — например
+# /home/w/waystea/sklad.waystea.ru/.htpasswd
+#
+# Если у хостера в панели есть готовая «Защита директории паролем» —
+# пользуйтесь ею, а этот файл не нужен: панель напишет то же самое сама.
+
+AuthType Basic
+AuthName "WAYSTEA - sklad"
+AuthUserFile /ПОЛНЫЙ/ПУТЬ/К/ПАПКЕ/.htpasswd
+Require valid-user
+
+# Программа не должна попадать в Яндекс и Google: внутри настоящие телефоны
+# клиентов. Одного пароля мало — поисковик может узнать адрес по ссылке из
+# письма или мессенджера и попытаться зайти.
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow, noarchive"
+</IfModule>
+
+# Список файлов в папке показывать некому.
+Options -Indexes
+
+# Программа — один файл; открывается он.
+DirectoryIndex index.html
+
+# Сжатие: файл на 26 МБ по мобильному интернету иначе едет долго.
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript
+</IfModule>

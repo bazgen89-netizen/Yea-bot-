@@ -1,6 +1,16 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Modal,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewProps,
+} from 'react-native';
 
 import { listLocations } from '../../src/db/locations';
 import {
@@ -13,6 +23,7 @@ import {
   type Scope,
 } from '../../src/db/reports';
 import { formatMoney } from '../../src/domain/money';
+import { anchorOf, byMonth, canGoForward, periodTitle, tickLabel } from '../../src/domain/periods';
 import { formatQty } from '../../src/domain/qty';
 import { useQuery } from '../../src/state/DatabaseProvider';
 import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
@@ -64,20 +75,66 @@ function HomePhone() {
   const stores = useQuery((db) => listLocations(db));
   const storeName = stores.find((store) => store.id === scope)?.name ?? null;
 
-  const period = periodFor(kind);
-  const summary = useQuery((db) => salesSummary(db, period, scope), [kind, scope]);
+  /**
+   * На сколько периодов назад листнули. 0 — нынешний.
+   *
+   * Сбрасывается при смене «День / Неделя / Месяц / Год»: остаться на третьем
+   * шаге назад, переключившись с дней на годы, значило бы прыгнуть на три года
+   * назад — а человек всего лишь нажал «Год».
+   */
+  const [back, setBack] = useState(0);
+
+  function выбрать(value: PeriodKind) {
+    setKind(value);
+    setBack(0);
+  }
+
+  const period = useMemo(() => periodFor(kind, anchorOf(kind, back)), [kind, back]);
+  const before = useMemo(() => periodFor(kind, anchorOf(kind, back + 1)), [kind, back]);
+
+  const summary = useQuery((db) => salesSummary(db, period, scope), [kind, back, scope]);
   const stock = useQuery((db) => stockValue(db, scope), [scope]);
   // За день график рисуется по часам: одна точка на весь день — это не
   // график, а синий прямоугольник во всю карточку.
   const daily = useQuery(
     (db) => (kind === 'today' ? hourlySales(db, period, scope) : dailySales(db, period, scope)),
-    [kind, scope],
+    [kind, back, scope],
   );
   const totalQty = useQuery((db) => stockQty(db, scope), [scope]);
 
+  /**
+   * Чем измеряется столбик: часами, днями или месяцами.
+   *
+   * За год дней триста шестьдесят пять, и в карточке шириной с телефон они
+   * схлопывались в ничто — график выходил пустым белым полем, будто выручки
+   * за год нет вовсе. Сводим их в двенадцать месяцев.
+   */
+  const unit = kind === 'today' ? 'hour' : kind === 'year' ? 'month' : 'day';
+  const chart = useMemo(() => (unit === 'month' ? byMonth(daily) : daily), [unit, daily]);
+
   // Насколько выручка отличается от предыдущего такого же периода.
-  const previous = useQuery((db) => salesSummary(db, previousPeriod(kind), scope), [kind, scope]);
+  const previous = useQuery((db) => salesSummary(db, before, scope), [kind, back, scope]);
   const change = percentChange(summary.revenue, previous.revenue);
+
+  /**
+   * Листание пальцем по карточке.
+   *
+   * Тянешь влево — уходишь в прошлое, вправо — возвращаешься, ровно как он
+   * показал. Порог в 40 точек нужен, чтобы карточка не улетала от случайного
+   * касания при прокрутке страницы вниз; по той же причине жест берётся
+   * только когда движение по горизонтали заметно больше вертикального.
+   */
+  const swipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) =>
+        Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onPanResponderRelease: (_event, gesture) => {
+        if (gesture.dx <= -40) setBack((was) => was + 1);
+        // Вперёд — только если есть куда: будущей выручки не бывает.
+        else if (gesture.dx >= 40) setBack((was) => (canGoForward(was) ? was - 1 : was));
+      },
+    }),
+  ).current;
 
   return (
     <View style={styles.screen}>
@@ -114,7 +171,7 @@ function HomePhone() {
               key={option.value}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === option.value }}
-              onPress={() => setKind(option.value)}
+              onPress={() => выбрать(option.value)}
               style={({ pressed }) => [
                 styles.period,
                 kind === option.value && styles.periodActive,
@@ -128,21 +185,49 @@ function HomePhone() {
           ))}
         </View>
 
-        <Card style={styles.chartCard}>
+        {/* Карточка листается пальцем; стрелки — для тех, кто листать не
+            догадается, и для мыши в веб-версии. Жест без видимой кнопки
+            существует только для того, кто про него узнал. */}
+        <Card style={styles.chartCard} {...swipe.panHandlers}>
           <View style={styles.chartHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Предыдущий период"
+              onPress={() => setBack((was) => was + 1)}
+              hitSlop={10}
+              style={({ pressed }) => [styles.arrow, pressed && { opacity: 0.5 }]}
+            >
+              <Text style={styles.arrowText}>‹</Text>
+            </Pressable>
+
             <View style={styles.chartTitles}>
-              <Text style={[text.muted, styles.periodDate]}>{periodLabel(kind)}</Text>
+              <Text style={[text.muted, styles.periodDate]}>{periodTitle(kind, back)}</Text>
               {change !== null ? (
                 <Text style={[styles.change, change < 0 && { color: colors.danger }]}>
                   {change < 0 ? '▼' : '▲'} {Math.abs(change)}%
                 </Text>
               ) : null}
             </View>
-            <Icon.info size={22} />
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Следующий период"
+              accessibilityState={{ disabled: !canGoForward(back) }}
+              disabled={!canGoForward(back)}
+              onPress={() => setBack((was) => was - 1)}
+              hitSlop={10}
+              style={({ pressed }) => [
+                styles.arrow,
+                !canGoForward(back) && styles.arrowOff,
+                pressed && { opacity: 0.5 },
+              ]}
+            >
+              <Text style={styles.arrowText}>›</Text>
+            </Pressable>
           </View>
 
           <Text style={text.hero}>{formatMoney(summary.revenue)}</Text>
-          <Chart points={daily} />
+          <Chart points={chart} unit={unit} />
         </Card>
 
         <Card style={styles.metricsCard}>
@@ -329,12 +414,31 @@ function StoreRow({
   );
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+/**
+ * Остальные свойства уходят во `View` — без этого обработчики жеста
+ * (`panHandlers`) молча терялись бы: TypeScript не ловит лишние свойства,
+ * переданные через `{...}`, и карточка выглядела бы листаемой, не будучи ею.
+ */
+function Card({
+  children,
+  style,
+  ...rest
+}: { children: React.ReactNode; style?: object } & ViewProps) {
+  return (
+    <View {...rest} style={[styles.card, style]}>
+      {children}
+    </View>
+  );
 }
 
 /** Столбики выручки по дням. Пусто — показываем пустую область, как в оригинале. */
-function Chart({ points }: { points: { day: string; revenue: number }[] }) {
+function Chart({
+  points,
+  unit,
+}: {
+  points: { day: string; revenue: number }[];
+  unit: 'hour' | 'day' | 'month';
+}) {
   const max = Math.max(...points.map((point) => point.revenue), 1);
 
   return (
@@ -359,7 +463,7 @@ function Chart({ points }: { points: { day: string; revenue: number }[] }) {
       <View style={styles.chartAxis}>
         {points.map((point) => (
           <Text key={point.day} style={styles.chartTick} numberOfLines={1}>
-            {tick(point.day)}
+            {tickLabel(point.day, unit)}
           </Text>
         ))}
       </View>
@@ -368,11 +472,6 @@ function Chart({ points }: { points: { day: string; revenue: number }[] }) {
 }
 
 /** Подпись под столбиком: час — числом, день — числом месяца. */
-function tick(day: string): string {
-  if (day.length <= 2) return String(Number(day));
-  return String(Number(day.slice(8, 10)));
-}
-
 function Metric({ label, value, active }: { label: string; value: string; active?: boolean }) {
   return (
     <View style={[styles.metric, active && styles.metricActive]}>
@@ -418,27 +517,6 @@ function SoftButton({ title, onPress }: { title: string; onPress: () => void }) 
   );
 }
 
-function periodLabel(kind: PeriodKind): string {
-  const now = new Date();
-  if (kind === 'today') {
-    return now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
-  }
-  return { week: 'Последние 7 дней', month: 'Последние 30 дней', year: 'Последний год' }[kind];
-}
-
-/** Предыдущий период той же длины — с ним сравнивается выручка. */
-function previousPeriod(kind: PeriodKind) {
-  const current = periodFor(kind);
-  const from = new Date(current.from);
-  const to = new Date(current.to);
-  const length = to.getTime() - from.getTime();
-
-  return {
-    from: new Date(from.getTime() - length).toISOString(),
-    to: current.from,
-  };
-}
-
 /** null — сравнивать не с чем: в прошлом периоде продаж не было. */
 function percentChange(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? null : 100;
@@ -446,6 +524,10 @@ function percentChange(current: number, previous: number): number | null {
 }
 
 const styles = StyleSheet.create({
+  arrow: { paddingHorizontal: 6, paddingVertical: 2 },
+  arrowOff: { opacity: 0.25 },
+  arrowText: { fontSize: 26, lineHeight: 28, color: colors.textMuted },
+
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: {
     backgroundColor: colors.surface,
@@ -508,7 +590,13 @@ const styles = StyleSheet.create({
   },
   chartCard: { gap: spacing.sm },
   // «вторник» из toLocaleDateString приходит с маленькой буквы.
-  periodDate: { textTransform: 'capitalize' },
+  /**
+   * Без `capitalize`. Он остался с тех пор, когда подпись приходила от
+   * `toLocaleDateString` со строчной буквы в начале, — и заодно поднимал
+   * каждое слово: выходило «7 Сентября» и «2026 Год». Теперь подпись
+   * приходит готовой из `domain/periods`, где регистр расставлен по-русски.
+   */
+  periodDate: {},
   metricsCard: { padding: 0 },
   periods: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.xs },
   period: {

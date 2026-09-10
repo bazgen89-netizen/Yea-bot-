@@ -537,15 +537,40 @@ export function cancelDoc(db: SqlDriver, id: Id): void {
   });
 }
 
-/** Список складских документов для журнала. */
+/**
+ * Список складских документов для журнала на телефоне.
+ *
+ * Позиции и сумма считаются по движениям склада, а если движений нет — по
+ * строкам документа. Движений не бывает у двух документов: у отложенного
+ * (он склада ещё не касался) и у перенесённого из CloudShop — там остаток
+ * приезжает готовым из карточек товара, и двигать его вторично нельзя,
+ * иначе он удвоится.
+ *
+ * Без этой развилки все 3 336 перенесённых корректировок стояли в журнале
+ * с подписью «0 позиций». В кабинете такая развилка была с самого начала
+ * (`journal.ts`), а на телефоне её забыли — журнал там читался как список
+ * пустых бумажек.
+ */
 export function listDocs(db: SqlDriver, limit = 50): DocSummary[] {
+  const движений = `(SELECT COUNT(*) FROM stock_moves m WHERE m.doc_id = d.id AND ${ONE_SIDE})`;
+
   return db.all<DocSummary>(
     `SELECT d.*,
-            COUNT(m.id) AS positions,
-            CAST(ROUND(COALESCE(SUM(ABS(m.qty_delta) * m.price), 0) / 1000.0) AS INTEGER) AS amount
+            CASE WHEN ${движений} > 0
+                 THEN ${движений}
+                 ELSE (SELECT COUNT(*) FROM doc_lines l WHERE l.doc_id = d.id)
+            END AS positions,
+            CASE WHEN ${движений} > 0
+                 THEN CAST(ROUND(COALESCE((
+                        SELECT SUM(ABS(m.qty_delta) * m.price) FROM stock_moves m
+                        WHERE m.doc_id = d.id AND ${ONE_SIDE}
+                      ), 0) / 1000.0) AS INTEGER)
+                 ELSE CAST(ROUND(COALESCE((
+                        SELECT SUM(l.qty * l.price) FROM doc_lines l
+                        WHERE l.doc_id = d.id
+                      ), 0) / 1000.0) AS INTEGER)
+            END AS amount
      FROM docs d
-     LEFT JOIN stock_moves m ON m.doc_id = d.id AND ${ONE_SIDE}
-     GROUP BY d.id
      ORDER BY d.id DESC
      LIMIT ?`,
     [limit],

@@ -3,7 +3,15 @@ import type { SqlDriver } from '../driver';
 import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
-import { postDoc, productMoveOptions, productMoves, productMovesCount, getStock, stockByLocation} from '../stock';
+import {
+  postDoc,
+  productMoveOptions,
+  productMoves,
+  productMovesCount,
+  getStock,
+  stockByLocation,
+  listDocs,
+} from '../stock';
 
 /**
  * Движение товара по одному товару — вкладка «История движения».
@@ -211,5 +219,83 @@ describe('остаток по магазинам', () => {
   it('у товара без движений список пуст', () => {
     const товар = товарС('Ничего не было');
     expect(stockByLocation(db, товар)).toEqual([]);
+  });
+});
+
+/**
+ * Журнал на телефоне: документ без движений склада — не пустая бумажка.
+ *
+ * Всё, что приехало из CloudShop, лежит в базе документом со строками, но
+ * без движений: остаток пришёл готовым из карточек товара, и двигать его
+ * вторично нельзя — он бы удвоился. Журнал на телефоне считал позиции по
+ * движениям и потому подписывал все 3 336 перенесённых корректировок как
+ * «0 позиций». В кабинете такая развилка была, на телефоне — нет.
+ */
+describe('журнал на телефоне', () => {
+  let db: SqlDriver;
+
+  beforeEach(() => {
+    db = createTestDriver();
+  });
+
+  it('у перенесённого документа позиции берутся из строк, а не из движений', () => {
+    const место = ensureLocation(db, 'Черёмушки');
+    const товар = createProduct(db, {
+      name: 'Лао Шоу Мэй',
+      sku: null,
+      barcode: null,
+      category_id: null,
+      unit: 'гр',
+      cost_price: 2_000,
+      sale_price: 6_000,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    // Ровно так переносится документ из CloudShop: сам документ и его
+    // строки есть, движений нет.
+    db.run(
+      `INSERT INTO docs (type, subtype, created_at, doc_date, location_id, number, posted)
+       VALUES ('adjust', 'adjustment', ?, ?, ?, '5', 1)`,
+      ['2019-10-25T21:51:40+00:00', '2019-10-25T21:51:40+00:00', место],
+    );
+    const docId = db.lastInsertId();
+    db.run('INSERT INTO doc_lines (doc_id, product_id, qty, price) VALUES (?, ?, ?, ?)', [
+      docId,
+      товар,
+      1_000,
+      2_000,
+    ]);
+
+    const [документ] = listDocs(db);
+    expect(документ.positions).toBe(1);
+    // 1 000 тысячных по 2 000 копеек — двадцать рублей, а не ноль.
+    expect(документ.amount).toBe(2_000);
+  });
+
+  it('у обычного документа считает по движениям, как и раньше', () => {
+    const место = ensureLocation(db, 'Чайный бар');
+    const товар = createProduct(db, {
+      name: 'Габа Алишань',
+      sku: null,
+      barcode: null,
+      category_id: null,
+      unit: 'гр',
+      cost_price: 3_000,
+      sale_price: 10_000,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+    postDoc(db, {
+      type: 'purchase',
+      counterparty: 'Чайная лавка',
+      locationId: место,
+      lines: [{ product_id: товар, name: 'Габа Алишань', unit: 'гр', qty: 10_000, price: 3_000 }],
+    });
+
+    const [документ] = listDocs(db);
+    expect(документ.positions).toBe(1);
+    expect(документ.amount).toBe(30_000);
   });
 });

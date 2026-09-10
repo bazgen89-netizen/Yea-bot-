@@ -29,12 +29,12 @@
       "Edit",
       "Write",
       "Artifact",
-      "SendUserFile"
+      "SendUserFile",
+      "Bash(curl:*)"
     ],
     "deny": [
       "Bash(rm:*)",
       "Bash(sudo:*)",
-      "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)"

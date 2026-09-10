@@ -363,6 +363,36 @@ export function stockAt(db: SqlDriver, productId: Id, locationId: Id | null): nu
   return row?.stock ?? 0;
 }
 
+/** Остаток товара в одном магазине с его стоимостью. */
+export interface StockAtLocation {
+  location_id: Id;
+  name: string;
+  /** Остаток, тысячные. */
+  qty: number;
+}
+
+/**
+ * Остаток по каждому магазину — одним запросом, а не по запросу на магазин.
+ *
+ * Магазины, где товара нет, в список не попадают: у него в карточке их тоже
+ * нет. Показывать «Черёмушки — 0» рядом с двумя магазинами, где товар есть,
+ * значило бы удлинять список ради нулей.
+ *
+ * Порядок — по убыванию остатка: где больше, там и смотрят в первую очередь.
+ */
+export function stockByLocation(db: SqlDriver, productId: Id): StockAtLocation[] {
+  return db.all<StockAtLocation>(
+    `SELECT m.location_id, l.name, SUM(m.qty_delta) AS qty
+       FROM stock_moves m
+       JOIN locations l ON l.id = m.location_id
+      WHERE m.product_id = ? AND m.location_id IS NOT NULL
+      GROUP BY m.location_id
+     HAVING SUM(m.qty_delta) <> 0
+      ORDER BY qty DESC, l.name`,
+    [productId],
+  );
+}
+
 export function getStock(db: SqlDriver, productId: Id): number {
   const row = db.get<{ stock: number }>(
     'SELECT COALESCE(SUM(qty_delta), 0) AS stock FROM stock_moves WHERE product_id = ?',

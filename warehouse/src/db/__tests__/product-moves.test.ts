@@ -3,7 +3,7 @@ import type { SqlDriver } from '../driver';
 import { ensureLocation } from '../locations';
 import { createProduct } from '../products';
 import { createSale } from '../sales';
-import { postDoc, productMoveOptions, productMoves, productMovesCount } from '../stock';
+import { postDoc, productMoveOptions, productMoves, productMovesCount, getStock, stockByLocation} from '../stock';
 
 /**
  * Движение товара по одному товару — вкладка «История движения».
@@ -144,5 +144,72 @@ describe('история движения товара', () => {
     const options = productMoveOptions(db, tea);
 
     expect(options.locations).toEqual(['Чайный бар']);
+  });
+});
+
+/**
+ * Остаток по магазинам — как в карточке товара CloudShop.
+ *
+ * Вазген прислал снимок: под ценами идёт «Склад», в нём строка на каждый
+ * магазин с остатком, а внизу «Всего». Магазинов, где товара нет, там не
+ * видно.
+ */
+describe('остаток по магазинам', () => {
+  let db: SqlDriver;
+
+  const товарС = (name: string) =>
+    createProduct(db, {
+      name,
+      sku: null,
+      barcode: null,
+      category_id: null,
+      unit: 'шт',
+      cost_price: 3_750,
+      sale_price: 130_000,
+      min_qty: 0,
+      photo_uri: null,
+    });
+
+  beforeEach(() => {
+    db = createTestDriver();
+  });
+
+  it('складывает движения каждого магазина и не показывает пустые', () => {
+    const товар = товарС('Сяо Чжун плитка');
+    const черёмушки = ensureLocation(db, 'Черёмушки');
+    const рынок = ensureLocation(db, 'WAYSTEA / Рынок на Студеной');
+    const бар = ensureLocation(db, 'Чайный бар');
+
+    const приход = (место: number, сколько: number) =>
+      postDoc(db, {
+        type: 'receipt',
+        locationId: место,
+        lines: [{ product_id: товар, name: 'Сяо Чжун плитка', unit: 'шт', qty: сколько, price: 30000 }],
+      });
+
+    приход(черёмушки, 3000);
+    приход(рынок, 5000);
+    // В баре приняли и тут же вернули — остаток ноль, в списке его быть не должно.
+    приход(бар, 2000);
+    postDoc(db, {
+      type: 'writeoff',
+      locationId: бар,
+      lines: [{ product_id: товар, name: 'Сяо Чжун плитка', unit: 'шт', qty: 2000, price: 30000 }],
+    });
+
+    const по = stockByLocation(db, товар);
+    expect(по.map((one) => [one.name, one.qty])).toEqual([
+      ['WAYSTEA / Рынок на Студеной', 5000],
+      ['Черёмушки', 3000],
+    ]);
+
+    // Всего сходится с общим остатком: иначе строка «Всего» противоречила бы
+    // тому, что под ней.
+    expect(по.reduce((sum, one) => sum + one.qty, 0)).toBe(getStock(db, товар));
+  });
+
+  it('у товара без движений список пуст', () => {
+    const товар = товарС('Ничего не было');
+    expect(stockByLocation(db, товар)).toEqual([]);
   });
 });

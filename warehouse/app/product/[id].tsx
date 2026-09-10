@@ -12,7 +12,7 @@ import {
   updateProduct,
   type ProductInput,
 } from '../../src/db/products';
-import { adjustStock, listMoves } from '../../src/db/stock';
+import { adjustStock, listMoves, stockByLocation } from '../../src/db/stock';
 import { formatMoney, formatMoneyWithSign, parseMoney } from '../../src/domain/money';
 import {
   VAT_RATES,
@@ -31,6 +31,7 @@ import {
   PRODUCT_KIND_LABEL,
   type MoveReason,
   type ProductKind,
+  type ProductWithStock,
 } from '../../src/domain/types';
 import { useDatabase, useQuery } from '../../src/state/DatabaseProvider';
 import { useDesktop } from '../../src/ui/useDesktop';
@@ -63,7 +64,39 @@ export default function ProductScreen() {
   return <ProductPhone />;
 }
 
+/**
+ * Карточка товара на телефоне: сперва смотреть, править — по карандашу.
+ *
+ * До этого экран открывался сразу формой правки: «Вид: Товар / Услуга /
+ * Комплект», поля, кнопка сохранить. У Вазгена в CloudShop иначе — он
+ * прислал снимок: фотография во весь верх, под ней вкладки «Информация» и
+ * «История», дальше строки «название — значение», цены, остаток по каждому
+ * магазину и категории. Править открывается отдельно.
+ *
+ * Так и правильнее: в карточку заходят посмотреть остаток и цену в сто раз
+ * чаще, чем переименовать товар, а форма правки на каждом открытии — это
+ * приглашение задеть цену локтем.
+ */
 function ProductPhone() {
+  const params = useLocalSearchParams<{ id: string }>();
+  const isNew = params.id === 'new';
+  const productId = isNew ? null : Number(params.id);
+
+  const product = useQuery(
+    (database) => (productId ? getProduct(database, productId) : null),
+    [productId],
+  );
+
+  const [editing, setEditing] = useState(isNew);
+
+  if (isNew || editing || !product) {
+    return <ProductForm onDone={() => (isNew ? null : setEditing(false))} />;
+  }
+
+  return <ProductView product={product} onEdit={() => setEditing(true)} />;
+}
+
+function ProductForm({ onDone }: { onDone: () => void }) {
   const router = useRouter();
   const { db, refresh } = useDatabase();
   const { scanBarcode } = useScanner();
@@ -171,7 +204,10 @@ function ProductPhone() {
         createProduct(db, input);
       }
       refresh();
-      router.back();
+      // Правка существующего товара возвращает к карточке, а не уводит с
+      // экрана: человек чаще всего хочет убедиться, что вышло как надо.
+      if (productId) onDone();
+      else router.back();
     } catch (error) {
       const message = String(error);
       // Единственное ограничение уникальности в таблице — штрихкод.
@@ -392,6 +428,220 @@ function ProductPhone() {
 }
 
 /** Срок годности в поле ввода — в том же виде, в каком его печатают: 31.12.2026. */
+/**
+ * Карточка товара — вид, а не правка. Повторяет то, что Вазген прислал
+ * снимком из CloudShop.
+ *
+ * Порядок блоков его: фотография во весь верх с названием поверх, вкладки
+ * «Информация» и «История», потом сведения, «Цены и скидки», «Склад» с
+ * остатком по каждому магазину и «Категории».
+ *
+ * Наценка и маржинальность у него приглушены — их не вводят, а считают. Мы
+ * тоже считаем и тоже приглушаем: голубая цифра в его карточке значит «сюда
+ * можно нажать», серая — «это вывод».
+ *
+ * Обе считаются от себестоимости, а не от цены закупки. Проверено на его же
+ * снимке: цена 1 300, себестоимость 37,50 — наценка 3367 %, маржинальность
+ * 97 %. От цены закупки в 300 рублей вышло бы 333 % и 77 %.
+ */
+function ProductView({
+  product,
+  onEdit,
+}: {
+  product: ProductWithStock;
+  onEdit: () => void;
+}) {
+  const router = useRouter();
+  const [tab, setTab] = useState<'info' | 'history'>('info');
+
+  const stock = useQuery(
+    (database) => stockByLocation(database, product.id),
+    [product.id],
+  );
+  const category = useQuery(
+    (database) =>
+      product.category_id
+        ? listCategories(database).find((one) => one.id === product.category_id)?.name ?? null
+        : null,
+    [product.category_id],
+  );
+
+  const markup = markupBp(product.cost_price, product.sale_price);
+  const margin = marginBp(product.cost_price, product.sale_price);
+  const всего = stock.reduce((sum, one) => sum + one.qty, 0);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.viewContent}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.hero}>
+        {product.photo_uri ? (
+          <Image source={{ uri: product.photo_uri }} style={styles.heroPhoto} />
+        ) : (
+          <View style={[styles.heroPhoto, styles.heroEmpty]} />
+        )}
+
+        <View style={styles.heroTop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Назад"
+            onPress={() => router.back()}
+            hitSlop={10}
+          >
+            <Text style={styles.heroIcon}>←</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Редактировать"
+            onPress={onEdit}
+            hitSlop={10}
+          >
+            <Text style={styles.heroIcon}>✎</Text>
+          </Pressable>
+        </View>
+
+        {/* Тёмная подложка под названием: на светлой фотографии белые буквы
+            иначе не читаются вовсе. */}
+        <View style={styles.heroShade}>
+          <Text style={styles.heroName} numberOfLines={3}>
+            {product.name}
+          </Text>
+          <Text style={styles.heroKind}>{PRODUCT_KIND_LABEL[product.kind]}</Text>
+        </View>
+      </View>
+
+      <View style={styles.viewTabs}>
+        {([['info', 'Информация'], ['history', 'История']] as const).map(([value, label]) => (
+          <Pressable
+            key={value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === value }}
+            onPress={() => setTab(value)}
+            style={[styles.viewTab, tab === value && styles.viewTabOn]}
+          >
+            <Text style={[styles.viewTabLabel, tab === value && styles.viewTabLabelOn]}>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {tab === 'history' ? (
+        <View style={styles.band}>
+          <HistoryCard productId={product.id} />
+        </View>
+      ) : (
+        <>
+          <Line label="Создан" value={created(product.created_at)} />
+          <Line label="Код товара" value={product.code || '—'} />
+          <Line
+            label="Штрих-код"
+            value={product.barcode || 'Сгенерировать'}
+            link={!product.barcode}
+            onPress={product.barcode ? undefined : onEdit}
+          />
+          <Line label="Артикул" value={product.sku || '—'} />
+
+          <Divider>Цены и скидки</Divider>
+          <Line label="Цена продажи" value={`${formatMoney(product.sale_price)}  руб`} link />
+          <Line label="Цена закупки" value={`${formatMoney(product.purchase_price)}  руб`} link />
+          <Line label="Себестоимость" value={`${formatMoney(product.cost_price)}  руб`} />
+          <Line label="Скидка" value={`${product.discount_bp / 100}%`} link />
+          <Line
+            label="Наценка"
+            value={markup === null ? '—' : `${Math.round(markup / 100)}%`}
+            dim
+          />
+          <Line
+            label="Маржинальность"
+            value={margin === null ? '—' : `${Math.round(margin / 100)}%`}
+            dim
+          />
+
+          <Divider>Склад</Divider>
+          {stock.map((one) => (
+            <View key={one.location_id} style={styles.stockRow}>
+              <View style={styles.stockBody}>
+                <Text style={styles.stockName}>{one.name}</Text>
+                <Text style={styles.stockNote}>
+                  По себестоимости: {formatMoney(Math.round((one.qty * product.cost_price) / 1000))}  руб
+                </Text>
+                <Text style={styles.stockNote}>
+                  По цене: {formatMoney(Math.round((one.qty * product.sale_price) / 1000))}  руб
+                </Text>
+              </View>
+              <Text style={styles.stockQty}>{formatQty(one.qty)}</Text>
+            </View>
+          ))}
+          {stock.length ? (
+            <View style={styles.stockRow}>
+              <Text style={[styles.stockName, styles.stockTotal]}>Всего</Text>
+              <Text style={[styles.stockQty, styles.stockTotal]}>{formatQty(всего)}</Text>
+            </View>
+          ) : (
+            <Text style={styles.viewEmpty}>Остатка нет ни в одном магазине</Text>
+          )}
+
+          <Divider>Категории</Divider>
+          <Text style={styles.category}>{category ?? 'Без категории'}</Text>
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+/** Строка «название — значение». Голубое значение можно нажать, серое — вывод. */
+function Line({
+  label,
+  value,
+  link,
+  dim,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  link?: boolean;
+  dim?: boolean;
+  onPress?: () => void;
+}) {
+  const body = (
+    <View style={styles.line}>
+      <Text style={[styles.lineLabel, dim && styles.lineDim]}>{label}</Text>
+      <Text style={[styles.lineValue, link && styles.lineLink, dim && styles.lineDim]}>
+        {value}
+      </Text>
+    </View>
+  );
+
+  if (!onPress) return body;
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress}>
+      {body}
+    </Pressable>
+  );
+}
+
+/** Серая полоса с синим заголовком — так у него разделены части карточки. */
+function Divider({ children }: { children: string }) {
+  return (
+    <>
+      <View style={styles.band} />
+      <Text style={styles.bandTitle}>{children}</Text>
+    </>
+  );
+}
+
+/** «31 янв. 2025, 10:36» — так подписана дата создания у него. */
+function created(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return `${date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })}, ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 function formatDateInput(value: string | null): string {
   return value ? formatDate(value) : '';
 }
@@ -512,6 +762,102 @@ function HistoryCard({ productId }: { productId: number }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+
+  viewContent: { paddingBottom: spacing.xl },
+  hero: { height: 300, backgroundColor: '#1B1D1F' },
+  heroPhoto: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  heroEmpty: { backgroundColor: '#2A2D30' },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+  },
+  heroIcon: { fontSize: 26, color: '#FFFFFF' },
+  // Подложка под названием: на светлой фотографии белые буквы иначе пропадают.
+  heroShade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  heroName: { fontSize: 26, fontWeight: '700', color: '#FFFFFF', lineHeight: 32 },
+  heroKind: { fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+
+  viewTabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  viewTab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  viewTabOn: { borderBottomColor: colors.accent },
+  viewTabLabel: { fontSize: 17, color: colors.textMuted },
+  viewTabLabelOn: { color: colors.text, fontWeight: '700' },
+
+  line: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  lineLabel: { fontSize: 17, color: colors.text, flexShrink: 1 },
+  lineValue: { fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
+  lineLink: { color: colors.accent },
+  // Приглушены те строки, которых не вводят, а выводят: наценка и маржа.
+  lineDim: { color: colors.textMuted },
+
+  band: { height: spacing.lg, backgroundColor: colors.bg },
+  bandTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.accent,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  stockBody: { flex: 1, gap: 2 },
+  stockName: { fontSize: 17, fontWeight: '600', color: colors.text },
+  stockNote: { fontSize: 13, color: colors.textMuted },
+  stockQty: { fontSize: 20, color: colors.text, fontVariant: ['tabular-nums'] },
+  stockTotal: { fontWeight: '700' },
+  category: {
+    fontSize: 17,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  viewEmpty: {
+    fontSize: 15,
+    color: colors.textMuted,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+  },
+
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
   photoBox: {
     height: 140,

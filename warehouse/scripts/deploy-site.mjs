@@ -1,52 +1,59 @@
 /**
- * Выкладка программы на поддомен Вазгена.
+ * Выкладка программы на сайт Вазгена — сама, без его участия.
  *
  *   node scripts/deploy-site.mjs [файл]
  *
- * Вазген попросил, чтобы программа жила по адресу на его домене и обновлялась
- * сама. Здесь — вторая половина: сама заливка. Первая половина (поддомен,
- * пароль на папку, сертификат) делается один раз руками, порядок в
- * `deploy/КАК-ПОЛОЖИТЬ-НА-ПОДДОМЕН.md`.
+ * ## Почему не по FTP
+ *
+ * Сначала это было написано на curl по FTP, и это не работало ни разу: с
+ * машины, где собирается программа, наружу открыт только 443-й порт.
+ * Проверено прямо: 21 (FTP), 990 (FTPS) и 22 (SFTP) не отвечают, 443
+ * отвечает. Значит, дорога одна — обычный https, а на том конце должен
+ * кто-то принимать. Принимает `deploy/priem.php`, положенный в папку
+ * программы один раз руками.
  *
  * ## Доступы
  *
- * Берутся только из переменных окружения — в чат их присылать не нужно и
- * нельзя, ровно как ключ CloudShop:
+ * Только из переменных окружения — как ключ CloudShop. В переписку их слать
+ * не нужно и нельзя:
  *
- *   SITE_FTP_URL       ftp://ftp.hoster.ru/sklad.waystea.ru/  (папка, со слешом)
- *   SITE_FTP_USER      логин FTP
- *   SITE_FTP_PASSWORD  пароль FTP
+ *   SITE_URL   https://waystea.ru/sklad/priem.php
+ *   SITE_KEY   та же длинная строка, что вписана в priem.php
  *
- * Логин и пароль уходят в curl через его файл настроек на стандартном вводе,
- * а не аргументами команды: аргументы видны в списке процессов всякому, кто
- * на этой машине окажется.
+ * Ключ уходит заголовком по https и в списке процессов не виден.
  *
- * Если переменных нет — команда честно об этом говорит и завершается спокойно,
- * не роняя ночной перенос: выкладка не главное в нём.
+ * ## Как едет
+ *
+ * Кусками по 4 МБ: хостеры не принимают 26 МБ одним запросом, а обрыв на
+ * половине не должен убивать работающую программу. Поэтому файл сперва
+ * копится черновиком, в конце сверяется длина и sha256, и только тогда
+ * подменяется — одним мгновенным rename.
+ *
+ * Если переменных нет, команда честно об этом говорит и завершается спокойно:
+ * ронять из-за этого весь ночной перенос незачем.
  */
-import { execFileSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Что кладём. По умолчанию — сборка со своими данными и крупными снимками. */
-const файл = resolve(root, process.argv[2] ?? 'dist-demo/index.html');
+/** Что кладём. По умолчанию — сборка со своими данными. */
+const файл = resolve(root, process.argv[2] ?? 'dist/index.html');
 
-const url = process.env.SITE_FTP_URL;
-const user = process.env.SITE_FTP_USER;
-const password = process.env.SITE_FTP_PASSWORD;
+const адрес = process.env.SITE_URL;
+const ключ = process.env.SITE_KEY;
 
-if (!url || !user || !password) {
+if (!адрес || !ключ) {
   console.log('Выкладка на сайт пропущена: не заданы доступы.');
   console.log('');
-  console.log('Нужны три переменные окружения:');
-  console.log('  SITE_FTP_URL       ftp://ftp.вашхостер.ру/sklad.waystea.ru/');
-  console.log('  SITE_FTP_USER      логин FTP');
-  console.log('  SITE_FTP_PASSWORD  пароль FTP');
+  console.log('Нужны две переменные окружения:');
+  console.log('  SITE_URL   https://waystea.ru/sklad/priem.php');
+  console.log('  SITE_KEY   длинная случайная строка (она же — в priem.php)');
   console.log('');
   console.log('Задаются в настройках среды, а не в переписке.');
+  console.log('Порядок — в deploy/КАК-ПОЛОЖИТЬ-НА-ПОДДОМЕН.md.');
   process.exit(0);
 }
 
@@ -55,42 +62,69 @@ if (!existsSync(файл)) {
   process.exit(1);
 }
 
-const мегабайт = statSync(файл).size / 1024 / 1024;
+const КУСОК = 4 * 1024 * 1024;
 
-// Слеш в конце обязателен: без него curl принял бы последнее слово за имя
-// файла и положил программу под именем папки.
-const папка = url.endsWith('/') ? url : `${url}/`;
-const адрес = `${папка}index.html`;
+const тело = readFileSync(файл);
+const размер = statSync(файл).size;
+const сумма = createHash('sha256').update(тело).digest('hex');
 
-console.log(`Кладу ${файл} (${мегабайт.toFixed(1)} МБ) → ${адрес}`);
+/** Один запрос к приёмнику. Ключ — заголовком, ответ — json. */
+async function позвать(что, { body, headers } = {}) {
+  const ответ = await fetch(`${адрес}?chto=${что}`, {
+    method: 'POST',
+    headers: { 'X-Klyuch': ключ, 'Content-Type': 'application/octet-stream', ...headers },
+    body,
+  });
 
-/**
- * Настройки для curl подаются на стандартный ввод.
- *
- * `--ssl` вместо `--ssl-reqd`: у многих хостеров FTP без шифрования, и
- * требовать его значило бы не положить файл вовсе. Само содержимое не
- * секрет — программа и так открывается по ссылке, — а вот пароль от FTP
- * секрет, и его curl при `--ssl` защитит, если хостер это умеет.
- */
-const настройки = [
-  `url = "${адрес}"`,
-  `user = "${user}:${password}"`,
-  `upload-file = "${файл}"`,
-  'ssl',
-  'ftp-create-dirs',
-  'silent',
-  'show-error',
-  'fail',
-  'connect-timeout = 30',
-  // Сорок мегабайт по мобильному каналу хостера едут небыстро.
-  'max-time = 900',
-].join('\n');
+  if (ответ.status === 404) {
+    throw new Error(
+      'приёмник не отозвался (404). Либо priem.php не лежит в папке, ' +
+        'либо SITE_KEY не совпадает с ключом внутри него.',
+    );
+  }
+  if (!ответ.ok) throw new Error(`хостинг ответил ${ответ.status}`);
+
+  const текст = await ответ.text();
+  let ответ_json;
+  try {
+    ответ_json = JSON.parse(текст);
+  } catch {
+    throw new Error(`непонятный ответ хостинга: ${текст.slice(0, 200)}`);
+  }
+  if (!ответ_json.ok) throw new Error(ответ_json.беда ?? 'отказ без объяснения');
+  return ответ_json;
+}
+
+const мб = (сколько) => (сколько / 1024 / 1024).toFixed(1);
 
 try {
-  execFileSync('curl', ['--config', '-'], { input: настройки, stdio: ['pipe', 'inherit', 'inherit'] });
-  console.log('Готово. Программа обновлена на сайте.');
-} catch (error) {
-  console.error('Не удалось выложить:', error.message);
-  console.error('Проверьте SITE_FTP_URL, логин и пароль в настройках среды.');
+  const проверка = await позвать('proverka');
+  if (!проверка.пишется) {
+    throw new Error('папка на хостинге закрыта на запись — приёмнику некуда класть');
+  }
+  console.log(
+    `Приёмник на связи. Сейчас на сайте: ${
+      проверка.программа ? `${мб(проверка.программа)} МБ` : 'пусто'
+    }.`,
+  );
+
+  console.log(`Кладу ${файл} (${мб(размер)} МБ) → ${адрес}`);
+  await позвать('nachat');
+
+  for (let с = 0; с < размер; с += КУСОК) {
+    const до = Math.min(с + КУСОК, размер);
+    await позвать('kusok', { body: тело.subarray(с, до) });
+    process.stdout.write(`\r  ${мб(до)} из ${мб(размер)} МБ`);
+  }
+  process.stdout.write('\n');
+
+  const готово = await позвать('zakonchit', {
+    headers: { 'X-Razmer': String(размер), 'X-Summa': сумма },
+  });
+
+  console.log(`Готово: программа на сайте обновлена, ${мб(готово.размер)} МБ.`);
+} catch (ошибка) {
+  console.error('Не удалось выложить:', ошибка.message);
+  console.error('Старая программа на сайте осталась нетронутой.');
   process.exit(1);
 }

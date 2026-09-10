@@ -470,6 +470,12 @@ function ProductView({
   const margin = marginBp(product.cost_price, product.sale_price);
   const всего = stock.reduce((sum, one) => sum + one.qty, 0);
 
+  // У услуги склада нет и быть не может: её не привозят и не списывают.
+  // Форма правки это уже учитывает — карточка должна вести себя так же,
+  // иначе под «Складом» висит «остатка нет ни в одном магазине», и это
+  // читается как недостача, а не как «здесь нечему лежать».
+  const складской = product.kind !== 'service';
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.viewContent}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -511,7 +517,10 @@ function ProductView({
       </View>
 
       <View style={styles.viewTabs}>
-        {([['info', 'Информация'], ['history', 'История']] as const).map(([value, label]) => (
+        {(складской
+          ? ([['info', 'Информация'], ['history', 'История']] as const)
+          : ([['info', 'Информация']] as const)
+        ).map(([value, label]) => (
           <Pressable
             key={value}
             accessibilityRole="tab"
@@ -526,7 +535,7 @@ function ProductView({
         ))}
       </View>
 
-      {tab === 'history' ? (
+      {tab === 'history' && складской ? (
         <View style={styles.band}>
           <HistoryCard productId={product.id} />
         </View>
@@ -558,8 +567,8 @@ function ProductView({
             dim
           />
 
-          <Divider>Склад</Divider>
-          {stock.map((one) => (
+          {складской ? <Divider>Склад</Divider> : null}
+          {(складской ? stock : []).map((one) => (
             <View key={one.location_id} style={styles.stockRow}>
               <View style={styles.stockBody}>
                 <Text style={styles.stockName}>{one.name}</Text>
@@ -573,7 +582,7 @@ function ProductView({
               <Text style={styles.stockQty}>{formatQty(one.qty)}</Text>
             </View>
           ))}
-          {stock.length ? (
+          {!складской ? null : stock.length ? (
             <View style={styles.stockRow}>
               <Text style={[styles.stockName, styles.stockTotal]}>Всего</Text>
               <Text style={[styles.stockQty, styles.stockTotal]}>{formatQty(всего)}</Text>

@@ -13,6 +13,23 @@ AuthName "WAYSTEA"
 AuthUserFile /home/w/waystea/waystea.ru/public_html/sklad/.htpasswd
 Require valid-user
 
+# Приёмник обновлений — единственное исключение.
+#
+# Он должен впускать ночную сборку, а пароля от этой папки у неё нет и быть
+# не должно. Взамен у него своя защита, причём построже здешней: длинный
+# случайный ключ заголовком, сверка без утечки по времени и одинаковая 404-я
+# на любую ошибку. Отдавать наружу он не умеет вовсе — только принимать.
+<Files "priem.php">
+  Require all granted
+  Satisfy Any
+</Files>
+
+# А черновик, пока программа едет, не должен отдаваться никому: это
+# наполовину доехавший файл с телефонами клиентов.
+<Files ".index.html.частями">
+  Require all denied
+</Files>
+
 # В поиск программе попадать незачем.
 <IfModule mod_headers.c>
   Header set X-Robots-Tag "noindex, nofollow, noarchive"

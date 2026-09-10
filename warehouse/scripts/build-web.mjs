@@ -234,6 +234,63 @@ const POS_VARS = `:root{
 page = replaceOnce(page, '</head>', `<style id="pos-vars">${POS_VARS}</style></head>`);
 
 /**
+ * Чтобы с телефона это открывалось приложением, а не страницей.
+ *
+ * Вазген просил одного: нажал на значок — открылся склад. Без этих строк
+ * «Добавить на экран Домой» кладёт на рабочий стол серый квадратик со
+ * снимком страницы, а по нажатию открывается браузер со всеми его
+ * полосками — адресной сверху и кнопками снизу. На узком экране эти полоски
+ * съедают сантиметра три, и нижнее меню программы оказывается под ними.
+ *
+ * Иконка и описание вшиваются прямо в файл: программа — один файл, который
+ * кладут куда угодно, и ссылаться на соседние она не может.
+ *
+ * `apple-mobile-web-app-capable` — старое имя, но iOS до сих пор слушает
+ * только его; `mobile-web-app-capable` рядом для всех остальных.
+ */
+const иконка = await readFile(join(root, 'assets/app-icon.png'));
+const значок = `data:image/png;base64,${иконка.toString('base64')}`;
+
+const МАНИФЕСТ = {
+  name: 'Wayshop — склад и касса',
+  short_name: 'Wayshop',
+  start_url: '.',
+  display: 'standalone',
+  background_color: '#F5F6F8',
+  theme_color: '#0B3FE8',
+  icons: [
+    { src: значок, sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: значок, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+};
+
+const ПРИЛОЖЕНИЕ = [
+  `<link rel="apple-touch-icon" href="${значок}">`,
+  `<link rel="icon" type="image/png" href="${значок}">`,
+  `<link rel="manifest" href="data:application/manifest+json;base64,${Buffer.from(
+    JSON.stringify(МАНИФЕСТ),
+  ).toString('base64')}">`,
+  '<meta name="apple-mobile-web-app-capable" content="yes">',
+  '<meta name="mobile-web-app-capable" content="yes">',
+  '<meta name="apple-mobile-web-app-title" content="Wayshop">',
+  '<meta name="application-name" content="Wayshop">',
+  /*
+   * `default`, а не `black-translucent`.
+   *
+   * Полупрозрачная полоса красивее — шапка уходит под часы и время стоит на
+   * синем. Но она же и опасна: содержимое лезет под часы, и без
+   * `viewport-fit=cover` вместе с отступами по `env(safe-area-inset-top)`
+   * заголовок оказывается наполовину под ними. Проверить это можно только
+   * на живом айфоне, которого здесь нет. Поэтому пока безопасный вариант:
+   * полоса своя, программа под ней не рисуется и заголовок цел.
+   */
+  '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
+  '<meta name="theme-color" content="#0B3FE8">',
+].join('');
+
+page = replaceOnce(page, '</head>', `${ПРИЛОЖЕНИЕ}</head>`);
+
+/**
  * Наполнять ли базу при первом запуске.
  *
  * Обычная сборка приходит пустой: каталог в ней заводит тот, кто её поставил,

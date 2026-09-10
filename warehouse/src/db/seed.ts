@@ -652,6 +652,123 @@ export function rememberSeedStamp(db: SqlDriver): void {
 }
 
 /**
+ * Заметки, дела и метки, снятые перед обновлением данных.
+ *
+ * Клиент опознаётся телефоном, а не номером записи: номера при обновлении
+ * заводятся заново, и заметка «пьёт только шу» после ночной выгрузки
+ * оказалась бы у другого человека. Телефон записан у 94 % клиентов; у
+ * остальных опорой служит имя.
+ */
+export interface KeptCrm {
+  notes: { phone: string | null; name: string; body: string; author: string | null; created_at: string }[];
+  tasks: {
+    phone: string | null;
+    name: string;
+    title: string;
+    due_date: string;
+    done_at: string | null;
+    author: string | null;
+    created_at: string;
+  }[];
+  tags: { phone: string | null; name: string; tags: string }[];
+}
+
+/** Телефон без разделителей: «+7 (900) 583-29-29» и «89005832929» — одно и то же. */
+function digits(phone: string | null): string {
+  const only = (phone ?? '').replace(/\D/g, '');
+  // Восьмёрка и семёрка в начале — один и тот же российский номер.
+  return only.length === 11 && only.startsWith('8') ? `7${only.slice(1)}` : only;
+}
+
+/**
+ * Снять то, чего нет в выгрузке CloudShop.
+ *
+ * Заметки, дела и метки заводит сам магазин, и в CloudShop их нет. Ночное
+ * обновление стирает клиентов и заводит заново — вместе с ними пропала бы и
+ * эта работа. Причём хуже потери: связи `client_notes.counterparty_id`
+ * пережили бы очистку (внешние ключи на время неё сняты) и стали бы указывать
+ * на чужие карточки.
+ */
+export function keepCrm(db: SqlDriver): KeptCrm {
+  const has = (table: string) =>
+    db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    )?.n === 1;
+
+  return {
+    notes: has('client_notes')
+      ? db.all(`SELECT p.phone, p.name, n.body, n.author, n.created_at
+                  FROM client_notes n JOIN counterparties p ON p.id = n.counterparty_id`)
+      : [],
+    tasks: has('client_tasks')
+      ? db.all(`SELECT p.phone, p.name, t.title, t.due_date, t.done_at, t.author, t.created_at
+                  FROM client_tasks t JOIN counterparties p ON p.id = t.counterparty_id`)
+      : [],
+    tags: hasColumn(db, 'counterparties', 'tags')
+      ? db.all("SELECT phone, name, tags FROM counterparties WHERE tags <> ''")
+      : [],
+  };
+}
+
+function hasColumn(db: SqlDriver, table: string, column: string): boolean {
+  return db
+    .all<{ name: string }>(`PRAGMA table_info(${table})`)
+    .some((one) => one.name === column);
+}
+
+/**
+ * Вернуть снятое на новые карточки — по телефону, иначе по имени.
+ *
+ * Кого не нашли, того пропускаем молча: клиент мог быть удалён в CloudShop, и
+ * заметка о нём никому не нужна. Прицепить её наугад было бы хуже.
+ */
+export function restoreCrm(db: SqlDriver, kept: KeptCrm): void {
+  const parties = db.all<{ id: number; phone: string | null; name: string }>(
+    'SELECT id, phone, name FROM counterparties',
+  );
+
+  const byPhone = new Map<string, number>();
+  const byName = new Map<string, number>();
+  for (const party of parties) {
+    const key = digits(party.phone);
+    if (key && !byPhone.has(key)) byPhone.set(key, party.id);
+    const name = party.name.trim().toLowerCase();
+    if (name && !byName.has(name)) byName.set(name, party.id);
+  }
+
+  const найти = (phone: string | null, name: string): number | null =>
+    byPhone.get(digits(phone)) ?? byName.get(name.trim().toLowerCase()) ?? null;
+
+  db.tx(() => {
+    for (const note of kept.notes) {
+      const id = найти(note.phone, note.name);
+      if (id === null) continue;
+      db.run(
+        'INSERT INTO client_notes (counterparty_id, body, author, created_at) VALUES (?, ?, ?, ?)',
+        [id, note.body, note.author, note.created_at],
+      );
+    }
+
+    for (const task of kept.tasks) {
+      const id = найти(task.phone, task.name);
+      if (id === null) continue;
+      db.run(
+        `INSERT INTO client_tasks (counterparty_id, title, due_date, done_at, author, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, task.title, task.due_date, task.done_at, task.author, task.created_at],
+      );
+    }
+
+    for (const tag of kept.tags) {
+      const id = найти(tag.phone, tag.name);
+      if (id === null) continue;
+      db.run('UPDATE counterparties SET tags = ? WHERE id = ?', [tag.tags, id]);
+    }
+  });
+}
+
+/**
  * Стереть всё, что завело наполнение, — чтобы завести заново.
  *
  * Вызывается **только** в сборке, которая везёт данные с собой: там вся база
@@ -682,6 +799,11 @@ export function resetSeed(db: SqlDriver): void {
       // Порядок всё равно от зависимых к главным: если проверку однажды
       // не выйдет снять, очистка должна пройти и так.
       for (const table of [
+        // Заметки и дела — первыми: внешние ключи на время очистки сняты,
+        // и уцелевшие строки указывали бы на чужие карточки. Их содержимое
+        // к этому времени уже снято `keepCrm` и вернётся после наполнения.
+        'client_notes',
+        'client_tasks',
         'sale_items',
         'doc_payments',
         'doc_lines',

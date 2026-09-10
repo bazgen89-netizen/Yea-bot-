@@ -6,9 +6,11 @@ import { listJournal } from '../journal';
 import { createSale, getSale } from '../sales';
 import {
   seedStamp,
+  keepCrm,
   loadedSeedStamp,
   rememberSeedStamp,
   resetSeed,
+  restoreCrm,
   seedCatalog,
   useSeedData,
 } from '../seed';
@@ -510,5 +512,106 @@ describe('перенесённые закупки', () => {
         'supplier',
       ]),
     ).not.toBeNull();
+  });
+});
+
+/**
+ * Заметки, дела и метки переживают ночное обновление.
+ *
+ * Это самая опасная часть обновления: клиенты стираются и заводятся заново с
+ * другими номерами, а внешние ключи на время очистки сняты. Не снять заметки
+ * заранее — и «пьёт только шу» после ночи окажется у другого человека.
+ */
+describe('CRM переживает обновление данных', () => {
+  let db: SqlDriver;
+
+  beforeEach(() => {
+    db = createTestDriver();
+  });
+
+  function клиент(name: string, phone: string | null) {
+    db.run(
+      `INSERT INTO counterparties (kind, name, phone, created_at, search_text)
+       VALUES ('customer', ?, ?, '2026-01-01T00:00:00.000Z', '')`,
+      [name, phone],
+    );
+    return db.lastInsertId();
+  }
+
+  it('возвращает заметку тому же человеку, хоть номер записи и сменился', () => {
+    const был = клиент('Сафонов Юрий', '89056162582');
+    db.run(
+      "INSERT INTO client_notes (counterparty_id, body, created_at) VALUES (?, 'Берёт шу коробками', '2026-09-08T10:00:00.000Z')",
+      [был],
+    );
+    db.run("UPDATE counterparties SET tags = 'опт' WHERE id = ?", [был]);
+
+    const kept = keepCrm(db);
+    resetSeed(db);
+
+    // Ночная выгрузка завела его заново — с другим номером и в другом
+    // написании телефона.
+    const стал = клиент('Сафонов Юрий', '+7 (905) 616-25-82');
+    клиент('Кто-то другой', '89990001122');
+    expect(стал).not.toBe(был);
+
+    restoreCrm(db, kept);
+
+    const заметки = db.all<{ counterparty_id: number; body: string }>('SELECT * FROM client_notes');
+    expect(заметки).toHaveLength(1);
+    expect(заметки[0].counterparty_id).toBe(стал);
+    expect(заметки[0].body).toBe('Берёт шу коробками');
+
+    const метка = db.get<{ tags: string }>('SELECT tags FROM counterparties WHERE id = ?', [стал]);
+    expect(метка?.tags).toBe('опт');
+  });
+
+  it('дело возвращается со своим сроком и отметкой', () => {
+    const был = клиент('Никита', '89046530214');
+    db.run(
+      `INSERT INTO client_tasks (counterparty_id, title, due_date, done_at, created_at)
+       VALUES (?, 'Позвонить про пуэр', '2026-09-15', NULL, '2026-09-08T10:00:00.000Z')`,
+      [был],
+    );
+
+    const kept = keepCrm(db);
+    resetSeed(db);
+    const стал = клиент('Никита', '89046530214');
+    restoreCrm(db, kept);
+
+    const [дело] = db.all<{ counterparty_id: number; due_date: string; done_at: string | null }>(
+      'SELECT * FROM client_tasks',
+    );
+    expect(дело.counterparty_id).toBe(стал);
+    expect(дело.due_date).toBe('2026-09-15');
+    expect(дело.done_at).toBeNull();
+  });
+
+  /** Иначе заметка про исчезнувшего прицепилась бы к случайному человеку. */
+  it('заметку о пропавшем из выгрузки клиенте молча выбрасывает', () => {
+    const был = клиент('Удалённый', '89001112233');
+    db.run(
+      "INSERT INTO client_notes (counterparty_id, body, created_at) VALUES (?, 'Что-то', '2026-09-08T10:00:00.000Z')",
+      [был],
+    );
+
+    const kept = keepCrm(db);
+    resetSeed(db);
+    клиент('Совсем другой', '89998887766');
+    restoreCrm(db, kept);
+
+    expect(db.all('SELECT * FROM client_notes')).toHaveLength(0);
+  });
+
+  /** Очистка снимает внешние ключи, поэтому сироты не удалились бы сами. */
+  it('очистка не оставляет заметок, висящих на стёртых карточках', () => {
+    const был = клиент('Кто-то', '89001112233');
+    db.run(
+      "INSERT INTO client_notes (counterparty_id, body, created_at) VALUES (?, 'Заметка', '2026-09-08T10:00:00.000Z')",
+      [был],
+    );
+
+    resetSeed(db);
+    expect(db.all('SELECT * FROM client_notes')).toHaveLength(0);
   });
 });

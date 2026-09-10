@@ -200,7 +200,7 @@ export async function openWebDatabase(): Promise<SqlDriver> {
   // Исключение — сборка для показа: в ней флаг ставится при сборке, и пустая
   // витрина не имела бы смысла.
   if ((globalThis as { __DEMO__?: boolean }).__DEMO__) {
-    const { seedStamp, loadedSeedStamp, rememberSeedStamp, resetSeed, seedCatalog, loadSeedPack } =
+    const { seedStamp, loadedSeedStamp, rememberSeedStamp, resetSeed, seedCatalog, loadSeedPack, keepCrm, restoreCrm } =
       await import('./seed');
 
     // Данные для показа могут лежать рядом со страницей пожатыми: так в
@@ -224,9 +224,17 @@ export async function openWebDatabase(): Promise<SqlDriver> {
     // заведённые прежними сборками, подписи не знают вовсе. Не считать их
     // устаревшими значило бы навсегда оставить у них старые данные. На
     // свежей базе стирать нечего, и проход обходится даром.
-    if (loadedSeedStamp(driver) !== seedStamp()) resetSeed(driver);
+    // Заметки, дела и метки магазин завёл сам — в выгрузке CloudShop их нет.
+    // Снимаем их до очистки и возвращаем после наполнения, опознавая клиента
+    // по телефону: номера записей заводятся заново.
+    let kept: ReturnType<typeof keepCrm> | null = null;
+    if (loadedSeedStamp(driver) !== seedStamp()) {
+      kept = keepCrm(driver);
+      resetSeed(driver);
+    }
 
     seedCatalog(driver);
+    if (kept) restoreCrm(driver, kept);
     rememberSeedStamp(driver);
   }
 

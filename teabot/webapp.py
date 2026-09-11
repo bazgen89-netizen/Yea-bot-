@@ -1,4 +1,5 @@
 """Сборка приложения: Telegram-бот (PTB) + aiohttp-сервер webhook."""
+import asyncio
 import logging
 
 from aiohttp import web
@@ -6,10 +7,13 @@ from telegram import Update
 from telegram.ext import Application
 
 from .cache import TTLCache
-from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
+from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
+from .handlers.social import ADMIN_KEY, HUB_KEY, deliver_items, poll_job
 from .http import create_session, close_session
-from .services import GroqClient, SerperClient
+from .services import AIRouter, GeminiClient, GroqClient, SerperClient
+from .social import SeenStore, SocialHub, build_connectors
+from .social.webhooks import parse_meta_payload, verify_signature
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,50 @@ async def handle_webhook(request: web.Request) -> web.Response:
         return web.Response(text="Error", status=500)
 
 
+async def handle_meta_verify(request: web.Request) -> web.Response:
+    """Подтверждение подписки: Meta ждёт обратно hub.challenge."""
+    social: SocialSettings = request.app['settings'].social
+    query = request.query
+    if (query.get("hub.mode") == "subscribe"
+            and social and query.get("hub.verify_token") == social.meta_verify_token):
+        return web.Response(text=query.get("hub.challenge", ""))
+    logger.warning("Meta webhook: неверный verify-токен")
+    return web.Response(status=403, text="forbidden")
+
+
+async def handle_meta_webhook(request: web.Request) -> web.Response:
+    """События WhatsApp, Instagram и Facebook — одной точкой входа.
+
+    Meta ждёт ответ за секунды и повторяет доставку при задержке, поэтому
+    отвечаем сразу, а разбор и отправку в чат делаем фоновой задачей.
+    """
+    social: SocialSettings = request.app['settings'].social
+    body = await request.read()
+    if not verify_signature(body, request.headers.get("X-Hub-Signature-256", ""),
+                            social.meta_app_secret if social else ""):
+        logger.warning("Meta webhook: подпись не сошлась")
+        return web.Response(status=403, text="bad signature")
+
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.warning(f"Meta webhook: тело не разобрано: {e}")
+        return web.Response(text="OK")
+
+    ptb: Application = request.app['ptb_app']
+    hub: SocialHub = ptb.bot_data.get(HUB_KEY)
+    admin_chat_id = ptb.bot_data.get(ADMIN_KEY)
+    if hub is None or admin_chat_id is None:
+        return web.Response(text="OK")
+
+    items = hub.seen.filter_new(parse_meta_payload(payload))
+    if items:
+        task = asyncio.create_task(deliver_items(ptb.bot, admin_chat_id, hub, items))
+        request.app['background'].add(task)
+        task.add_done_callback(request.app['background'].discard)
+    return web.Response(text="OK")
+
+
 async def on_startup(app: web.Application):
     settings: Settings = app['settings']
     ptb: Application = app['ptb_app']
@@ -35,7 +83,17 @@ async def on_startup(app: web.Application):
         settings.serper_key, session,
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
-    ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    # Два мозга: основной отвечает, второй подстраховывает при сбое
+    ai = AIRouter(
+        {
+            "groq": GroqClient(settings.groq_api_key, settings.groq_model, session),
+            "gemini": GeminiClient(settings.gemini_api_key, settings.gemini_model, session),
+        },
+        primary=settings.ai_primary,
+    )
+    ptb.bot_data[AI_KEY] = ai
+
+    setup_social(ptb, settings, session, ai)
 
     await ptb.initialize()
     await ptb.start()
@@ -43,11 +101,54 @@ async def on_startup(app: web.Application):
     await ptb.bot.set_webhook(full_url)
     logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
     logger.info(f"🔗 Webhook: {full_url}")
-    logger.info(f"🤖 AI: Groq {settings.groq_model}")
+    brains = ", ".join(
+        f"{getattr(b, 'name', n)} {getattr(b, 'model', '')}"
+        + ("" if getattr(b, "available", False) else " (нет ключа)")
+        for n, b in ai.brains.items()
+    )
+    logger.info(f"🧠 Мозги: {brains} | основной: {ai.primary}")
+
+
+def setup_social(ptb: Application, settings: Settings,
+                 session, ai: GroqClient) -> None:
+    """Собирает единый хаб соцсетей и запускает автономный опрос площадок."""
+    social: SocialSettings = settings.social or SocialSettings.from_env()
+    hub = SocialHub(
+        connectors=build_connectors(social.env, session),
+        seen=SeenStore(social.state_path),
+        ai=ai,
+        autopilot=social.autopilot,
+    )
+    ptb.bot_data[HUB_KEY] = hub
+    ptb.bot_data[ADMIN_KEY] = social.admin_chat_id
+
+    if not social.polling_enabled:
+        logger.warning("⚠️ SOCIAL_ADMIN_CHAT_ID не задан — автономный опрос соцсетей выключен")
+        return
+    if ptb.job_queue is None:
+        logger.warning("⚠️ JobQueue недоступна — автономный опрос соцсетей выключен")
+        return
+
+    if social.meta_webhook_enabled:
+        logger.info("🔔 Webhook Meta включён: /social/meta (WhatsApp, Instagram, Facebook)")
+    else:
+        logger.info("ℹ️ META_VERIFY_TOKEN не задан — WhatsApp не сможет принимать сообщения")
+
+    ptb.job_queue.run_repeating(
+        poll_job, interval=social.poll_interval, first=20, name="social_poll",
+    )
+    logger.info(
+        "🌐 Автономный опрос соцсетей: каждые %d с → чат %s (автопилот: %s)",
+        social.poll_interval, social.admin_chat_id,
+        "вкл" if social.autopilot else "выкл",
+    )
 
 
 async def on_shutdown(app: web.Application):
     ptb: Application = app['ptb_app']
+    hub = ptb.bot_data.get(HUB_KEY)
+    if hub is not None:
+        hub.seen.save()
     await ptb.stop()
     await ptb.shutdown()
     session = app.get('http_session')
@@ -65,6 +166,10 @@ def create_app(settings: Settings) -> web.Application:
     web_app['bot'] = ptb.bot
     web_app['ptb_app'] = ptb
     web_app.router.add_post('/webhook', handle_webhook)
+    # Одна точка приёма для WhatsApp, Instagram и Facebook
+    web_app.router.add_get('/social/meta', handle_meta_verify)
+    web_app.router.add_post('/social/meta', handle_meta_webhook)
+    web_app['background'] = set()
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)
     return web_app

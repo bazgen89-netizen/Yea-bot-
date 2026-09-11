@@ -22,7 +22,6 @@
  * остаётся в истории навсегда, и «удалить» его оттуда нельзя — только
  * перевыпустить в кабинете. Пароль от CloudShop не нужен вовсе.
  *
- * Ключи:
  * Выгрузка ложится в `src/db/seed/local/` — рядом, но **не в git**: там
  * телефоны и дни рождения живых людей. Собрать с ней программу:
  *
@@ -32,13 +31,16 @@
  *   --no-photos       не забирать фотографии (быстро)
  *   --no-history      не забирать историю покупок
  *   --history=N       сколько последних чеков брать (по умолчанию все)
- *   --since=ГГГГ-ММ-ДД  с какого дня история (по умолчанию 2019-01-01)
+ *   --since=ГГГГ-ММ-ДД  с какого дня история (по умолчанию — догоняя прежнюю)
+ *   --full            пройти всю историю заново, с 2019 года (18 минут)
  *   --into-repo       положить в сборочную папку, которая лежит в git
  *   --shrink          разрешить выгрузке уменьшиться (обычно это ошибка)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { SINCE, крайВыгрузки, откудаИсторию, пронумероватьСмены } from './догон.cjs';
 
 const API = 'https://connect-api.cloudshop.ru/api/v4';
 const token = process.env.CLOUDSHOP_TOKEN;
@@ -243,13 +245,26 @@ async function all(path, limit, label, cap = Infinity) {
 }
 
 /**
- * С какого дня забирать историю по умолчанию.
- *
- * Первые чеки у него — 2019 год. Дата вынесена сюда, чтобы её было видно:
- * взять «с начала времён» нельзя, окна пришлось бы гонять впустую за годы,
- * которых не было.
+ * Прежняя выгрузка — только чтение файлов; счёт даты живёт в `догон.mjs`.
  */
-const SINCE = '2019-01-01';
+function прежнийСписок(файл) {
+  try {
+    const строки = JSON.parse(readFileSync(`${out}/${файл}`, 'utf8'));
+    return Array.isArray(строки) ? строки : null;
+  } catch {
+    return null;
+  }
+}
+
+const ОТКУДА = откудаИсторию({
+  заказано: value('since', null),
+  всё: flag('full'),
+  край: крайВыгрузки(прежнийСписок('sales.json'), прежнийСписок('docs.json')),
+});
+
+if (ОТКУДА !== SINCE) {
+  console.log(`Догоняем историю с ${ОТКУДА} (всю заново — ключ --full).`);
+}
 
 /**
  * Вся история покупок — окнами по месяцу.
@@ -421,7 +436,7 @@ console.log('Товары…');
 const rawProducts = await all('/product', 1000, 'товаров');
 
 console.log('Себестоимость и цены закупки…');
-const prices = await costPrices(value('since', SINCE));
+const prices = await costPrices(ОТКУДА);
 
 /**
  * Формат — тот же, в котором лежит наполнение базы: короткие ключи и целые
@@ -510,11 +525,89 @@ async function costPrices(since) {
  * видно, продать нельзя, а история цела. Так же и в кабинете.
  */
 console.log('Снятые с продажи…');
+// Здесь — всегда с самого начала, а не с той даты, с которой догоняется
+// история: это один запрос, зато справочник приезжает целиком. Возьми мы
+// снятые за последние дни — их стало бы несколько штук вместо семисот, и
+// `writeList` не дал бы записать похудевший файл.
 const deleted = await get(
   `/product/deleted?start_time=${encodeURIComponent(`${value('since', SINCE)} 00:00:00`)}`,
 );
 const rawDeleted = deleted.data ?? deleted.products ?? deleted;
 console.log(`  ${Array.isArray(rawDeleted) ? rawDeleted.length : 0}`);
+
+/**
+ * Себестоимость из прежней выгрузки — чтобы она не обнулилась.
+ *
+ * В карточке CloudShop себестоимости нет вовсе: она собирается из документов
+ * корректировки (`costPrices`). Когда история догоняется за три дня, таких
+ * документов приезжает десяток — и у остальных полутора тысяч товаров
+ * себестоимость встала бы в ноль. Числа те же, файл той же длины, защита в
+ * `writeList` ничего бы не заметила, а прибыль во всех отчётах поехала бы.
+ *
+ * Поэтому цену, которой в свежих документах не нашлось, берём из того, что
+ * уже лежит в `products.json`. Свежая всегда важнее: она идёт первой.
+ */
+function прежниеЦены() {
+  const было = new Map();
+  let строки;
+  try {
+    строки = JSON.parse(readFileSync(`${out}/products.json`, 'utf8'));
+  } catch {
+    return было;
+  }
+  if (!Array.isArray(строки)) return было;
+
+  for (const товар of строки) {
+    const ключ = товар.c || товар.s || товар.n;
+    if (ключ) было.set(ключ, { cp: товар.cp ?? 0, pp: товар.pp ?? 0 });
+  }
+  return было;
+}
+
+/**
+ * Прибавить свежий справочник к прежнему — как чеки и документы.
+ *
+ * Ключ отдаёт неполный каталог: в `/product` 1282 карточки, а всего их
+ * 1553. Недостающие 271 — наборы и снятые с продажи, которых нет ни в
+ * каталоге, ни в списке удалённых; они находятся только поштучно, по
+ * идентификаторам, встреченным в чеках. Пока история проходилась целиком,
+ * все 271 находились каждый раз. Когда история догоняется за десять дней,
+ * находится десяток — и `writeList` справедливо отказывался записывать
+ * файл, похудевший с 1553 до 1282. Справочник переставал обновляться вовсе,
+ * то есть новая цена до программы не доезжала.
+ *
+ * Поэтому не «переписать или отказаться», а склейка: свежая карточка важнее
+ * прежней, а та, которой в этот раз не нашлось, остаётся как была. Хуже
+ * прежнего не станет: карточка, снятая в кабинете, приедет снятой в списке
+ * удалённых — он спрашивается целиком.
+ */
+function mergeProducts(fresh) {
+  let old = [];
+  try {
+    old = JSON.parse(readFileSync(`${out}/products.json`, 'utf8'));
+  } catch {
+    return fresh;
+  }
+  if (!Array.isArray(old) || old.length === 0) return fresh;
+
+  const имя = (товар) => товар.c || товар.s || товар.n || null;
+  const приехали = new Set(fresh.map(имя).filter(Boolean));
+  const остались = old.filter((товар) => {
+    const ключ = имя(товар);
+    return ключ !== null && !приехали.has(ключ);
+  });
+
+  return [...fresh, ...остались];
+}
+
+const былиЦены = прежниеЦены();
+
+/** Тот же товар в прежней выгрузке: по коду, артикулу или имени. */
+const былоУТовара = (item) =>
+  былиЦены.get(item.code) ??
+  былиЦены.get(item.sku) ??
+  былиЦены.get((item.options?.name ?? '').trim()) ??
+  null;
 
 const card = (item, archived) => {
   const options = item.options ?? {};
@@ -536,9 +629,10 @@ const card = (item, archived) => {
     u: item.unit || 'шт',
     p: kopecks(item.price),
     // Себестоимость и цена закупки: в самой карточке их нет, они собраны
-    // выше из документов корректировки.
-    cp: prices.cost.get(item.id) ?? 0,
-    pp: prices.purchase.get(item.id) ?? 0,
+    // выше из документов корректировки. Не нашлось в свежих — берём из
+    // прежней выгрузки, см. `прежниеЦены`.
+    cp: prices.cost.get(item.id) ?? былоУТовара(item)?.cp ?? 0,
+    pp: prices.purchase.get(item.id) ?? былоУТовара(item)?.pp ?? 0,
     d: bp(item.discount),
     // Категорий у товара в CloudShop может быть несколько, у нас одна:
     // берём первую, а не склеиваем в строку, которой нигде нет.
@@ -618,7 +712,7 @@ const codeOf = (product, line, name) => {
   );
 };
 
-writeList('products.json', products, 'Товары');
+writeList('products.json', mergeProducts(products), 'Товары');
 
 /**
  * Корректировки — складские документы журнала.
@@ -731,14 +825,14 @@ let sales = [];
 if (!flag('no-history')) {
   console.log('История покупок…');
   const cap = Number(value('history', '')) || Infinity;
-  const documents = await history(value('since', SINCE), cap);
+  const documents = await history(ОТКУДА, cap);
 
   /** Товары из чеков, которых нет в справочнике: идентификатор → код. */
   const lost = new Map();
 
   // Возвраты продаж — свой раздел CloudShop. В журнале они стоят рядом с
   // чеками, а из выручки вычитаются.
-  const refunds = cap === Infinity ? await returns(value('since', SINCE)) : [];
+  const refunds = cap === Infinity ? await returns(ОТКУДА) : [];
 
   // Чеки и возвраты идут одним списком: в журнале они стоят рядом, и
   // раскладывать их по двум файлам значило бы дважды писать одно и то же.
@@ -862,7 +956,7 @@ if (!flag('no-history')) {
     }
 
     process.stdout.write(`\r  дозагружено: ${got}\n`);
-    writeList('products.json', products, 'Товары');
+    writeList('products.json', mergeProducts(products), 'Товары');
 
   }
 
@@ -876,26 +970,16 @@ if (!flag('no-history')) {
    */
   const registers = await registerNames(new Set(sales.map((sale) => sale.rg).filter(Boolean)));
 
-  const firstSeen = new Map();
-  for (const sale of sales) {
-    if (!sale.sh || !sale.at) continue;
-    const seen = firstSeen.get(sale.sh);
-    if (!seen || sale.at < seen) firstSeen.set(sale.sh, sale.at);
-  }
-
-  const order = [...firstSeen.entries()].sort((a, b) => (a[1] < b[1] ? -1 : 1));
-  const shiftNo = new Map(order.map(([id], index) => [id, index + 1]));
-
   for (const sale of sales) {
     sale.rg = sale.rg ? (registers.get(sale.rg) ?? null) : null;
-    sale.sh = sale.sh ? (shiftNo.get(sale.sh) ?? null) : null;
   }
-
-  console.log(`  касс: ${registers.size}, смен: ${shiftNo.size}`);
 
   const fresh = sales.length;
   sales = mergeHistory(sales);
   if (sales.length > fresh) console.log(`  вместе с прежними: ${sales.length}`);
+
+  const смен = пронумероватьСмены(sales);
+  console.log(`  касс: ${registers.size}, смен: ${смен}`);
 
   // История пишется без отступов и без пустых полей. Отступ в один пробел
   // стоит недорого на пятистах строках и дорого — на сорока пяти тысячах
@@ -911,8 +995,8 @@ if (!flag('no-history')) {
    * код, артикул, штрихкод, имя.
    */
   console.log('Складские документы…');
-  const bought = await purchases(value('since', SINCE));
-  const sentBack = await supplierReturns(value('since', SINCE));
+  const bought = await purchases(ОТКУДА);
+  const sentBack = await supplierReturns(ОТКУДА);
 
   const docLines = (doc) =>
     (doc.line_items ?? []).map((line) => {

@@ -568,19 +568,51 @@ export interface ProductMotion {
  * Товары без движений за период не показываются: строка «ничего не
  * происходило» занимает место и ничего не сообщает.
  */
-export function motionByProduct(db: SqlDriver, period: Period): ProductMotion[] {
+export function motionByProduct(
+  db: SqlDriver,
+  period: Period,
+  /**
+   * Магазин и сотрудник — отбор с фишек телефонного отчёта.
+   *
+   * Покупателя здесь нет и быть не может: движение склада — это приход,
+   * списание и перемещение, а не только продажа. У прихода покупателя не
+   * существует вовсе.
+   */
+  отбор?: { место?: Scope; сотрудник?: Scope },
+): ProductMotion[] {
+  /*
+   * Начальный остаток отбирается теми же условиями, что и движения внутри
+   * периода.
+   *
+   * Иначе, выбрав Черёмушки, человек увидел бы приход и расход по
+   * Черёмушкам, а остаток на начало — по всем трём магазинам, и «на конец»
+   * не сошлось бы ни с чем. Условие про сотрудника у остатка тоже своё:
+   * движения сотрудника видны через документ, к которому они привязаны.
+   */
+  const место = scopeSql('m.location_id', отбор?.место ?? null);
+  const сотрудникДо = отбор?.сотрудник
+    ? ` AND (EXISTS (SELECT 1 FROM docs d WHERE d.id = m.doc_id AND d.staff_id = ${Number(отбор.сотрудник)})
+           OR EXISTS (SELECT 1 FROM sales s WHERE s.id = m.sale_id AND s.staff_id = ${Number(отбор.сотрудник)}))`
+    : '';
+  const сотрудникВ = отбор?.сотрудник
+    ? ` AND (EXISTS (SELECT 1 FROM docs d WHERE d.id = v.doc_id AND d.staff_id = ${Number(отбор.сотрудник)})
+           OR EXISTS (SELECT 1 FROM sales s WHERE s.id = v.sale_id AND s.staff_id = ${Number(отбор.сотрудник)}))`
+    : '';
+
   return db
     .all<ProductMotion>(
       `SELECT p.name,
               p.unit,
               COALESCE((SELECT SUM(m.qty_delta) FROM stock_moves m
-                        WHERE m.product_id = p.id AND m.created_at < ?), 0) AS before,
+                        WHERE m.product_id = p.id AND m.created_at < ?
+                        ${место}${сотрудникДо}), 0) AS before,
               COALESCE(SUM(CASE WHEN v.qty_delta > 0 THEN v.qty_delta END), 0)  AS movsIn,
               -COALESCE(SUM(CASE WHEN v.qty_delta < 0 THEN v.qty_delta END), 0) AS movsOut,
               0 AS after
        FROM stock_moves v
        JOIN products p ON p.id = v.product_id
        WHERE v.created_at >= ? AND v.created_at < ?
+         ${scopeSql('v.location_id', отбор?.место ?? null)}${сотрудникВ}
        GROUP BY p.id
        ORDER BY p.name COLLATE NOCASE`,
       [period.from, period.from, period.to],

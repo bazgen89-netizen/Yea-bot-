@@ -41,6 +41,16 @@ import { formatQtyWeb } from '../domain/qty';
 
 export interface ReportColumn {
   title: string;
+  /**
+   * Название колонки на телефоне, если оно там другое.
+   *
+   * У CloudShop в кабинете эти колонки зовутся «На начало», «Поступило»,
+   * «Выбыло», «На конец», а в телефоне — «Начальный остаток», «Приход»,
+   * «Расход», «Конечный остаток». Оба названия сняты с его экранов, и
+   * сводить их к одному нельзя: человек ищет то слово, к которому привык
+   * на этом экране.
+   */
+  phoneTitle?: string;
   width: number;
   numeric?: boolean;
   /** Кружок «?» рядом с названием — у него он стоит не у всех колонок. */
@@ -328,19 +338,40 @@ export const REPORTS: ReportDefinition[] = [
     note: 'Остаток на начало периода, поступило, выбыло и остаток на конец — по каждому товару.',
     columns: [
       { title: 'Наименование', width: 450 },
-      { title: 'На начало', width: 200, numeric: true },
-      { title: 'Поступило', width: 200, numeric: true },
-      { title: 'Выбыло', width: 200, numeric: true },
-      { title: 'На конец', width: 200, numeric: true },
+      { title: 'На начало', phoneTitle: 'Начальный остаток', width: 200, numeric: true },
+      { title: 'Поступило', phoneTitle: 'Приход', width: 200, numeric: true },
+      { title: 'Выбыло', phoneTitle: 'Расход', width: 200, numeric: true },
+      { title: 'На конец', phoneTitle: 'Конечный остаток', width: 200, numeric: true },
     ],
-    rows: (db, period) =>
-      motionByProduct(db, period).map((row) => [
+    rows: (db, period, отбор) =>
+      motionByProduct(db, period, отбор).map((row) => [
         row.name,
         formatQtyWeb(row.before),
         formatQtyWeb(row.movsIn),
         formatQtyWeb(row.movsOut),
         formatQtyWeb(row.after),
       ]),
+    /*
+     * Итог — сумма по каждой колонке.
+     *
+     * Складываются количества, а не деньги, и в разных единицах: граммы
+     * чая с штуками чайников. Число выходит бессмысленное по существу, но
+     * ровно это и показывает CloudShop — «Итог (183 позиций) −5 542 970,90»,
+     * — а расходиться с ним в цифрах хуже, чем показать ту же странность.
+     */
+    total: (db, period, отбор) => {
+      const все = motionByProduct(db, period, отбор);
+      const сложить = (что: (строка: (typeof все)[number]) => number) =>
+        formatQtyWeb(все.reduce((сумма, строка) => сумма + что(строка), 0));
+
+      return [
+        'ИТОГ',
+        сложить((строка) => строка.before),
+        сложить((строка) => строка.movsIn),
+        сложить((строка) => строка.movsOut),
+        сложить((строка) => строка.after),
+      ];
+    },
   },
   {
     id: 'agent',

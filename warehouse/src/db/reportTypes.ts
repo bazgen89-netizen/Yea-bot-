@@ -12,6 +12,7 @@ import {
   type Period,
 } from './reports';
 import { formatDayLabel, groupByMonth, groupByWeek } from '../domain/grouping';
+import { дниПериода, type ОтборОтчёта } from '../domain/reportFilter';
 import { formatMoneyWeb } from '../domain/money';
 import { ROLE_LABEL, type Role } from '../domain/permissions';
 import { formatQtyWeb } from '../domain/qty';
@@ -57,12 +58,16 @@ export interface ReportDefinition {
   /** Одной строкой: что именно показывает отчёт. */
   note: string;
   columns: ReportColumn[];
-  rows: (db: SqlDriver, period: Period) => string[][];
+  /**
+   * Строки отчёта. Отбор необязателен: его понимают пока не все отчёты,
+   * и молча считать по всем — честнее, чем делать вид, что отобрали.
+   */
+  rows: (db: SqlDriver, period: Period, отбор?: ОтборОтчёта) => string[][];
   /**
    * Итог по колонкам. У него он стоит не строкой в таблице, а прямо в шапке,
    * под названием колонки: сумма видна сразу, искать её прокруткой не надо.
    */
-  total?: (db: SqlDriver, period: Period) => string[] | null;
+  total?: (db: SqlDriver, period: Period, отбор?: ОтборОтчёта) => string[] | null;
   /** По какой колонке отчёт открывается отсортированным. */
   sortColumn?: number;
   /**
@@ -92,14 +97,36 @@ function percent(part: number, whole: number): string {
 
 /** Продажи, сгруппированные по дням, неделям или месяцам. */
 function salesOver(kind: 'day' | 'week' | 'month'): ReportDefinition['rows'] {
-  return (db, period) => {
-    const points = dailySales(db, period);
+  return (db, period, отбор) => {
+    const points = dailySales(db, period, отбор?.место ?? null, undefined, отбор?.сотрудник ?? null);
+
+    /*
+     * Дни без единого чека — тоже строки отчёта.
+     *
+     * Запрос отдаёт только те дни, где были продажи. У него же в «Продажах
+     * по дням» стоят все тридцать дней месяца, и двадцать девятое сентября
+     * с нулём — такая же строка: видно, что в этот день не торговали, а не
+     * что его забыли посчитать. И «Итог (30 позиций)» под таблицей —
+     * это тридцать дней, а не тридцать дней с выручкой.
+     *
+     * Неделям и месяцам это ни к чему: там пустых клеток не бывает.
+     */
+    const полные =
+      kind === 'day'
+        ? (() => {
+            const было = new Map(points.map((p) => [p.day, p]));
+            return дниПериода(period.from, period.to).map(
+              (день) => было.get(день) ?? { day: день, revenue: 0, profit: 0, receipts: 0 },
+            );
+          })()
+        : points;
+
     const buckets =
       kind === 'day'
-        ? points.map((p) => ({ label: formatDayLabel(p.day), ...p }))
+        ? полные.map((p) => ({ label: formatDayLabel(p.day), ...p }))
         : kind === 'week'
-          ? groupByWeek(points)
-          : groupByMonth(points);
+          ? groupByWeek(полные)
+          : groupByMonth(полные);
 
     return buckets.map((b) => [
       b.label,
@@ -131,8 +158,8 @@ const PERIOD_COLUMNS: ReportColumn[] = [
   { title: 'Продажи', width: 180, numeric: true, help: 'Количество продаж товара' },
 ];
 
-function periodTotal(db: SqlDriver, period: Period): string[] {
-  const s = salesSummary(db, period);
+function periodTotal(db: SqlDriver, period: Period, отбор?: ОтборОтчёта): string[] {
+  const s = salesSummary(db, period, отбор?.место ?? null, отбор?.сотрудник ?? null);
   return [
     'ИТОГ',
     money(s.revenue),

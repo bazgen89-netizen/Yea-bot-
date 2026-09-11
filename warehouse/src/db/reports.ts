@@ -81,7 +81,12 @@ export function localHourSql(column: string, offsetMinutes?: number): string {
  * Возвращённые чеки исключаются: при возврате их суммы обнуляются, и учитывать
  * такой чек в количестве и среднем чеке было бы неверно.
  */
-export function salesSummary(db: SqlDriver, period: Period, scope: Scope = null): SalesSummary {
+export function salesSummary(
+  db: SqlDriver,
+  period: Period,
+  scope: Scope = null,
+  staff: Scope = null,
+): SalesSummary {
   const row = db.get<{
     revenue: number;
     cost: number;
@@ -96,7 +101,7 @@ export function salesSummary(db: SqlDriver, period: Period, scope: Scope = null)
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )${scopeSql('s.location_id', scope)}`,
+       )${scopeSql('s.location_id', scope)}${scopeSql('s.staff_id', staff)}`,
     [period.from, period.to],
   );
 
@@ -228,6 +233,7 @@ export function dailySales(
   period: Period,
   scope: Scope = null,
   offsetMinutes?: number,
+  staff: Scope = null,
 ): DailyPoint[] {
   return db.all<DailyPoint>(
     `SELECT ${localDaySql('s.created_at', offsetMinutes)} AS day,
@@ -238,7 +244,7 @@ export function dailySales(
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )${scopeSql('s.location_id', scope)}
+       )${scopeSql('s.location_id', scope)}${scopeSql('s.staff_id', staff)}
      GROUP BY day
      ORDER BY day`,
     [period.from, period.to],

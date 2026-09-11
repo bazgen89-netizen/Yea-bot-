@@ -10,6 +10,7 @@ import { useDesktop } from '../../src/ui/useDesktop';
 import { WebIcon } from '../../src/ui/icons';
 import { web, webText } from '../../src/ui/webTheme';
 import { colors, spacing, text as phoneText } from '../../src/ui/theme';
+import { ReportPhone } from '../../src/ui/ReportPhone';
 import { Dropdown, type Option } from '../../src/web/Dropdown';
 import { Column, HeadRow, Row, ToolButton, Toolbar } from '../../src/web/Table';
 
@@ -34,6 +35,20 @@ const REPORT_OPTIONS: Option<string>[] = REPORTS.map((report) => ({
   value: report.id,
   label: report.title,
 }));
+
+/**
+ * Кнопка внизу телефонного отчёта: соседний по смыслу.
+ *
+ * У него под «Продажами по дням» стоит «Продажи по неделям» — тот же отчёт
+ * крупнее, и переходят туда чаще, чем возвращаются к списку всех отчётов.
+ * Дни → недели → месяцы, и обратно от месяцев к дням.
+ */
+const СОСЕД: Record<string, string> = { day: 'week', week: 'month', month: 'day' };
+
+function соседнийОтчёт(id: string): { id: string; title: string } | null {
+  const сосед = REPORTS.find((one) => one.id === СОСЕД[id]);
+  return сосед ? { id: сосед.id, title: сосед.title } : null;
+}
 
 export default function ReportScreen() {
   const router = useRouter();
@@ -92,6 +107,25 @@ export default function ReportScreen() {
         .join('\r\n');
 
     await saveFile(`${report.title}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  /*
+   * На телефоне — свой экран, по снимку Вазгена.
+   *
+   * Раньше здесь и на телефоне открывался кабинетный: панель с выпадающими
+   * списками и таблица в семь колонок, которую приходилось листать вбок. У
+   * него на телефоне лента фишек, две колонки и закреплённый внизу итог.
+   *
+   * Стоит после проверки «такого отчёта нет», чтобы не дублировать её, и
+   * до всей кабинетной обвязки — она телефону не нужна вовсе.
+   */
+  if (!desktop) {
+    return (
+      <View style={styles.screen}>
+        <Stack.Screen options={{ title: report.title }} />
+        <ReportPhone report={report} соседний={соседнийОтчёт(report.id)} />
+      </View>
+    );
   }
 
   return (

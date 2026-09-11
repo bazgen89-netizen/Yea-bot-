@@ -41,11 +41,21 @@ const PERIODS: { value: PeriodKind; label: string }[] = [
   { value: 'year', label: 'Год' },
 ];
 
+/*
+ * Плитки отчётов на главной.
+ *
+ * `key` — это имя отчёта в реестре (`src/db/reportTypes.ts`), по нему
+ * строится адрес. Четыре из шести здесь были названы по-своему — `daily`
+ * вместо `day`, `products` вместо `product`, `customers` вместо `agent`,
+ * `moves` вместо `motion`, — и открывали «Такого отчёта нет». Имена должны
+ * совпадать с реестром буква в букву; если заводится новый отчёт, он
+ * добавляется туда, а не сюда.
+ */
 const REPORTS = [
-  { key: 'daily', label: 'Продажи\nпо дням', tint: '#DFF1E4', color: '#2E9E5B', Icon: ReportIcon.daily },
-  { key: 'products', label: 'Продажи\nпо товарам', tint: '#DEE8FD', color: '#1A66FF', Icon: ReportIcon.products },
-  { key: 'customers', label: 'Отчет по\nпокупателям', tint: '#FBDCE6', color: '#E23B72', Icon: ReportIcon.customers },
-  { key: 'moves', label: 'Отчёт\nпо движению', tint: '#FCE4D4', color: '#E4691E', Icon: ReportIcon.moves },
+  { key: 'day', label: 'Продажи\nпо дням', tint: '#DFF1E4', color: '#2E9E5B', Icon: ReportIcon.daily },
+  { key: 'product', label: 'Продажи\nпо товарам', tint: '#DEE8FD', color: '#1A66FF', Icon: ReportIcon.products },
+  { key: 'agent', label: 'Отчет по\nпокупателям', tint: '#FBDCE6', color: '#E23B72', Icon: ReportIcon.customers },
+  { key: 'motion', label: 'Отчёт\nпо движению', tint: '#FCE4D4', color: '#E4691E', Icon: ReportIcon.moves },
   { key: 'staff', label: 'Отчет по\nсотрудникам', tint: '#D9EDF6', color: '#2A7FA8', Icon: ReportIcon.staff },
   { key: 'finance', label: 'Финансовый\nотчёт', tint: '#EDE2FA', color: '#7B4BC9', Icon: ReportIcon.finance },
 ];

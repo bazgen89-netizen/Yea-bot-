@@ -16,6 +16,7 @@ import {
   ПУСТОЙ_ОТБОР,
   type ОтборОтчёта,
 } from '../domain/reportFilter';
+import { pluralize } from '../domain/plural';
 import { ОкноДаты } from './ОкноДаты';
 import { useQuery } from '../state/DatabaseProvider';
 import { colors, spacing } from './theme';
@@ -261,7 +262,11 @@ export function ReportPhone({
       {/* Итог закреплён внизу: у него он виден всегда, а не в конце списка. */}
       {итог ? (
         <View style={стиль.итог}>
-          <Text style={стиль.итогПодпись}>Итог ({строки.length} позиций)</Text>
+          {/* Склонение обязательно: «Итог (92 позиций)» читается как опечатка,
+              а число позиций тут меняется на каждом отборе. */}
+          <Text style={стиль.итогПодпись}>
+            Итог ({pluralize(строки.length, 'позиция', 'позиции', 'позиций')})
+          </Text>
           <Text style={стиль.итогСумма}>
             {рубли}
             <Text style={стиль.итогКопейки}>{копейки}</Text>

@@ -55,6 +55,15 @@ export interface ReportColumn {
 export interface ReportDefinition {
   id: string;
   title: string;
+  /**
+   * Название на телефоне, если оно там другое.
+   *
+   * У CloudShop оно и правда бывает разным: в кабинете этот отчёт зовётся
+   * «Отчёт по агентам», а в телефоне — «Отчет по покупателям». Названия
+   * читались из их же кода, поэтому переименовывать одно в другое нельзя:
+   * человек ищет знакомое слово там, где привык его видеть.
+   */
+  phoneTitle?: string;
   /** Одной строкой: что именно показывает отчёт. */
   note: string;
   columns: ReportColumn[];
@@ -336,6 +345,8 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: 'agent',
     title: 'Отчёт по агентам',
+    phoneTitle: 'Отчет по покупателям',
+    отборКлиента: true,
     note: 'Клиенты и поставщики: продажи, возвраты, средний чек и движение денег.',
     columns: [
       { title: 'Наименование', width: 430 },
@@ -346,8 +357,8 @@ export const REPORTS: ReportDefinition[] = [
       { title: 'Приход', width: 190, numeric: true },
       { title: 'Расход', width: 190, numeric: true },
     ],
-    rows: (db, period) =>
-      agentsReport(db, period).map((a) => [
+    rows: (db, period, отбор) =>
+      agentsReport(db, period, отбор).map((a) => [
         a.name,
         String(a.salesCount),
         money(a.salesSum),
@@ -356,6 +367,33 @@ export const REPORTS: ReportDefinition[] = [
         money(a.debit),
         money(a.credit),
       ]),
+    /*
+     * Итога у этого отчёта не было вовсе, а на телефоне внизу закреплена
+     * строка «Итог (239 позиций)» — и без неё там висела пустота.
+     *
+     * Считаем по тем же строкам, а не отдельным запросом: строка отчёта
+     * отбирается фишками, и второй запрос пришлось бы отбирать теми же
+     * условиями заново — то есть держать их в двух местах.
+     *
+     * Средний чек — это выручка на число продаж, а не среднее средних:
+     * последнее дало бы покупателю с одним чеком на сто рублей тот же вес,
+     * что и покупателю с сорока чеками.
+     */
+    total: (db, period, отбор) => {
+      const все = agentsReport(db, period, отбор);
+      const продажи = все.reduce((сумма, один) => сумма + один.salesCount, 0);
+      const выручка = все.reduce((сумма, один) => сумма + один.salesSum, 0);
+
+      return [
+        'ИТОГ',
+        String(продажи),
+        money(выручка),
+        String(все.reduce((сумма, один) => сумма + один.returnCount, 0)),
+        money(продажи > 0 ? Math.round(выручка / продажи) : 0),
+        money(все.reduce((сумма, один) => сумма + один.debit, 0)),
+        money(все.reduce((сумма, один) => сумма + один.credit, 0)),
+      ];
+    },
   },
   {
     id: 'finance',

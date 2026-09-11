@@ -50,6 +50,7 @@ const СОСЕДИ: Record<string, string[]> = {
   month: ['day'],
   product: ['month', 'set'],
   categories: ['product'],
+  agent: ['categories'],
   set: ['product'],
 };
 
@@ -61,6 +62,7 @@ const ЗНАЧКИ: Record<string, { значок: string; фон: string; цв�
   product: { значок: '◱', фон: '#DEE8FD', цвет: '#1A66FF' },
   set: { значок: '◧', фон: '#FBDCE6', цвет: '#E23B72' },
   categories: { значок: '◨', фон: '#FCE4D4', цвет: '#E4691E' },
+  agent: { значок: '◍', фон: '#FBDCE6', цвет: '#E23B72' },
 };
 
 function соседниеОтчёты(id: string): Сосед[] {
@@ -144,7 +146,7 @@ export default function ReportScreen() {
   if (!desktop) {
     return (
       <View style={styles.screen}>
-        <Stack.Screen options={{ title: report.title }} />
+        <Stack.Screen options={{ title: report.phoneTitle ?? report.title }} />
         <ReportPhone report={report} соседние={соседниеОтчёты(report.id)} />
       </View>
     );

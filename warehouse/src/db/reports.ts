@@ -608,7 +608,12 @@ export interface AgentReport {
  * Только те, у кого за период что-то было: в справочнике три тысячи карточек,
  * и строки с нулями сделали бы отчёт нечитаемым.
  */
-export function agentsReport(db: SqlDriver, period: Period): AgentReport[] {
+export function agentsReport(
+  db: SqlDriver,
+  period: Period,
+  /** Магазин, сотрудник и сам покупатель — отбор с фишек телефонного отчёта. */
+  отбор?: { место?: Scope; сотрудник?: Scope; клиент?: Scope },
+): AgentReport[] {
   const rows = db.all<Omit<AgentReport, 'average'>>(
     `SELECT c.name,
             COALESCE(SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END), 0) AS salesCount,
@@ -622,6 +627,10 @@ export function agentsReport(db: SqlDriver, period: Period): AgentReport[] {
                         AND md.created_at >= ? AND md.created_at < ?), 0) AS credit
      FROM counterparties c
      JOIN sales s ON s.customer_id = c.id AND s.created_at >= ? AND s.created_at < ?
+       ${scopeSql('s.location_id', отбор?.место ?? null)}${scopeSql(
+         's.staff_id',
+         отбор?.сотрудник ?? null,
+       )}${scopeSql('s.customer_id', отбор?.клиент ?? null)}
      LEFT JOIN stock_moves r ON r.sale_id = s.id AND r.reason = 'return'
      GROUP BY c.id
      ORDER BY salesSum DESC`,

@@ -4,16 +4,19 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import { counterpartyNames } from '../db/counterparties';
 import { listLocations } from '../db/locations';
-import { periodFor, type PeriodKind } from '../db/reports';
+import { periodFor } from '../db/reports';
 import type { ReportDefinition } from '../db/reportTypes';
 import { listStaff } from '../db/staff';
 import {
   естьОтбор,
   подписьПериода,
+  день,
+  периодИз,
   ячейкаОтчёта,
   ПУСТОЙ_ОТБОР,
   type ОтборОтчёта,
 } from '../domain/reportFilter';
+import { ОкноДаты } from './ОкноДаты';
 import { useQuery } from '../state/DatabaseProvider';
 import { colors, spacing } from './theme';
 
@@ -37,17 +40,16 @@ const ПОРЦИЯ = 60;
 interface Выбор {
   /** Что показываем во второй колонке — номер колонки отчёта. */
   колонка: number;
-  период: PeriodKind;
+  /**
+   * Границы периода местными датами, «2026-09-01».
+   *
+   * Раньше здесь лежало одно слово — «месяц», «год». Но в его окне «Дата»
+   * период набирается колёсиком по числам, и словом такой не назвать.
+   */
+  от: string;
+  до: string;
   отбор: ОтборОтчёта;
 }
-
-const ПЕРИОДЫ: { value: PeriodKind; label: string }[] = [
-  { value: 'today', label: 'Сегодня' },
-  { value: 'week', label: 'Неделя' },
-  { value: 'month', label: 'Месяц' },
-  { value: 'quarter', label: 'Квартал' },
-  { value: 'year', label: 'Год' },
-];
 
 /** Соседний отчёт: кнопка внизу экрана. */
 export interface Сосед {
@@ -71,16 +73,21 @@ export function ReportPhone({
 }) {
   const router = useRouter();
 
-  const [выбор, задать] = useState<Выбор>(() => ({
-    // Первая числовая колонка — «Сумма продаж», она же его «Выручка».
-    колонка: Math.max(1, report.columns.findIndex((c) => c.numeric)),
-    период: 'month',
-    отбор: ПУСТОЙ_ОТБОР,
-  }));
+  const [выбор, задать] = useState<Выбор>(() => {
+    // Открывается на текущем месяце — так же, как открывался раньше.
+    const месяц = periodFor('month');
+    return {
+      // Первая числовая колонка — «Сумма продаж», она же его «Выручка».
+      колонка: Math.max(1, report.columns.findIndex((c) => c.numeric)),
+      от: день(new Date(месяц.from)),
+      до: день(new Date(месяц.to)),
+      отбор: ПУСТОЙ_ОТБОР,
+    };
+  });
 
   /** Какое окошко выбора открыто. */
   const [окно, открыть] = useState<
-    null | 'период' | 'параметр' | 'сотрудник' | 'магазин' | 'клиент'
+    null | 'дата' | 'параметр' | 'сотрудник' | 'магазин' | 'клиент'
   >(null);
   const [сколько, показать] = useState(ПОРЦИЯ);
 
@@ -88,7 +95,7 @@ export function ReportPhone({
   // алфавиту — стрелка вверх у «Наименования».
   const [сортировка, сортировать] = useState({ колонка: 0, вверх: true });
 
-  const период = useMemo(() => periodFor(выбор.период), [выбор.период]);
+  const период = useMemo(() => периодИз(выбор.от, выбор.до), [выбор.от, выбор.до]);
 
   const строки = useQuery(
     (db) => report.rows(db, период, выбор.отбор),
@@ -161,7 +168,7 @@ export function ReportPhone({
           <Фишка
             подпись="Дата"
             значение={подписьПериода(период.from, период.to)}
-            onPress={() => открыть('период')}
+            onPress={() => открыть('дата')}
           />
           <Фишка
             подпись="Параметр"
@@ -286,13 +293,12 @@ export function ReportPhone({
         </View>
       ) : null}
 
-      <Окно
-        открыто={окно === 'период'}
-        заголовок="Дата"
-        строки={ПЕРИОДЫ.map((один) => ({ ключ: один.value, имя: один.label }))}
-        выбрано={выбор.период}
+      <ОкноДаты
+        открыто={окно === 'дата'}
+        от={выбор.от}
+        до={выбор.до}
         закрыть={() => открыть(null)}
-        выбрать={(ключ) => задать((было) => ({ ...было, период: ключ as PeriodKind }))}
+        применить={(от, до) => задать((было) => ({ ...было, от, до }))}
       />
 
       <Окно

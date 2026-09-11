@@ -291,6 +291,74 @@ const ПРИЛОЖЕНИЕ = [
 page = replaceOnce(page, '</head>', `${ПРИЛОЖЕНИЕ}</head>`);
 
 /**
+ * Заставка на те секунды, пока программа ещё не запустилась.
+ *
+ * Замерено на процессоре вчетверо медленнее этой машины — то есть примерно
+ * на телефоне: четыре секунды уходит на разбор страницы, а до первого
+ * экрана проходит около пятидесяти. Всё это время окно было **белым**:
+ * своя заставка есть только внутри программы, а до её запуска показывать
+ * нечего и некому.
+ *
+ * Вазген на это и наткнулся: «открываю мобильную версию, а там нет никаких
+ * данных, всё пусто».
+ *
+ * Поэтому заставка вшивается в саму страницу — обычной разметкой, без
+ * единой строчки из сборки. Она рисуется браузером сразу, как только
+ * дочитана шапка, и убирается, когда в корне появляется настоящий экран.
+ */
+const ЗАСТАВКА = `
+<style id="заставка-стиль">
+  #заставка {
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center;
+    background: #EFF0F4; color: #111318;
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  #заставка .знак { font-size: 26px; font-weight: 700; letter-spacing: .5px; color: #0A37F0; }
+  #заставка .круг {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 3px solid #C9D2E8; border-top-color: #0A37F0;
+    animation: заставка-крутится 1s linear infinite;
+  }
+  #заставка .мелко { font-size: 14px; color: #8A8F98; max-width: 300px; }
+  @keyframes заставка-крутится { to { transform: rotate(360deg); } }
+  @media (prefers-color-scheme: dark) {
+    #заставка { background: #000; color: #fff; }
+    #заставка .знак { color: #0A84FF; }
+    #заставка .круг { border-color: #2C2C2E; border-top-color: #0A84FF; }
+    #заставка .мелко { color: #8E8E93; }
+  }
+</style>
+<div id="заставка">
+  <div class="знак">WAYSTEA</div>
+  <div class="круг"></div>
+  <div>Открываю склад и кассу…</div>
+  <div class="мелко">Запуск на телефоне занимает до минуты: вся история покупок лежит в самой программе.</div>
+</div>
+<script>
+(function () {
+  // Убираем, когда в корне появился настоящий экран. Наблюдатель, а не
+  // таймер: угаданное время было бы либо мало — мигнёт белым, — либо
+  // велико, и заставка постояла бы поверх готовой программы.
+  var убрать = function () {
+    var корень = document.getElementById('root');
+    if (!корень || корень.childElementCount === 0) return false;
+    var з = document.getElementById('заставка');
+    if (з) з.remove();
+    return true;
+  };
+  if (убрать()) return;
+  var сторож = setInterval(function () { if (убрать()) clearInterval(сторож); }, 200);
+  // Страховка: если корень так и не наполнился, через три минуты убираем
+  // сами — под заставкой окажется хотя бы сообщение об ошибке.
+  setTimeout(function () { clearInterval(сторож); var з = document.getElementById('заставка'); if (з) з.remove(); }, 180000);
+})();
+</script>`;
+
+page = replaceOnce(page, '<body>', `<body>${ЗАСТАВКА}`);
+
+/**
  * Наполнять ли базу при первом запуске.
  *
  * Обычная сборка приходит пустой: каталог в ней заводит тот, кто её поставил,

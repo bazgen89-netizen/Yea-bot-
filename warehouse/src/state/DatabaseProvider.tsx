@@ -85,10 +85,27 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  /*
+   * Пока база открывается — не голый кружок, а объяснение.
+   *
+   * На телефоне запуск занимает около минуты: замерено на процессоре
+   * вчетверо медленнее этой машины — четыре секунды на разбор страницы и
+   * пятьдесят на то, чтобы поднять базу. Всё это время крутился кружок без
+   * единого слова, и Вазген решил, что данные не загрузились вовсе:
+   * «открываю, а там ничего нет, всё пусто».
+   *
+   * Кружок без подписи и правда ничего не обещает. Слова обещают.
+   */
   if (!value) {
     return (
       <View style={styles.center}>
+        <Text style={styles.знак}>WAYSTEA</Text>
         <ActivityIndicator color={colors.primary} />
+        <Text style={styles.ждём}>Открываю склад и кассу…</Text>
+        <Text style={styles.долго}>
+          Первый запуск на телефоне занимает до минуты: вся история покупок лежит в
+          самой программе, и её надо поднять.
+        </Text>
       </View>
     );
   }
@@ -113,6 +130,22 @@ export function useQuery<T>(selector: (db: SqlDriver) => T, deps: unknown[] = []
 }
 
 const styles = StyleSheet.create({
+  знак: {
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: colors.primary,
+    marginBottom: spacing.lg,
+  },
+  ждём: { fontSize: 17, color: colors.text, marginTop: spacing.md },
+  долго: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    maxWidth: 300,
+    lineHeight: 20,
+  },
   center: {
     flex: 1,
     alignItems: 'center',

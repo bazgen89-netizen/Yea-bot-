@@ -88,6 +88,7 @@ Yea-bot-/
 ├── teabot/                 # пакет приложения
 │   ├── config.py           # Settings (env), константы тайм-аутов и кэша
 │   ├── constants.py        # тексты, REGIONS, BUY_KEYWORDS, is_buy_question()
+│   ├── branches.py         # профили точек: тематика, аудитория, тон ответов
 │   ├── cache.py            # TTLCache — кэш в памяти с TTL и лимитом размера
 │   ├── http.py             # общая aiohttp.ClientSession на всё приложение
 │   ├── services/
@@ -139,6 +140,7 @@ flowchart TD
 |---|---|---|
 | `teabot/config.py` | Чтение окружения, параметры моделей/тайм-аутов | `Settings.from_env()`, `Settings.validate()` |
 | `teabot/constants.py` | Пользовательские тексты и справочники | `WAYSTEA_PROMO`, `REGIONS`, `is_buy_question()` |
+| `teabot/branches.py` | Профили магазинов: тематика, акценты, тон ответов | `BRANCHES`, `Branch.reply_profile()` |
 | `teabot/cache.py` | Кэш в памяти | `TTLCache(ttl=300, max_size=200)` |
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |

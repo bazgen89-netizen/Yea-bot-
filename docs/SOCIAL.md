@@ -155,7 +155,8 @@ Meta присылает их на webhook. Для Instagram и Facebook webhook 
 | Переменная | Где взять |
 |---|---|
 | `YANDEX_BUSINESS_TOKEN` | OAuth-токен владельца организации |
-| `YANDEX_COMPANY_ID` | Id организации в Яндекс Бизнесе |
+| `YANDEX_COMPANY_ID` | Id организации в Яндекс Бизнесе (одна карточка) |
+| `YANDEX_COMPANIES` | Несколько магазинов: `gagarina:123,gastromarket:456,cheryomushki:789`. Каждая карточка становится отдельной площадкой и отвечает от имени своей точки — см. [docs/BRANCHES.md](BRANCHES.md) |
 | `YANDEX_API_URL` | Необязательно: базовый адрес API, если вам выдали другой (по умолчанию `https://api.business.yandex.ru/v1`) |
 
 Доступ к API отзывов выдаётся владельцу организации отдельно. Базовый адрес

@@ -8,6 +8,7 @@ from typing import Mapping
 
 import aiohttp
 
+from .. import branches
 from .base import Connector
 from .connectors import (
     AvitoConnector, FacebookConnector, GoogleBusinessConnector,
@@ -30,14 +31,47 @@ SPECS: tuple = (
     (AvitoConnector, {"client_id": "AVITO_CLIENT_ID",
                       "client_secret": "AVITO_CLIENT_SECRET",
                       "user_id": "AVITO_USER_ID"}),
-    (YandexBusinessConnector, {"token": "YANDEX_BUSINESS_TOKEN",
-                               "company_id": "YANDEX_COMPANY_ID",
-                               "api_url": "YANDEX_API_URL"}),
     (GoogleBusinessConnector, {"client_id": "GOOGLE_CLIENT_ID",
                                "client_secret": "GOOGLE_CLIENT_SECRET",
                                "refresh_token": "GOOGLE_REFRESH_TOKEN",
                                "location": "GOOGLE_LOCATION"}),
 )
+
+
+def _yandex_connectors(env: Mapping[str, str],
+                       session: aiohttp.ClientSession) -> list[Connector]:
+    """По коннектору на каждую карточку Яндекс Карт.
+
+    YANDEX_COMPANIES перечисляет точки: «gagarina:123,gastromarket:456».
+    Если задан только YANDEX_COMPANY_ID, работает одна карточка без
+    привязки к точке — как было раньше.
+    """
+    common = {
+        "token": env.get("YANDEX_BUSINESS_TOKEN", ""),
+        "api_url": env.get("YANDEX_API_URL", ""),
+    }
+    pairs = env.get("YANDEX_COMPANIES", "").strip()
+    if not pairs:
+        return [YandexBusinessConnector(
+            session, company_id=env.get("YANDEX_COMPANY_ID", ""), **common,
+        )]
+
+    out = []
+    for chunk in pairs.replace(";", ",").split(","):
+        code, _, company_id = chunk.partition(":")
+        code, company_id = code.strip(), company_id.strip()
+        if not company_id:
+            logger.warning("YANDEX_COMPANIES: пропущен id у «%s»", chunk.strip())
+            continue
+        if branches.find(code) is None:
+            logger.warning(
+                "YANDEX_COMPANIES: точка «%s» не описана в teabot/branches.py — "
+                "отзывы придут без профиля магазина", code,
+            )
+        out.append(YandexBusinessConnector(
+            session, company_id=company_id, branch=code, **common,
+        ))
+    return out
 
 
 def build_connectors(env: Mapping[str, str],
@@ -47,6 +81,7 @@ def build_connectors(env: Mapping[str, str],
     for cls, mapping in SPECS:
         creds = {arg: env.get(var, "") for arg, var in mapping.items()}
         connectors.append(cls(session, **creds))
+    connectors += _yandex_connectors(env, session)
     enabled = [c.title for c in connectors if c.enabled]
     logger.info("🌐 Соцсети подключены: %s", ", ".join(enabled) if enabled else "нет")
     return connectors

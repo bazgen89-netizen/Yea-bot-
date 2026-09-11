@@ -35,6 +35,7 @@ class SocialItem:
     thread_id: str = ""
     url: str = ""
     rating: Optional[int] = None
+    branch: str = ""  # код точки Waystea, если площадка привязана к магазину
     raw: dict = field(default_factory=dict, repr=False, compare=False)
 
     @property

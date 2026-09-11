@@ -9,6 +9,7 @@ import logging
 from collections import OrderedDict
 from typing import Iterable, Optional
 
+from .. import branches
 from .base import CAP_INBOX, CAP_PUBLISH, CAP_REPLY, Connector, ConnectorError
 from .models import KIND_REVIEW, PublishResult, SocialItem
 from .state import SeenStore
@@ -114,16 +115,24 @@ class SocialHub:
             return PublishResult(item.network, False, error=str(e)[:100])
 
     async def draft_reply(self, item: SocialItem) -> str:
-        """Черновик ответа от AI — используется кнопкой «Ответить ИИ» и автопилотом."""
+        """Черновик ответа от AI — используется кнопкой «Ответить ИИ» и автопилотом.
+
+        Если элемент пришёл с карточки конкретного магазина, к роли
+        добавляется его профиль: ответ звучит от имени этой точки.
+        """
         if self.ai is None:
             return ""
+        system = REPLY_SYSTEM_PROMPT
+        branch = branches.find(item.branch)
+        if branch is not None:
+            system = f"{system}\n\n{branch.reply_profile()}"
         prompt = (
             f"Площадка: {item.network}. Тип: {item.kind}."
             + (f" Оценка: {item.rating}/5." if item.rating else "")
             + f"\nАвтор: {item.author}\nТекст: {item.text}\n\n"
             "Напиши готовый ответ клиенту — только текст ответа, без пояснений."
         )
-        return (await self.ai.ask(prompt, system=REPLY_SYSTEM_PROMPT)).strip()
+        return (await self.ai.ask(prompt, system=system)).strip()
 
     def needs_human(self, item: SocialItem) -> bool:
         """Автопилот не отвечает сам на негатив — такие случаи уходят человеку."""

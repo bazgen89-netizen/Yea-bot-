@@ -208,3 +208,52 @@ def test_cards_of_branches_are_used_when_env_is_silent():
 def test_env_list_overrides_known_cards():
     found = yandex_connectors(yandex_env(YANDEX_COMPANIES="gagarina:999"))
     assert [c.creds["company_id"] for c in found] == ["999"]
+
+
+# --------------------------------------------- Google: своя локация на точку
+
+def google_env(**extra):
+    return {"GOOGLE_CLIENT_ID": "c", "GOOGLE_CLIENT_SECRET": "s",
+            "GOOGLE_REFRESH_TOKEN": "r", **extra}
+
+
+def google_connectors(env):
+    return [c for c in build_connectors(env, session=None)
+            if c.network.startswith("google_maps")]
+
+
+def test_google_locations_become_separate_platforms():
+    found = google_connectors(google_env(
+        GOOGLE_LOCATIONS="gagarina:accounts/1/locations/11,cheryomushki:accounts/1/locations/33"))
+
+    assert [c.network for c in found] == ["google_maps_gagarina", "google_maps_cheryomushki"]
+    assert all(c.enabled for c in found)
+    assert "Гагарина" in found[0].title
+    assert found[1].creds["location"] == "accounts/1/locations/33"
+
+
+def test_single_google_location_still_works():
+    found = google_connectors(google_env(GOOGLE_LOCATION="accounts/1/locations/2"))
+    assert [c.network for c in found] == ["google_maps"]
+
+
+def test_google_entry_without_location_is_skipped():
+    found = google_connectors(google_env(GOOGLE_LOCATIONS="gagarina:accounts/1/locations/11,мусор"))
+    assert [c.network for c in found] == ["google_maps_gagarina"]
+
+
+def test_google_review_carries_its_branch():
+    connector = google_connectors(google_env(
+        GOOGLE_LOCATIONS="gagarina:accounts/1/locations/11"))[0]
+    connector.session = FakeSession({"access_token": "t", "expires_in": 3600})
+    connector._token, connector._token_expires = "t", 9e12  # токен уже есть
+    connector.session = FakeSession({"reviews": [{
+        "reviewId": "r1", "starRating": "FIVE", "comment": "Отличный подарок",
+        "createTime": "2026-09-01T10:00:00Z", "name": "accounts/1/locations/11/reviews/r1",
+        "reviewer": {"displayName": "Гость"},
+    }]})
+
+    item = run(connector.fetch())[0]
+    assert item.branch == "gagarina"
+    assert item.network == "google_maps_gagarina"
+    assert item.rating == 5

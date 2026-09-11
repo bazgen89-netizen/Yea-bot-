@@ -3,10 +3,15 @@
 Нужны OAuth-креды приложения и refresh-токен владельца карточки
 (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN)
 и имя локации вида accounts/123/locations/456 (GOOGLE_LOCATION).
+
+У сети несколько магазинов — у каждого своя локация. Коннектор
+обслуживает одну и помнит, какая это точка: отзыв уходит на разбор с её
+профилем (teabot/branches.py), поэтому ответ звучит от имени магазина.
 """
 import time
 from datetime import datetime
 
+from ... import branches
 from ..base import CAP_INBOX, CAP_REPLY, ConnectorError, HttpConnector
 from ..models import KIND_REVIEW, PublishResult, SocialItem
 
@@ -27,6 +32,13 @@ class GoogleBusinessConnector(HttpConnector):
         super().__init__(session, **creds)
         self._token = ""
         self._token_expires = 0.0
+        code = (self.creds.get("branch") or "").strip().lower()
+        if not code:
+            return
+        # Отдельная площадка на каждую карточку — иначе они столкнутся
+        self.network = f"{type(self).network}_{code}"
+        branch = branches.find(code)
+        self.title = f"Google Карты — {branch.title if branch else code}"
 
     async def _access_token(self) -> str:
         """Обменивает refresh-токен на access-токен, кэшируя его до истечения."""
@@ -75,6 +87,7 @@ class GoogleBusinessConnector(HttpConnector):
                 thread_id=r.get("name", ""),
                 url="https://business.google.com/reviews",
                 rating=STARS.get(r.get("starRating", "")),
+                branch=self.creds.get("branch", ""),
                 raw=r,
             ))
         return items

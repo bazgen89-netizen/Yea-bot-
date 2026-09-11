@@ -5,17 +5,19 @@
 печатает то, что нужно вписать в переменные бота. Сами ключи никуда не
 отправляются и в репозиторий не попадают.
 
-    # 1. Ссылка для авторизации (нужны GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET)
+    # 1. Вход в Google и получение refresh-токена (откроется браузер)
     python scripts/google_setup.py auth
 
-    # 2. Обмен кода из браузера на refresh-токен
-    python scripts/google_setup.py token <код-из-браузера>
-
-    # 3. Проверка доступа и готовая строка GOOGLE_LOCATIONS
+    # 2. Проверка доступа и готовая строка GOOGLE_LOCATIONS
     python scripts/google_setup.py locations
 
-    # 4. Свежие отзывы по всем точкам — убедиться, что доступ работает
+    # 3. Свежие отзывы по всем точкам — убедиться, что всё работает
     python scripts/google_setup.py reviews
+
+Ответ Google возвращается на локальный адрес http://localhost:8765/ —
+поэтому в Cloud Console нужен OAuth client типа Desktop app (там такой
+адрес разрешён сразу). Старый способ с кодом из браузера Google
+заблокировал в 2022 году. Порт меняется через GOOGLE_OAUTH_PORT.
 """
 import json
 import os
@@ -23,12 +25,15 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from teabot import branches  # noqa: E402
 
 SCOPE = "https://www.googleapis.com/auth/business.manage"
-REDIRECT = "urn:ietf:wg:oauth:2.0:oob"
+OAUTH_PORT = int(os.getenv("GOOGLE_OAUTH_PORT", "8765"))
+REDIRECT = f"http://localhost:{OAUTH_PORT}/"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 ACCOUNTS_URL = "https://mybusinessaccountmanagement.googleapis.com/v1/accounts"
@@ -55,10 +60,10 @@ def request(url: str, data: dict = None, token: str = "") -> dict:
         sys.exit(f"❌ HTTP {e.code}: {detail}")
 
 
-def auth_url(client_id: str) -> str:
+def auth_url(client_id: str, redirect: str = REDIRECT) -> str:
     params = {
         "client_id": client_id,
-        "redirect_uri": REDIRECT,
+        "redirect_uri": redirect,
         "response_type": "code",
         "scope": SCOPE,
         "access_type": "offline",
@@ -99,10 +104,50 @@ def guess_branch(title: str, address: str) -> str:
     return ""
 
 
+class _CodeCatcher(BaseHTTPRequestHandler):
+    """Ловит один ответ Google и отдаёт браузеру страничку «готово»."""
+
+    code = ""
+
+    def do_GET(self):  # noqa: N802 — имя задано базовым классом
+        query = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(query)
+        _CodeCatcher.code = (params.get("code") or [""])[0]
+        error = (params.get("error") or [""])[0]
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        message = ("Готово. Вернитесь в терминал." if _CodeCatcher.code
+                   else f"Google вернул ошибку: {error}")
+        self.wfile.write(f"<h2>{message}</h2>".encode())
+
+    def log_message(self, *args):  # тишина в терминале
+        pass
+
+
+def wait_for_code() -> str:
+    """Поднимает локальный сервер на время одного ответа Google."""
+    server = HTTPServer(("localhost", OAUTH_PORT), _CodeCatcher)
+    try:
+        server.handle_request()
+    finally:
+        server.server_close()
+    return _CodeCatcher.code
+
+
 def cmd_auth() -> None:
-    print("Откройте ссылку, войдите владельцем карточек и скопируйте код:\n")
-    print(auth_url(env("GOOGLE_CLIENT_ID")))
-    print("\nЗатем: python scripts/google_setup.py token <код>")
+    url = auth_url(env("GOOGLE_CLIENT_ID"))
+    print("Открываю браузер. Войдите аккаунтом, которому принадлежат карточки.")
+    print(f"Если браузер не открылся — скопируйте ссылку:\n\n{url}\n")
+    webbrowser.open(url)
+
+    print(f"Жду ответа Google на localhost:{OAUTH_PORT} …")
+    code = wait_for_code()
+    if not code:
+        sys.exit("❌ Код не получен. Проверьте, что в Cloud Console создан "
+                 "OAuth client типа Desktop app.")
+    cmd_token(code)
 
 
 def cmd_token(code: str) -> None:

@@ -16,6 +16,14 @@ def test_auth_url_asks_for_offline_access():
     assert "business.manage" in url
 
 
+def test_auth_returns_to_local_port():
+    # Способ с кодом из браузера Google заблокировал в 2022 году —
+    # ответ должен возвращаться на localhost
+    assert gs.REDIRECT.startswith("http://localhost:")
+    assert "oob" not in gs.auth_url("client-123")
+    assert "localhost" in gs.auth_url("client-123")
+
+
 def test_branch_is_guessed_by_address():
     assert gs.guess_branch("Waystea", "г. Владимир, ул. Гагарина, 5А") == "gagarina"
     assert gs.guess_branch("Waystea", "Дворянская улица, 27Ак1") == "gastromarket"

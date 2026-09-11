@@ -270,11 +270,17 @@ GOOGLE_LOCATIONS=gagarina:accounts/123/locations/111,gastromarket:accounts/123/l
 
 ```bash
 export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...   # только в своей консоли
-python scripts/google_setup.py auth        # ссылка для входа
-python scripts/google_setup.py token КОД   # печатает GOOGLE_REFRESH_TOKEN
-python scripts/google_setup.py locations   # печатает готовую GOOGLE_LOCATIONS
-python scripts/google_setup.py reviews     # проверка: отзывы по каждой точке
+python3 scripts/google_setup.py auth        # откроет браузер, напечатает токен
+export GOOGLE_REFRESH_TOKEN=...             # значение из предыдущего шага
+python3 scripts/google_setup.py locations   # напечатает готовую GOOGLE_LOCATIONS
+export GOOGLE_LOCATIONS=...
+python3 scripts/google_setup.py reviews     # проверка: отзывы по каждой точке
 ```
+
+В Cloud Console создаётся OAuth client типа **Desktop app**: ответ
+возвращается на `http://localhost:8765/`, и скрипт ловит его сам. Способ
+с ручным копированием кода Google заблокировал в 2022 году. Порт при
+необходимости меняется через `GOOGLE_OAUTH_PORT`.
 
 Точки сопоставляются с локациями по адресу автоматически; если адрес
 незнакомый, вместо кода печатается «?» — подставьте вручную.

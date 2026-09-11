@@ -180,3 +180,31 @@ def test_fetched_review_carries_its_branch():
     item = run(connector.fetch())[0]
     assert item.branch == "gagarina"
     assert item.network == "yandex_maps_gagarina"
+
+
+# ------------------------------------------------ карточки точек по умолчанию
+
+def test_every_branch_knows_its_card_and_address():
+    for branch in branches.BRANCHES.values():
+        assert branch.address and branch.yandex_id.isdigit()
+        assert branch.yandex_id in branch.yandex_url
+
+
+def test_cards_are_unique():
+    ids = [b.yandex_id for b in branches.BRANCHES.values()]
+    assert len(set(ids)) == len(ids)
+
+
+def test_cards_of_branches_are_used_when_env_is_silent():
+    found = yandex_connectors(yandex_env())
+    assert [c.network for c in found] == [
+        "yandex_maps_gagarina", "yandex_maps_gastromarket", "yandex_maps_cheryomushki",
+    ]
+    assert [c.creds["company_id"] for c in found] == [
+        b.yandex_id for b in branches.BRANCHES.values()
+    ]
+
+
+def test_env_list_overrides_known_cards():
+    found = yandex_connectors(yandex_env(YANDEX_COMPANIES="gagarina:999"))
+    assert [c.creds["company_id"] for c in found] == ["999"]

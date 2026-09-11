@@ -51,10 +51,13 @@ def _yandex_connectors(env: Mapping[str, str],
         "api_url": env.get("YANDEX_API_URL", ""),
     }
     pairs = env.get("YANDEX_COMPANIES", "").strip()
-    if not pairs:
+    if not pairs and env.get("YANDEX_COMPANY_ID", "").strip():
+        # Явно заданная одна карточка — работает как раньше, без привязки к точке
         return [YandexBusinessConnector(
-            session, company_id=env.get("YANDEX_COMPANY_ID", ""), **common,
+            session, company_id=env["YANDEX_COMPANY_ID"].strip(), **common,
         )]
+    # По умолчанию — карточки точек, известные из branches.py
+    pairs = pairs or branches.yandex_pairs()
 
     out = []
     for chunk in pairs.replace(";", ",").split(","):

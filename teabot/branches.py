@@ -17,6 +17,8 @@ class Branch:
 
     code: str            # короткий ключ: в переменных окружения и callback_data
     title: str           # как называем точку в интерфейсе бота
+    address: str         # адрес во Владимире
+    yandex_id: str       # id карточки на Яндекс Картах
     format: str          # что это за место одним словосочетанием
     positioning: str     # главная мысль карточки
     audience: str        # кто сюда приходит
@@ -24,6 +26,10 @@ class Branch:
     tone: str            # как разговариваем в ответах
     avoid: str           # чего в ответах не обещаем
     keywords: tuple = field(default=())
+
+    @property
+    def yandex_url(self) -> str:
+        return f"https://yandex.ru/maps/org/{self.yandex_id}/"
 
     def reply_profile(self) -> str:
         """Блок для системного запроса к AI — чтобы ответ звучал от этой точки."""
@@ -40,7 +46,9 @@ class Branch:
 GAGARINA = Branch(
     code="gagarina",
     title="Гагарина",
-    format="сувенирная чайная лавка в центре",
+    address="ул. Гагарина, 5А, 1 этаж",
+    yandex_id="180419504667",
+    format="чайная лавка в туристическом центре",
     positioning=(
         "место, куда заходят за подарком и за чаем, который увозят "
         "домой как впечатление от поездки."
@@ -66,6 +74,8 @@ GAGARINA = Branch(
 GASTROMARKET = Branch(
     code="gastromarket",
     title="Гастромаркет",
+    address="ул. Дворянская, 27Ак1, гастромаркет ТЕХНИКА",
+    yandex_id="118754326902",
     format="чайная: место выпить чай и купить его с собой",
     positioning=(
         "чайная, где чай сначала пробуют за столом, а потом забирают "
@@ -92,6 +102,8 @@ GASTROMARKET = Branch(
 CHERYOMUSHKI = Branch(
     code="cheryomushki",
     title="Черёмушки",
+    address="пр-т Строителей, 9Б, 1 этаж, ТЦ «Черёмушки»",
+    yandex_id="102766286091",
     format="чайный магазин в торговом центре",
     positioning=(
         "магазин, куда приходят за чаем на каждый день: широкий выбор, "
@@ -124,3 +136,8 @@ def find(code: str) -> Optional[Branch]:
 
 def titles() -> str:
     return ", ".join(b.title for b in BRANCHES.values())
+
+
+def yandex_pairs() -> str:
+    """Карточки точек в формате переменной YANDEX_COMPANIES."""
+    return ",".join(f"{b.code}:{b.yandex_id}" for b in BRANCHES.values() if b.yandex_id)

@@ -265,6 +265,20 @@ GOOGLE_LOCATIONS=gagarina:accounts/123/locations/111,gastromarket:accounts/123/l
 | `GOOGLE_REFRESH_TOKEN` | Одноразовая авторизация владельца карточек со scope `https://www.googleapis.com/auth/business.manage` |
 | `GOOGLE_LOCATIONS` | Имена локаций вида `accounts/<id>/locations/<id>` — их отдаёт Business Profile API после подключения |
 
+Получить эти значения помогает скрипт — он запускается у владельца
+карточек и ничего никуда не отправляет:
+
+```bash
+export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...   # только в своей консоли
+python scripts/google_setup.py auth        # ссылка для входа
+python scripts/google_setup.py token КОД   # печатает GOOGLE_REFRESH_TOKEN
+python scripts/google_setup.py locations   # печатает готовую GOOGLE_LOCATIONS
+python scripts/google_setup.py reviews     # проверка: отзывы по каждой точке
+```
+
+Точки сопоставляются с локациями по адресу автоматически; если адрес
+незнакомый, вместо кода печатается «?» — подставьте вручную.
+
 Важно, о чём стоит знать заранее:
 
 1. **Доступ к Business Profile API Google выдаёт по заявке.** В Cloud

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { REPORTS, reportById } from '../reportTypes';
@@ -41,5 +41,39 @@ describe('плитки отчётов на главной', () => {
   it('в реестре нет двух отчётов с одним именем', () => {
     const все = REPORTS.map((отчёт) => отчёт.id);
     expect(new Set(все).size).toBe(все.length);
+  });
+});
+
+/**
+ * Ссылки с главной, ведущие не в отчёты.
+ *
+ * Кнопка «Подробнее» под «Оценкой склада» вела на `/reports/stock`, а
+ * отчёта с именем `stock` в реестре нет — и открывалось «Такого отчёта
+ * нет». Ровно та же беда, что была у четырёх плиток, и поймать её опять
+ * можно было только пальцем.
+ *
+ * Поэтому проверяем не реестр, а сам маршрут: у каждой ссылки вида
+ * `/reports/что-то` должен быть либо отчёт в реестре, либо свой файл
+ * экрана.
+ */
+describe('ссылки на отчёты с главной', () => {
+  const главная = readFileSync(
+    join(__dirname, '..', '..', '..', 'app', '(tabs)', 'index.tsx'),
+    'utf8',
+  );
+
+  const ссылки = [...главная.matchAll(/'\/reports\/([a-z-]+)'/g)].map((найдено) => найдено[1]);
+
+  it('такие ссылки вообще есть — иначе проверка ничего не проверяет', () => {
+    expect(ссылки.length).toBeGreaterThan(0);
+  });
+
+  it.each(ссылки)('«/reports/%s» куда-то ведёт', (имя) => {
+    const вРеестре = reportById(имя) !== null;
+    const свойЭкран = existsSync(
+      join(__dirname, '..', '..', '..', 'app', 'reports', `${имя}.tsx`),
+    );
+
+    expect(вРеестре || свойЭкран).toBe(true);
   });
 });

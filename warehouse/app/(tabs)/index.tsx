@@ -24,7 +24,7 @@ import {
 } from '../../src/db/reports';
 import { formatMoney } from '../../src/domain/money';
 import { anchorOf, byMonth, canGoForward, periodTitle, tickLabel } from '../../src/domain/periods';
-import { formatQty } from '../../src/domain/qty';
+import { formatQty, formatQtyTotal } from '../../src/domain/qty';
 import { useQuery } from '../../src/state/DatabaseProvider';
 import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
 import { Icon, ReportIcon } from '../../src/ui/icons';
@@ -278,7 +278,7 @@ function HomePhone() {
 
         <Card>
           <Text style={text.block}>Оценка склада</Text>
-          <StatRow label="Общее" caption="Количество товара" value={`${formatQty(totalQty)} ед.`} />
+          <StatRow label="Общее" caption="Количество товара" value={`${formatQtyTotal(totalQty)} ед.`} />
           <StatRow
             label="Стоимость товара"
             caption="В розничных ценах"

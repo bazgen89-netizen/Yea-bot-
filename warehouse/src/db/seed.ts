@@ -917,6 +917,23 @@ function seedHistory(db: SqlDriver): void {
       return id;
     };
 
+    /*
+     * Готовим оба запроса один раз.
+     *
+     * `db.run` в браузере разбирает и компилирует текст запроса при каждом
+     * вызове. Чеков 46 429, позиций в них около ста тысяч — и на эту
+     * компиляцию уходило сорок две секунды при каждом открытии программы.
+     * Замерено по шагам: сама вставка данных там доля секунды.
+     */
+    const вставитьЧек = db.prepared(
+      `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, customer_name, location_id, number, money_number, bonus_earned, bonus_used, author, is_return, register_name, shift_no)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const вставитьПозицию = db.prepared(
+      `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+
     for (const sale of sales) {
       const lines = sale.ln.map((line) => {
         const found = line.code ? byCode.get(line.code) : undefined;
@@ -955,10 +972,7 @@ function seedHistory(db: SqlDriver): void {
       const note = (sale.cm ?? '').trim() || null;
       const customerName = customerId === null && sale.cn ? sale.cn : null;
 
-      db.run(
-        `INSERT INTO sales (discount, total, cost_total, payment, created_at, customer_id, note, customer_name, location_id, number, money_number, bonus_earned, bonus_used, author, is_return, register_name, shift_no)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+      вставитьЧек([
           sale.disc ?? 0,
           sale.t ?? 0,
           cost,
@@ -981,11 +995,7 @@ function seedHistory(db: SqlDriver): void {
       const saleId = db.lastInsertId();
 
       for (const { line, product } of kept) {
-        db.run(
-          `INSERT INTO sale_items (sale_id, product_id, qty, price, cost_price, discount)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost, line.d ?? 0],
-        );
+        вставитьПозицию([saleId, product.id, line.q ?? 0, line.p ?? 0, product.cost, line.d ?? 0]);
       }
     }
 

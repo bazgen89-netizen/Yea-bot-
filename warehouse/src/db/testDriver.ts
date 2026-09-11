@@ -15,6 +15,12 @@ export function createTestDriver(): SqlDriver {
   let depth = 0;
 
   const driver: SqlDriver = {
+    prepared(sql: string) {
+      const запрос = db.prepare(sql);
+      return (params: SqlParam[] = []) => {
+        запрос.run(params);
+      };
+    },
     run(sql: string, params: SqlParam[] = []) {
       db.prepare(sql).run(params);
     },

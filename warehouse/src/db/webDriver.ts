@@ -19,6 +19,8 @@ import { migrate } from './schema';
 
 /** Минимум из API sql.js, который нам нужен. Пакет типизируем сами: */
 interface SqlJsStatement {
+  /** Подставить значения и выполнить — без повторной компиляции текста. */
+  run(params?: SqlParam[]): void;
   bind(params: SqlParam[]): void;
   step(): boolean;
   getAsObject(): Record<string, unknown>;
@@ -54,6 +56,19 @@ export function createWebDriver(box: DbBox, onChange: () => void): SqlDriver {
    */
   let depth = 0;
 
+  /*
+   * Подготовленный «какой номер у последней строки».
+   *
+   * Он спрашивается после каждой вставки: при наполнении базы это ещё
+   * пятьдесят тысяч разборов одного и того же коротенького запроса.
+   * Держим его рядом с базой, на которой готовили: соседнее окно может
+   * базу подменить, и тогда старая подготовка указывает на закрытую.
+   */
+  const последний: { база: SqlJsDatabase | null; запрос: SqlJsStatement | null } = {
+    база: null,
+    запрос: null,
+  };
+
   const rows = <T>(sql: string, params: SqlParam[]): T[] => {
     const statement = box.current.prepare(sql);
     try {
@@ -67,6 +82,22 @@ export function createWebDriver(box: DbBox, onChange: () => void): SqlDriver {
   };
 
   return {
+    prepared(sql) {
+      // Готовим один раз и держим, пока держат саму функцию. Если базу
+      // подменили соседним окном, старая подготовка указывает на закрытую
+      // базу — тогда готовим заново.
+      let база = box.current;
+      let запрос = база.prepare(sql);
+
+      return (params = []) => {
+        if (база !== box.current) {
+          база = box.current;
+          запрос = база.prepare(sql);
+        }
+        запрос.run(params);
+      };
+    },
+
     run(sql, params = []) {
       box.current.run(sql, params);
       if (depth === 0) onChange();
@@ -77,9 +108,21 @@ export function createWebDriver(box: DbBox, onChange: () => void): SqlDriver {
     get<T>(sql: string, params: SqlParam[] = []): T | null {
       return rows<T>(sql, params)[0] ?? null;
     },
+    /*
+     * Номер последней вставленной строки — с подготовкой.
+     *
+     * Он спрашивается после каждой вставки: при наполнении базы это ещё
+     * пятьдесят тысяч разборов одного и того же коротенького запроса.
+     */
     lastInsertId(): number {
-      const row = rows<{ id: number }>('SELECT last_insert_rowid() AS id', []);
-      return Number(row[0]?.id ?? 0);
+      if (последний.база !== box.current) {
+        последний.база = box.current;
+        последний.запрос = box.current.prepare('SELECT last_insert_rowid() AS id');
+      }
+      последний.запрос!.bind([]);
+      последний.запрос!.step();
+      const id = последний.запрос!.getAsObject().id;
+      return Number(id ?? 0);
     },
     tx<T>(fn: () => T): T {
       if (depth > 0) return fn();
@@ -124,10 +167,28 @@ export function createWebDriver(box: DbBox, onChange: () => void): SqlDriver {
  * строка чека переписывала бы весь файл.
  */
 export async function openWebDatabase(): Promise<SqlDriver> {
+  /*
+   * Отметки времени на шагах запуска.
+   *
+   * Запуск на телефоне занимает около минуты, и до замеров было неясно,
+   * на что она уходит: на разбор страницы, на подъём базы из хранилища
+   * или на наполнение. Гадать тут дороже, чем померить.
+   *
+   * Складываются в globalThis.__ЗАПУСК__ — оттуда их видно и из консоли,
+   * и из проверки браузером.
+   */
+  const шаги: [string, number][] = [];
+  const отметить = (имя: string) => шаги.push([имя, Math.round(performance.now())]);
+  отметить('начало');
+
   const SQL = await loadSqlJs();
+  отметить('sql.js поднят');
+
   const saved = await readSaved();
+  отметить(`база прочитана${saved ? ` (${(saved.length / 1024 / 1024).toFixed(1)} МБ)` : ' (пусто)'}`);
 
   const box: DbBox = { current: saved ? new SQL.Database(saved) : new SQL.Database() };
+  отметить('база открыта');
 
   /**
    * Разговор между окнами.
@@ -141,6 +202,12 @@ export async function openWebDatabase(): Promise<SqlDriver> {
     typeof globalThis.BroadcastChannel === 'function'
       ? new globalThis.BroadcastChannel('wayshop-db')
       : null;
+
+  // Подготовленный «какой номер у последней строки»: см. lastInsertId.
+  const последний: { база: SqlJsDatabase | null; запрос: SqlJsStatement | null } = {
+    база: null,
+    запрос: null,
+  };
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   const save = () => {
@@ -193,7 +260,10 @@ export async function openWebDatabase(): Promise<SqlDriver> {
     });
   }, 2000);
 
+  отметить('подписка на окна');
+
   migrate(driver);
+  отметить('схема приведена');
 
   // Пример данных при запуске не грузится: программой пользуется не один
   // магазин, и чужой каталог в свежей установке пришлось бы вычищать руками.
@@ -207,7 +277,9 @@ export async function openWebDatabase(): Promise<SqlDriver> {
     // один файл влезает вся история, а не последние восемнадцать тысяч
     // чеков. Распаковать надо до подписи — иначе подпись посчитается по
     // пустышкам, которые вшиты в сборку вместо файлов.
+    отметить('seed подгружен кодом');
     await loadSeedPack();
+    отметить('выгрузка распакована');
 
     // Новый файл — новые данные, а не «уже загружено».
     //
@@ -233,12 +305,19 @@ export async function openWebDatabase(): Promise<SqlDriver> {
       resetSeed(driver);
     }
 
+    отметить('подпись сверена');
+
     seedCatalog(driver);
+    отметить('каталог наполнен');
+
     if (kept) restoreCrm(driver, kept);
     rememberSeedStamp(driver);
   }
 
   save();
+  отметить('сохранено');
+
+  (globalThis as { __ЗАПУСК__?: [string, number][] }).__ЗАПУСК__ = шаги;
 
   return driver;
 }

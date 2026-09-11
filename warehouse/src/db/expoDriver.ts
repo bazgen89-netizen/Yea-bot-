@@ -8,6 +8,16 @@ export const DATABASE_NAME = 'warehouse.db';
 /** Адаптер expo-sqlite к SqlDriver. Синхронный API — запросы у нас короткие. */
 export function createExpoDriver(db: SQLite.SQLiteDatabase): SqlDriver {
   return {
+    /*
+     * На телефоне подготовка ничего не ускоряет: expo-sqlite и так держит
+     * разобранный запрос у себя. Здесь она только затем, чтобы вызывающий
+     * код был один на все три драйвера.
+     */
+    prepared(sql: string) {
+      return (params: SqlParam[] = []) => {
+        db.runSync(sql, params);
+      };
+    },
     run(sql: string, params: SqlParam[] = []) {
       db.runSync(sql, params);
     },

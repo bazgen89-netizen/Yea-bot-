@@ -71,6 +71,14 @@ export interface ReportDefinition {
   /** По какой колонке отчёт открывается отсортированным. */
   sortColumn?: number;
   /**
+   * Есть ли у отчёта фишка «Клиент».
+   *
+   * Только там, где строка отчёта восходит к чеку: у «Продаж по товарам»
+   * покупатель известен, у «Оценки склада» — нет. Показывать фишку, которая
+   * ничего не отбирает, нельзя: нажмут и решат, что программа врёт.
+   */
+  отборКлиента?: boolean;
+  /**
    * Отчёт по датам: строки — дни, недели или месяцы подряд. У таких у него в
    * шапке каждой числовой колонки стоит полоска-график, и переключатель
    * «таблица / график» показывает их крупно.
@@ -197,6 +205,10 @@ const PRODUCT_COLUMNS: ReportColumn[] = [
   { title: 'Продажи', width: 200, numeric: true, help: 'Количество продаж товара' },
   { title: 'Продано', width: 200, numeric: true, help: 'Количество единиц проданного товара' },
   { title: 'Рентабельность', width: 200, numeric: true, help: 'Отношение прибыли к себестоимости' },
+  // Рентабельность и маржинальность — разные дроби с одним числителем:
+  // первая делит прибыль на себестоимость, вторая — на выручку. В его
+  // списке «Параметр» стоят обе, и путать их нельзя.
+  { title: 'Маржинальность', width: 200, numeric: true, help: 'Отношение прибыли к выручке' },
 ];
 
 export const REPORTS: ReportDefinition[] = [
@@ -207,8 +219,9 @@ export const REPORTS: ReportDefinition[] = [
     columns: PRODUCT_COLUMNS,
     // Отсортировано по прибыли — так этот отчёт открывается у него.
     sortColumn: 4,
-    rows: (db, period) =>
-      topProducts(db, period, 1000).map((p) => [
+    отборКлиента: true,
+    rows: (db, period, отбор) =>
+      topProducts(db, period, 1000, undefined, отбор).map((p) => [
         p.name,
         p.barcode ?? '',
         p.sku ?? '',
@@ -218,11 +231,12 @@ export const REPORTS: ReportDefinition[] = [
         String(p.sales),
         formatQtyWeb(p.qty),
         percent(p.profit, p.revenue - p.profit),
+        percent(p.profit, p.revenue),
       ]),
-    total: (db, period) => {
-      const s = salesSummary(db, period);
+    total: (db, period, отбор) => {
+      const s = salesSummary(db, period, отбор?.место ?? null, отбор?.сотрудник ?? null, отбор?.клиент ?? null);
       return ['ИТОГ', '', '', money(s.revenue), money(s.profit), money(s.cost),
-        String(s.receipts), '', percent(s.profit, s.cost)];
+        String(s.receipts), '', percent(s.profit, s.cost), percent(s.profit, s.revenue)];
     },
   },
   {

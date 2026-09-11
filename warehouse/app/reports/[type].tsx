@@ -10,7 +10,7 @@ import { useDesktop } from '../../src/ui/useDesktop';
 import { WebIcon } from '../../src/ui/icons';
 import { web, webText } from '../../src/ui/webTheme';
 import { colors, spacing, text as phoneText } from '../../src/ui/theme';
-import { ReportPhone } from '../../src/ui/ReportPhone';
+import { ReportPhone, type Сосед } from '../../src/ui/ReportPhone';
 import { Dropdown, type Option } from '../../src/web/Dropdown';
 import { Column, HeadRow, Row, ToolButton, Toolbar } from '../../src/web/Table';
 
@@ -37,17 +37,39 @@ const REPORT_OPTIONS: Option<string>[] = REPORTS.map((report) => ({
 }));
 
 /**
- * Кнопка внизу телефонного отчёта: соседний по смыслу.
+ * Кнопки внизу телефонного отчёта: соседние по смыслу.
  *
  * У него под «Продажами по дням» стоит «Продажи по неделям» — тот же отчёт
- * крупнее, и переходят туда чаще, чем возвращаются к списку всех отчётов.
- * Дни → недели → месяцы, и обратно от месяцев к дням.
+ * крупнее, и переходят туда чаще, чем возвращаются к списку всех отчётов. А
+ * под «Продажами по товарам» их сразу две: «по месяцам» и «по комплектам».
+ * Поэтому список, а не одна запись.
  */
-const СОСЕД: Record<string, string> = { day: 'week', week: 'month', month: 'day' };
+const СОСЕДИ: Record<string, string[]> = {
+  day: ['week'],
+  week: ['month'],
+  month: ['day'],
+  product: ['month', 'set'],
+  categories: ['product'],
+  set: ['product'],
+};
 
-function соседнийОтчёт(id: string): { id: string; title: string } | null {
-  const сосед = REPORTS.find((one) => one.id === СОСЕД[id]);
-  return сосед ? { id: сосед.id, title: сосед.title } : null;
+/** Значок и его цвета — те же, что у плиток на главной. */
+const ЗНАЧКИ: Record<string, { значок: string; фон: string; цвет: string }> = {
+  day: { значок: '▤', фон: '#DFF1E4', цвет: '#2E9E5B' },
+  week: { значок: '▤', фон: '#DFF1E4', цвет: '#2E9E5B' },
+  month: { значок: '▦', фон: '#DEE8FD', цвет: '#1A66FF' },
+  product: { значок: '◱', фон: '#DEE8FD', цвет: '#1A66FF' },
+  set: { значок: '◧', фон: '#FBDCE6', цвет: '#E23B72' },
+  categories: { значок: '◨', фон: '#FCE4D4', цвет: '#E4691E' },
+};
+
+function соседниеОтчёты(id: string): Сосед[] {
+  return (СОСЕДИ[id] ?? []).flatMap((имя) => {
+    const сосед = REPORTS.find((one) => one.id === имя);
+    if (!сосед) return [];
+    const вид = ЗНАЧКИ[имя] ?? { значок: '▤', фон: '#EDEFF3', цвет: '#5A5F68' };
+    return [{ id: сосед.id, title: сосед.title, ...вид }];
+  });
 }
 
 export default function ReportScreen() {
@@ -123,7 +145,7 @@ export default function ReportScreen() {
     return (
       <View style={styles.screen}>
         <Stack.Screen options={{ title: report.title }} />
-        <ReportPhone report={report} соседний={соседнийОтчёт(report.id)} />
+        <ReportPhone report={report} соседние={соседниеОтчёты(report.id)} />
       </View>
     );
   }

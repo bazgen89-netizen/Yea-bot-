@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { counterpartyNames } from '../db/counterparties';
 import { listLocations } from '../db/locations';
 import { periodFor, type PeriodKind } from '../db/reports';
 import type { ReportDefinition } from '../db/reportTypes';
@@ -9,8 +10,7 @@ import { listStaff } from '../db/staff';
 import {
   естьОтбор,
   подписьПериода,
-  поРусски,
-  рублиИкопейки,
+  ячейкаОтчёта,
   ПУСТОЙ_ОТБОР,
   type ОтборОтчёта,
 } from '../domain/reportFilter';
@@ -49,13 +49,25 @@ const ПЕРИОДЫ: { value: PeriodKind; label: string }[] = [
   { value: 'year', label: 'Год' },
 ];
 
+/** Соседний отчёт: кнопка внизу экрана. */
+export interface Сосед {
+  id: string;
+  title: string;
+  значок: string;
+  фон: string;
+  цвет: string;
+}
+
 export function ReportPhone({
   report,
-  соседний,
+  соседние = [],
 }: {
   report: ReportDefinition;
-  /** Отчёт, кнопка на который стоит внизу: у него под «днями» — «недели». */
-  соседний?: { id: string; title: string } | null;
+  /**
+   * Отчёты, кнопки на которые стоят внизу. У «дней» это «недели», у
+   * «товаров» — «по месяцам» и «по комплектам»: у него их там два.
+   */
+  соседние?: Сосед[];
 }) {
   const router = useRouter();
 
@@ -67,22 +79,33 @@ export function ReportPhone({
   }));
 
   /** Какое окошко выбора открыто. */
-  const [окно, открыть] = useState<null | 'период' | 'параметр' | 'сотрудник' | 'магазин'>(null);
+  const [окно, открыть] = useState<
+    null | 'период' | 'параметр' | 'сотрудник' | 'магазин' | 'клиент'
+  >(null);
   const [сколько, показать] = useState(ПОРЦИЯ);
+
+  // По какой колонке и в какую сторону. У него отчёт по товарам открыт по
+  // алфавиту — стрелка вверх у «Наименования».
+  const [сортировка, сортировать] = useState({ колонка: 0, вверх: true });
 
   const период = useMemo(() => periodFor(выбор.период), [выбор.период]);
 
   const строки = useQuery(
     (db) => report.rows(db, период, выбор.отбор),
-    [report.id, период.from, период.to, выбор.отбор.место, выбор.отбор.сотрудник],
+    [report.id, период.from, период.to, выбор.отбор.место, выбор.отбор.сотрудник, выбор.отбор.клиент],
   );
   const итог = useQuery(
     (db) => (report.total ? report.total(db, период, выбор.отбор) : null),
-    [report.id, период.from, период.to, выбор.отбор.место, выбор.отбор.сотрудник],
+    [report.id, период.from, период.to, выбор.отбор.место, выбор.отбор.сотрудник, выбор.отбор.клиент],
   );
 
   const магазины = useQuery((db) => listLocations(db), []);
   const сотрудники = useQuery((db) => listStaff(db), []);
+  // Покупателей три тысячи, поэтому окно клиента — с поиском.
+  const клиенты = useQuery(
+    (db) => (report.отборКлиента ? counterpartyNames(db, 'customer') : []),
+    [report.отборКлиента],
+  );
 
   const числовые = report.columns
     .map((колонка, номер) => ({ колонка, номер }))
@@ -96,9 +119,38 @@ export function ReportPhone({
     выбор.отбор.сотрудник === null
       ? null
       : (сотрудники.find((один) => один.id === выбор.отбор.сотрудник)?.name ?? null);
+  const имяКлиента =
+    выбор.отбор.клиент === null
+      ? null
+      : (клиенты.find((один) => один.id === выбор.отбор.клиент)?.name ?? null);
 
-  const видно = строки.slice(0, сколько);
-  const [рубли, копейки] = рублиИкопейки(поРусски(String(итог?.[выбор.колонка] ?? '')));
+  /*
+   * Порядок строк. У него шапка «Наименование» со стрелкой вверх, и список
+   * идёт по алфавиту; нажатие переворачивает. Числовую колонку он тоже
+   * сортирует — по ней отчёт и открывается.
+   *
+   * Сортируем уже готовые строки, а не запрос: строка отчёта — это текст,
+   * и второй порядок в SQL пришлось бы держать для каждого из одиннадцати
+   * отчётов отдельно.
+   */
+  const упорядочены = useMemo(() => {
+    const копия = [...строки];
+    const по = сортировка.колонка;
+    const знак = сортировка.вверх ? 1 : -1;
+
+    копия.sort((а, б) => {
+      const левое = а[по] ?? '';
+      const правое = б[по] ?? '';
+      if (report.columns[по]?.numeric) {
+        return (число(левое) - число(правое)) * знак;
+      }
+      return левое.localeCompare(правое, 'ru') * знак;
+    });
+    return копия;
+  }, [строки, сортировка.колонка, сортировка.вверх, report.id]);
+
+  const видно = упорядочены.slice(0, сколько);
+  const [рубли, копейки] = ячейкаОтчёта(String(итог?.[выбор.колонка] ?? ''));
 
   return (
     <View style={стиль.экран}>
@@ -121,6 +173,13 @@ export function ReportPhone({
             значение={имяСотрудника ?? 'все'}
             onPress={() => открыть('сотрудник')}
           />
+          {report.отборКлиента ? (
+            <Фишка
+              подпись="Клиент"
+              значение={имяКлиента ?? 'все'}
+              onPress={() => открыть('клиент')}
+            />
+          ) : null}
           <Фишка
             подпись="Магазин"
             значение={имяМагазина ?? 'все'}
@@ -138,10 +197,29 @@ export function ReportPhone({
         </ScrollView>
       </View>
 
-      {/* Шапка таблицы. Слева название строки, справа выбранный параметр. */}
+      {/* Шапка таблицы — она же переключатель порядка: нажатие по названию
+          колонки сортирует по ней, повторное переворачивает. */}
       <View style={стиль.шапка}>
-        <Text style={стиль.шапкаЛево}>{report.columns[0]?.title ?? 'Наименование'}</Text>
-        <Text style={стиль.шапкаПраво}>{report.columns[выбор.колонка]?.title ?? ''}</Text>
+        <Загловок
+          имя={report.columns[0]?.title ?? 'Наименование'}
+          своя={сортировка.колонка === 0}
+          вверх={сортировка.вверх}
+          слева
+          onPress={() =>
+            сортировать((было) => ({ колонка: 0, вверх: было.колонка === 0 ? !было.вверх : true }))
+          }
+        />
+        <Загловок
+          имя={report.columns[выбор.колонка]?.title ?? ''}
+          своя={сортировка.колонка === выбор.колонка}
+          вверх={сортировка.вверх}
+          onPress={() =>
+            сортировать((было) => ({
+              колонка: выбор.колонка,
+              вверх: было.колонка === выбор.колонка ? !было.вверх : false,
+            }))
+          }
+        />
       </View>
 
       <ScrollView
@@ -151,16 +229,22 @@ export function ReportPhone({
         }}
         scrollEventThrottle={200}
       >
-        {видно.map((строка, номер) => (
-          <View key={номер} style={стиль.строка}>
-            <Text style={стиль.название} numberOfLines={2}>
-              {строка[0]}
-            </Text>
-            <Text style={стиль.значение} numberOfLines={1}>
-              {поРусски(строка[выбор.колонка] ?? '')}
-            </Text>
-          </View>
-        ))}
+        {видно.map((строка, номер) => {
+          const [целое, дробь] = ячейкаОтчёта(строка[выбор.колонка] ?? '');
+          return (
+            <View key={номер} style={стиль.строка}>
+              <Text style={стиль.название} numberOfLines={2}>
+                {строка[0]}
+              </Text>
+              {/* Копейки бледнее: у него в каждой строке «785,52» — рубли
+                  чёрные, копейки серые. */}
+              <Text style={стиль.значение} numberOfLines={1}>
+                {целое}
+                <Text style={стиль.копейки}>{дробь}</Text>
+              </Text>
+            </View>
+          );
+        })}
 
         {строки.length === 0 ? (
           <Text style={стиль.пусто}>За выбранный период данных нет</Text>
@@ -178,19 +262,28 @@ export function ReportPhone({
         </View>
       ) : null}
 
-      {соседний ? (
-        <Pressable
-          accessibilityRole="button"
-          style={стиль.сосед}
-          onPress={() =>
-            router.replace({ pathname: '/reports/[type]', params: { type: соседний.id } })
-          }
-        >
-          <View style={стиль.соседЗначок}>
-            <Text style={стиль.соседЗначокТекст}>▤</Text>
-          </View>
-          <Text style={стиль.соседТекст}>{соседний.title}</Text>
-        </Pressable>
+      {/* Соседние отчёты. У «Продаж по товарам» их внизу два — «по месяцам»
+          и «по комплектам», — поэтому это список, а не одна кнопка. */}
+      {соседние.length ? (
+        <View style={стиль.соседи}>
+          {соседние.map((сосед) => (
+            <Pressable
+              key={сосед.id}
+              accessibilityRole="button"
+              style={стиль.сосед}
+              onPress={() =>
+                router.replace({ pathname: '/reports/[type]', params: { type: сосед.id } })
+              }
+            >
+              <View style={[стиль.соседЗначок, { backgroundColor: сосед.фон }]}>
+                <Text style={[стиль.соседЗначокТекст, { color: сосед.цвет }]}>{сосед.значок}</Text>
+              </View>
+              <Text style={стиль.соседТекст} numberOfLines={2}>
+                {сосед.title}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       ) : null}
 
       <Окно
@@ -224,6 +317,24 @@ export function ReportPhone({
           задать((было) => ({
             ...было,
             отбор: { ...было.отбор, сотрудник: ключ === 'все' ? null : Number(ключ) },
+          }))
+        }
+      />
+
+      <Окно
+        открыто={окно === 'клиент'}
+        заголовок="Клиент"
+        сПоиском
+        строки={[
+          { ключ: 'все', имя: 'Все клиенты' },
+          ...клиенты.map((один) => ({ ключ: String(один.id), имя: один.name })),
+        ]}
+        выбрано={выбор.отбор.клиент === null ? 'все' : String(выбор.отбор.клиент)}
+        закрыть={() => открыть(null)}
+        выбрать={(ключ) =>
+          задать((было) => ({
+            ...было,
+            отбор: { ...было.отбор, клиент: ключ === 'все' ? null : Number(ключ) },
           }))
         }
       />
@@ -277,6 +388,40 @@ function Фишка({
   );
 }
 
+/**
+ * Заголовок колонки со стрелкой порядка.
+ *
+ * Стрелка стоит только у той колонки, по которой сейчас отсортировано —
+ * у него так же: две стрелки разом сбивали бы с толку, по какой из них
+ * список на самом деле построен.
+ */
+function Загловок({
+  имя,
+  своя,
+  вверх,
+  слева,
+  onPress,
+}: {
+  имя: string;
+  своя: boolean;
+  вверх: boolean;
+  слева?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Сортировать по «${имя}»`}
+      style={[стиль.заголовок, слева && стиль.заголовокСлева]}
+      onPress={onPress}
+      hitSlop={8}
+    >
+      <Text style={стиль.заголовокТекст}>{имя}</Text>
+      {своя ? <Text style={стиль.стрелка}>{вверх ? '⌃' : '⌄'}</Text> : null}
+    </Pressable>
+  );
+}
+
 /** Окошко выбора — список снизу, как у него. */
 function Окно({
   открыто,
@@ -285,6 +430,7 @@ function Окно({
   выбрано,
   закрыть,
   выбрать,
+  сПоиском,
 }: {
   открыто: boolean;
   заголовок: string;
@@ -292,15 +438,46 @@ function Окно({
   выбрано: string;
   закрыть: () => void;
   выбрать: (ключ: string) => void;
+  /** Список клиентов — три тысячи строк, без поиска в нём не найти. */
+  сПоиском?: boolean;
 }) {
+  const [искомое, искать] = useState('');
+
+  /*
+   * Больше сотни строк разом не рисуем.
+   *
+   * Клиентов 3 272. В браузере на этой машине окно открывается за 79 мс и
+   * без предела — замерено, — но у него телефон, а не эта машина, и три
+   * тысячи нажимаемых строк там обойдутся дороже. Листать их всё равно
+   * никто не станет: нужного ищут поиском, он отзывается за 42 мс.
+   */
+  const ПРЕДЕЛ = 100;
+
+  const подходящие = сПоиском && искомое.trim()
+    ? строки.filter((один) => один.имя.toLowerCase().includes(искомое.trim().toLowerCase()))
+    : строки;
+
+  const отобранные = подходящие.slice(0, ПРЕДЕЛ);
+  const спрятано = подходящие.length - отобранные.length;
+
   return (
     <Modal visible={открыто} transparent animationType="slide" onRequestClose={закрыть}>
       <Pressable style={стиль.тень} onPress={закрыть}>
         {/* Нажатие по самому листу не должно его закрывать. */}
         <Pressable style={стиль.лист} onPress={() => {}}>
           <Text style={стиль.листЗаголовок}>{заголовок}</Text>
-          <ScrollView>
-            {строки.map((один) => (
+          {сПоиском ? (
+            <TextInput
+              style={стиль.поиск}
+              value={искомое}
+              onChangeText={искать}
+              placeholder="Поиск"
+              placeholderTextColor={colors.textMuted}
+              autoCorrect={false}
+            />
+          ) : null}
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {отобранные.map((один) => (
               <Pressable
                 key={один.ключ}
                 accessibilityRole="button"
@@ -320,11 +497,35 @@ function Окно({
                 {один.ключ === выбрано ? <Text style={стиль.галка}>✓</Text> : null}
               </Pressable>
             ))}
+
+            {/* Молча обрезать список нельзя: человек пролистает до конца и
+                решит, что его клиента в программе нет. */}
+            {спрятано > 0 ? (
+              <Text style={стиль.ещё}>
+                Показаны первые {отобранные.length}. Ещё {спрятано} — найдите поиском.
+              </Text>
+            ) : null}
+
+            {подходящие.length === 0 ? (
+              <Text style={стиль.ещё}>Никто не найден</Text>
+            ) : null}
           </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
   );
+}
+
+/**
+ * Число из готовой ячейки: «26,525.60» и «894%» — в 26525.6 и 894.
+ *
+ * Ячейки отчёта — уже текст, второго, «сырого» набора значений рядом нет.
+ * Держать его значило бы иметь два источника правды об одном столбце.
+ */
+function число(ячейка: string): number {
+  const чистое = ячейка.replace(/[\s,%]/g, '');
+  const значение = Number(чистое);
+  return Number.isFinite(значение) ? значение : 0;
 }
 
 /** Оранжевый значения на фишке — его собственный, снят со снимка. */
@@ -360,8 +561,10 @@ const стиль = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
   },
-  шапкаЛево: { flex: 1, fontSize: 15, color: colors.textMuted },
-  шапкаПраво: { fontSize: 15, color: colors.textMuted },
+  заголовок: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  заголовокСлева: { flex: 1 },
+  заголовокТекст: { fontSize: 15, color: colors.textMuted },
+  стрелка: { fontSize: 15, color: colors.textMuted, lineHeight: 18 },
 
   строка: {
     flexDirection: 'row',
@@ -374,6 +577,8 @@ const стиль = StyleSheet.create({
   },
   название: { flex: 1, fontSize: 17, color: colors.text },
   значение: { fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
+  // Копейки бледнее рублей — так у него в каждой строке отчёта.
+  копейки: { color: colors.textMuted },
 
   пусто: { padding: spacing.xl, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
 
@@ -395,7 +600,14 @@ const стиль = StyleSheet.create({
   // Копейки мельче и бледнее: на них не смотрят, а место они занимают.
   итогКопейки: { fontSize: 19, fontWeight: '400', color: colors.textMuted },
 
+  соседи: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   сосед: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -431,6 +643,16 @@ const стиль = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
   },
+  поиск: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.bg,
+    fontSize: 17,
+    color: colors.text,
+  },
   пункт: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -443,4 +665,11 @@ const стиль = StyleSheet.create({
   пунктТекст: { flex: 1, fontSize: 17, color: colors.text },
   пунктВыбран: { color: ОРАНЖЕВЫЙ, fontWeight: '600' },
   галка: { fontSize: 17, color: ОРАНЖЕВЫЙ },
+  ещё: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
 });

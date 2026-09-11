@@ -86,6 +86,7 @@ export function salesSummary(
   period: Period,
   scope: Scope = null,
   staff: Scope = null,
+  customer: Scope = null,
 ): SalesSummary {
   const row = db.get<{
     revenue: number;
@@ -101,7 +102,10 @@ export function salesSummary(
      WHERE s.created_at >= ? AND s.created_at < ?
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )${scopeSql('s.location_id', scope)}${scopeSql('s.staff_id', staff)}`,
+       )${scopeSql('s.location_id', scope)}${scopeSql('s.staff_id', staff)}${scopeSql(
+         's.customer_id',
+         customer,
+       )}`,
     [period.from, period.to],
   );
 
@@ -147,6 +151,8 @@ export function topProducts(
   period: Period,
   limit = 10,
   kind?: string,
+  /** Магазин, сотрудник и покупатель — отбор с фишек телефонного отчёта. */
+  отбор?: { место?: Scope; сотрудник?: Scope; клиент?: Scope },
 ): TopProduct[] {
   return db.all<TopProduct>(
     `SELECT i.product_id,
@@ -165,7 +171,10 @@ export function topProducts(
        AND (? IS NULL OR p.kind = ?)
        AND NOT EXISTS (
          SELECT 1 FROM stock_moves m WHERE m.sale_id = s.id AND m.reason = 'return'
-       )
+       )${scopeSql('s.location_id', отбор?.место ?? null)}${scopeSql(
+         's.staff_id',
+         отбор?.сотрудник ?? null,
+       )}${scopeSql('s.customer_id', отбор?.клиент ?? null)}
      GROUP BY i.product_id
      ORDER BY revenue DESC
      LIMIT ?`,

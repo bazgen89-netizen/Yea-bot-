@@ -3,6 +3,7 @@ import { createTestDriver } from '../testDriver';
 import {
   archiveCounterparty,
   countCounterparties,
+  counterpartyNames,
   createCounterparty,
   formatPhone,
   getCounterparty,
@@ -337,5 +338,45 @@ describe('карточка контрагента целиком', () => {
     expect(back.loyalty_type).toBe('bonus');
     expect(back.cashback_bp).toBe(500);
     expect(parsePairs(back.details)).toHaveLength(1);
+  });
+});
+
+/**
+ * Список имён для окна выбора.
+ *
+ * Окно «Клиент» в отчёте открывалось три секунды: listCounterparties на
+ * каждого из 3 272 считает обороты, долги, возвраты и движение денег —
+ * пять подзапросов, тогда как окну нужны имя и номер.
+ */
+describe('имена контрагентов', () => {
+  let db: SqlDriver;
+
+  beforeEach(() => {
+    db = createTestDriver();
+  });
+
+  it('отдаёт только живых и по алфавиту', () => {
+    const первый = createCounterparty(db, { name: 'Яковлев', kind: 'customer' });
+    createCounterparty(db, { name: 'Абрамов', kind: 'customer' });
+    const убранный = createCounterparty(db, { name: 'Борисов', kind: 'customer' });
+    archiveCounterparty(db, убранный);
+
+    expect(counterpartyNames(db).map((один) => один.name)).toEqual(['Абрамов', 'Яковлев']);
+    expect(counterpartyNames(db)[1].id).toBe(первый);
+  });
+
+  it('отбирает по виду, не теряя тех, кто и клиент и поставщик', () => {
+    createCounterparty(db, { name: 'Покупатель', kind: 'customer' });
+    createCounterparty(db, { name: 'Поставщик', kind: 'supplier' });
+    createCounterparty(db, { name: 'И тот и тот', kind: 'both' });
+
+    expect(counterpartyNames(db, 'customer').map((о) => о.name)).toEqual([
+      'И тот и тот',
+      'Покупатель',
+    ]);
+    expect(counterpartyNames(db, 'supplier').map((о) => о.name)).toEqual([
+      'И тот и тот',
+      'Поставщик',
+    ]);
   });
 });

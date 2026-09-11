@@ -64,6 +64,34 @@ export interface PartyFilter {
   includeArchived?: boolean;
 }
 
+/**
+ * Только имена — для списков выбора.
+ *
+ * `listCounterparties` вместе с каждой карточкой считает обороты, долги,
+ * возвраты и движение денег: пять подзапросов на каждого из 3 272. Окну
+ * «Клиент» в отчёте из всего этого нужны имя и номер, а платить за
+ * остальное на телефоне незачем.
+ */
+export function counterpartyNames(
+  db: SqlDriver,
+  kind?: 'customer' | 'supplier',
+): { id: Id; name: string }[] {
+  const where = ['archived = 0'];
+  const params: SqlParam[] = [];
+
+  if (kind) {
+    where.push("(kind = ? OR kind = 'both')");
+    params.push(kind);
+  }
+
+  return db.all<{ id: Id; name: string }>(
+    `SELECT id, name FROM counterparties
+      WHERE ${where.join(' AND ')}
+      ORDER BY name COLLATE NOCASE`,
+    params,
+  );
+}
+
 export function listCounterparties(
   db: SqlDriver,
   filter: PartyFilter = {},

@@ -620,6 +620,78 @@ export function motionByProduct(
     .map((row) => ({ ...row, after: row.before + row.movsIn - row.movsOut }));
 }
 
+export interface SupplierReport {
+  name: string;
+  /** Сколько приходных документов. */
+  docs: number;
+  /** На какую сумму приняли, копейки. */
+  amount: number;
+  /** Сколько возвратов поставщику. */
+  returns: number;
+  /** На какую сумму вернули, копейки. */
+  returnsSum: number;
+}
+
+/**
+ * Отчёт по поставщикам — по приходным документам.
+ *
+ * У Вазгена он стоит кнопкой под «Отчётом по движению» и под «Отчётом по
+ * покупателям». Строится не по чекам, а по складским документам: у
+ * поставщика чеков не бывает, у него бывают поставки.
+ *
+ * Сумма поставки считается по её движениям — количество на цену, — а не по
+ * строкам документа: строки есть и у отложенного, который склада ещё не
+ * касался, и такая поставка попала бы в отчёт как состоявшаяся.
+ *
+ * Только те, у кого за период что-то было: в справочнике карточек куда
+ * больше, чем поставщиков, с которыми работали в этом месяце.
+ */
+export function suppliersReport(
+  db: SqlDriver,
+  period: Period,
+  отбор?: { место?: Scope; сотрудник?: Scope },
+): SupplierReport[] {
+  const приход = `d.subtype = 'purchase'`;
+  const возврат = `d.subtype = 'purchase_return'`;
+
+  /*
+   * Группируем по имени из самого документа, а не по карточке контрагента.
+   *
+   * `postDoc` записывает имя поставщика строкой, а ссылку на его карточку
+   * ставит только если её передали явно — то есть у большинства приходов
+   * её нет вовсе. Соединение по карточке отдавало пустой отчёт при живых
+   * поставках: так и вышло, все четыре проверки упали разом.
+   *
+   * Имя и есть то, по чему его узнают: в журнале, в документе и здесь оно
+   * одно и то же.
+   */
+  const кто = `COALESCE(NULLIF(TRIM(d.counterparty), ''), '(без поставщика)')`;
+
+  /** Сумма документа — по его движениям: количество на цену. */
+  const сумма = `(
+    SELECT CAST(ROUND(COALESCE(SUM(ABS(m.qty_delta) * m.price), 0) / 1000.0) AS INTEGER)
+      FROM stock_moves m WHERE m.doc_id = d.id
+  )`;
+
+  return db.all<SupplierReport>(
+    `SELECT ${кто} AS name,
+            COALESCE(SUM(CASE WHEN ${приход} THEN 1 ELSE 0 END), 0) AS docs,
+            COALESCE(SUM(CASE WHEN ${приход} THEN ${сумма} ELSE 0 END), 0) AS amount,
+            COALESCE(SUM(CASE WHEN ${возврат} THEN 1 ELSE 0 END), 0) AS returns,
+            COALESCE(SUM(CASE WHEN ${возврат} THEN ${сумма} ELSE 0 END), 0) AS returnsSum
+     FROM docs d
+     WHERE d.created_at >= ? AND d.created_at < ?
+       AND (${приход} OR ${возврат})
+       ${scopeSql('d.location_id', отбор?.место ?? null)}${scopeSql(
+         'd.staff_id',
+         отбор?.сотрудник ?? null,
+       )}
+     GROUP BY name
+     ORDER BY amount DESC`,
+    [period.from, period.to],
+  );
+}
+
 export interface AgentReport {
   name: string;
   salesCount: number;
@@ -682,6 +754,8 @@ export interface StaffReport {
   returnCount: number;
   /** Сумма пробитого без возвратов, копейки. */
   salesSum: number;
+  /** Сумма возвращённого, копейки. */
+  returnsSum: number;
   /** Средний чек, копейки. */
   average: number;
   /** Сумма выданных скидок, копейки. */
@@ -697,7 +771,12 @@ export interface StaffReport {
  * Теперь помнит — но только с того дня, как завели сотрудников: у чеков,
  * пробитых раньше, сотрудника нет и приписать его задним числом нельзя.
  */
-export function staffReport(db: SqlDriver, period: Period): StaffReport[] {
+export function staffReport(
+  db: SqlDriver,
+  period: Period,
+  /** Магазин и сам сотрудник — отбор с фишек телефонного отчёта. */
+  отбор?: { место?: Scope; сотрудник?: Scope },
+): StaffReport[] {
   const rows = db.all<Omit<StaffReport, 'average' | 'itemsPerReceipt'> & { items: number }>(
     `SELECT st.name,
             st.role,
@@ -705,11 +784,13 @@ export function staffReport(db: SqlDriver, period: Period): StaffReport[] {
             COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END), 0) AS returnCount,
             COALESCE(SUM(CASE WHEN r.id IS NULL THEN s.total ELSE 0 END), 0) AS salesSum,
             COALESCE(SUM(CASE WHEN r.id IS NULL THEN s.discount ELSE 0 END), 0) AS discounts,
+            COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN s.total ELSE 0 END), 0) AS returnsSum,
             COALESCE(SUM(CASE WHEN r.id IS NULL
                               THEN (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id)
                               ELSE 0 END), 0) AS items
      FROM staff st
      JOIN sales s ON s.staff_id = st.id AND s.created_at >= ? AND s.created_at < ?
+       ${scopeSql('s.location_id', отбор?.место ?? null)}${scopeSql('st.id', отбор?.сотрудник ?? null)}
      LEFT JOIN stock_moves r ON r.sale_id = s.id AND r.reason = 'return'
      GROUP BY st.id
      ORDER BY salesSum DESC`,
@@ -722,6 +803,7 @@ export function staffReport(db: SqlDriver, period: Period): StaffReport[] {
     salesCount: row.salesCount,
     returnCount: row.returnCount,
     salesSum: row.salesSum,
+    returnsSum: row.returnsSum,
     discounts: row.discounts,
     average: row.salesCount > 0 ? Math.round(row.salesSum / row.salesCount) : 0,
     itemsPerReceipt: row.salesCount > 0 ? Math.round((row.items * 100) / row.salesCount) : 0,

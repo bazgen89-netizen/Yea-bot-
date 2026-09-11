@@ -8,7 +8,9 @@ import {
   salesSummary,
   staffReport,
   stockOverview,
+  suppliersReport,
   topProducts,
+  type SupplierReport,
   type Period,
 } from './reports';
 import { formatDayLabel, groupByMonth, groupByWeek } from '../domain/grouping';
@@ -104,6 +106,30 @@ export interface ReportDefinition {
    */
   dates?: boolean;
 }
+
+/**
+ * Отчёты по группам — как во всплывающем окне «Все отчёты» на телефоне.
+ *
+ * Порядок и состав его собственные, он их продиктовал: «Продажи по датам»
+ * — дни, недели, месяцы; «Каталог» — товары, комплекты, категории и
+ * движение; «Контрагенты» — покупатели и поставщики; «Компания» —
+ * сотрудники и финансовый.
+ *
+ * Лежит рядом с самими отчётами, а не в экране: экранов, где этот список
+ * нужен, уже два — всплывающее окно и плитки кабинета, — и разъехаться им
+ * ничего не мешало бы.
+ */
+export interface ГруппаОтчётов {
+  имя: string;
+  отчёты: string[];
+}
+
+export const ГРУППЫ: ГруппаОтчётов[] = [
+  { имя: 'Продажи по датам', отчёты: ['day', 'week', 'month'] },
+  { имя: 'Каталог', отчёты: ['product', 'set', 'categories', 'motion'] },
+  { имя: 'Контрагенты', отчёты: ['agent', 'supplier'] },
+  { имя: 'Компания', отчёты: ['staff', 'finance'] },
+];
 
 const money = (value: number) => formatMoneyWeb(value);
 
@@ -427,6 +453,40 @@ export const REPORTS: ReportDefinition[] = [
     },
   },
   {
+    id: 'supplier',
+    title: 'Отчёт по поставщикам',
+    phoneTitle: 'Отчет по поставщикам',
+    note: 'Поставки, возвраты поставщику и оплаты по каждому из них.',
+    columns: [
+      { title: 'Наименование', width: 430 },
+      { title: 'Поставки', width: 180, numeric: true, help: 'Количество приходных документов' },
+      { title: 'Сумма поставок', width: 220, numeric: true },
+      { title: 'Возвраты', width: 190, numeric: true },
+      { title: 'Сумма возвратов', width: 230, numeric: true },
+    ],
+    rows: (db, period, отбор) =>
+      suppliersReport(db, period, отбор).map((один) => [
+        один.name,
+        String(один.docs),
+        money(один.amount),
+        String(один.returns),
+        money(один.returnsSum),
+      ]),
+    total: (db, period, отбор) => {
+      const все = suppliersReport(db, period, отбор);
+      const сложить = (что: (строка: SupplierReport) => number) =>
+        все.reduce((сумма, строка) => сумма + что(строка), 0);
+
+      return [
+        'ИТОГ',
+        String(сложить((один) => один.docs)),
+        money(сложить((один) => один.amount)),
+        String(сложить((один) => один.returns)),
+        money(сложить((один) => один.returnsSum)),
+      ];
+    },
+  },
+  {
     id: 'finance',
     title: 'Финансовый отчёт',
     note: 'Выручка, себестоимость, прибыль и скидки за период — одной сводкой.',
@@ -454,22 +514,66 @@ export const REPORTS: ReportDefinition[] = [
     columns: [
       { title: 'Наименование', width: 400 },
       { title: 'Продажи', width: 180, numeric: true, help: 'Количество продаж товара' },
-      { title: 'Возвраты', width: 190, numeric: true },
+      { title: 'Возвраты', phoneTitle: 'Возврат продаж', width: 190, numeric: true },
       { title: 'Сумма продаж', width: 210, numeric: true },
+      { title: 'Сумма возврата', width: 220, numeric: true },
       { title: 'Средний чек', width: 210, numeric: true, help: 'Сумма продаж, делённая на их количество' },
       { title: 'Сумма скидок', width: 210, numeric: true },
-      { title: 'Позиций в чеке', width: 220, numeric: true },
+      {
+        title: 'Позиций в чеке',
+        phoneTitle: 'Среднее количество товаров',
+        width: 220,
+        numeric: true,
+      },
+      {
+        title: 'Чеки',
+        width: 170,
+        numeric: true,
+        help: 'Все пробитые документы, включая возвраты',
+      },
     ],
-    rows: (db, period) =>
-      staffReport(db, period).map((row) => [
+    rows: (db, period, отбор) =>
+      staffReport(db, period, отбор).map((row) => [
         `${row.name} · ${ROLE_LABEL[row.role as Role] ?? row.role}`,
         String(row.salesCount),
         String(row.returnCount),
         money(row.salesSum),
+        money(row.returnsSum),
         money(row.average),
         money(row.discounts),
         (row.itemsPerReceipt / 100).toFixed(2).replace('.', ','),
+        // «Чеки» — всё пробитое, вместе с возвратами: «Продажи» их не
+        // считают, и без этой колонки сотрудник, оформивший десять
+        // возвратов, выглядел бы бездельником.
+        String(row.salesCount + row.returnCount),
       ]),
+    total: (db, period, отбор) => {
+      const все = staffReport(db, period, отбор);
+      const сложить = (что: (строка: (typeof все)[number]) => number) =>
+        все.reduce((сумма, строка) => сумма + что(строка), 0);
+
+      const продажи = сложить((один) => один.salesCount);
+      const выручка = сложить((один) => один.salesSum);
+      const позиций = все.reduce(
+        (сумма, один) => сумма + один.itemsPerReceipt * один.salesCount,
+        0,
+      );
+
+      return [
+        'ИТОГ',
+        String(продажи),
+        String(сложить((один) => один.returnCount)),
+        money(выручка),
+        money(сложить((один) => один.returnsSum)),
+        // Средний чек по всем — выручка на число продаж, а не среднее
+        // средних: иначе стажёр с двумя чеками весил бы столько же,
+        // сколько сменщик с двумя сотнями.
+        money(продажи > 0 ? Math.round(выручка / продажи) : 0),
+        money(сложить((один) => один.discounts)),
+        (продажи > 0 ? позиций / продажи / 100 : 0).toFixed(2).replace('.', ','),
+        String(продажи + сложить((один) => один.returnCount)),
+      ];
+    },
   },
   {
     id: 'accounts',

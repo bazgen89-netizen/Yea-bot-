@@ -30,6 +30,7 @@ import { AppHeader, HeaderAction } from '../../src/ui/AppHeader';
 import { Icon, ReportIcon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing, text } from '../../src/ui/theme';
 import { useDesktop } from '../../src/ui/useDesktop';
+import { ОкноОтчётов } from '../../src/ui/ОкноОтчётов';
 import { HomeDashboard } from '../../src/web/screens/HomeDashboard';
 
 type PeriodKind = 'today' | 'week' | 'month' | 'year';
@@ -81,6 +82,8 @@ function HomePhone() {
    */
   const [scope, setScope] = useState<Scope>(null);
   const [picking, setPicking] = useState(false);
+  /** Открыт ли список всех отчётов — у него он всплывает снизу. */
+  const [отчётыВидны, показатьОтчёты] = useState(false);
 
   const stores = useQuery((db) => listLocations(db));
   const storeName = stores.find((store) => store.id === scope)?.name ?? null;
@@ -162,6 +165,8 @@ function HomePhone() {
           </>
         }
       />
+
+      <ОкноОтчётов открыто={отчётыВидны} закрыть={() => показатьОтчёты(false)} />
 
       <StorePicker
         visible={picking}
@@ -266,7 +271,9 @@ function HomePhone() {
               </Pressable>
             ))}
           </View>
-          <SoftButton title="Все отчёты" onPress={() => router.push('/reports')} />
+          {/* У него это всплывающее окно со списком всех отчётов по
+              группам, а не отдельный экран сводки. */}
+          <SoftButton title="Все отчёты" onPress={() => показатьОтчёты(true)} />
         </Card>
 
         <Card>

@@ -50,8 +50,8 @@ const СОСЕДИ: Record<string, string[]> = {
   month: ['day'],
   product: ['month', 'set'],
   categories: ['product'],
-  agent: ['categories'],
-  motion: ['staff'],
+  agent: ['categories', 'supplier'],
+  motion: ['supplier', 'staff'],
   set: ['product'],
 };
 
@@ -66,6 +66,7 @@ const ЗНАЧКИ: Record<string, { значок: string; фон: string; цв�
   agent: { значок: '◍', фон: '#FBDCE6', цвет: '#E23B72' },
   staff: { значок: '◒', фон: '#D9EDF6', цвет: '#2A7FA8' },
   motion: { значок: '◐', фон: '#FCE4D4', цвет: '#E4691E' },
+  supplier: { значок: '◎', фон: '#FBDCE6', цвет: '#E23B72' },
 };
 
 function соседниеОтчёты(id: string): Сосед[] {

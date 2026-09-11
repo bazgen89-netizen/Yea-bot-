@@ -44,14 +44,21 @@ export const web = {
   createButton: '#2185D0',
 
   bg: '#FFFFFF',
-  pageBg: '#F5F6F8',
-  border: '#E4E6EB',
+  /*
+   * Фон страницы, цвет текста и цвет рамок — из правила `body` в их
+   * собственной таблице стилей: `color:#33425B; background-color:#f5f5f5`.
+   * Прежде все три были подобраны на глаз по скриншоту и расходились на
+   * десятые: #F5F6F8 вместо #F5F5F5, #212121 вместо #33425B (а это не серый,
+   * а синеватый), #E4E6EB вместо #E1E2E6.
+   */
+  pageBg: '#F5F5F5',
+  border: '#E1E2E6',
   /** Линии внутри таблиц — светлее рамок. */
   gridLine: '#ECEDEF',
   rowHover: '#F7F8FA',
 
-  text: '#212121',
-  textMuted: '#9AA0A6',
+  text: '#33425B',
+  textMuted: '#767676',
   /** Заголовки колонок в таблицах. */
   columnHead: '#7A7F85',
 
@@ -241,7 +248,8 @@ export function applyPosTheme(theme: 'auto' | 'light' | 'dark'): void {
  * Шрифт кабинета — тот же, что в оригинале.
  * Со шрифтом, отличным от Roboto, не сойдутся ни ширины колонок, ни высоты строк.
  */
-export const WEB_FONT = 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif';
+export const WEB_FONT =
+  'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
 /** Ширина, с которой показываем кабинет вместо телефонной вёрстки. */
 export const DESKTOP_WIDTH = 1000;

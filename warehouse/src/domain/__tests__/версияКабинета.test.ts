@@ -3,6 +3,7 @@ import {
   другаяВерсия,
   подписьПерехода,
   переключитьВерсию,
+  ссылкаНаВерсию,
 } from '../../ui/версияКабинета';
 
 /**
@@ -77,6 +78,79 @@ describe('какой кабинет показывать', () => {
   it('чужое значение в хранилище не сбивает с толку', () => {
     склад['wayshop:версия-кабинета'] = 'какая-то';
     expect(версияКабинета()).toBe('старая');
+  });
+});
+
+describe('версия прямо в адресе', () => {
+  const былоХранилище = (globalThis as { localStorage?: Storage }).localStorage;
+  const былАдрес = (globalThis as { location?: Location }).location;
+  let склад: Record<string, string>;
+
+  const адрес = (строка: string) =>
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: { search: строка.split('#')[0], hash: строка.includes('#') ? `#${строка.split('#')[1]}` : '' },
+    });
+
+  beforeEach(() => {
+    склад = {};
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (к: string) => склад[к] ?? null,
+        setItem: (к: string, з: string) => {
+          склад[к] = з;
+        },
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: былоХранилище });
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: былАдрес });
+  });
+
+  it('по-русски и по-латыни — одинаково', () => {
+    // Вазген не нашёл пункт в меню: на невысоком экране нижние строки уходят
+    // под сгиб. Ссылка находится всегда.
+    for (const хвост of ['?версия=новая', '?v=new', '?version=NEW', '#v=new']) {
+      адрес(хвост);
+      expect(версияКабинета()).toBe('новая');
+    }
+  });
+
+  it('и обратно, к прежнему виду', () => {
+    склад['wayshop:версия-кабинета'] = 'новая';
+    адрес('?v=old');
+    expect(версияКабинета()).toBe('старая');
+  });
+
+  it('адрес важнее запомненного и сам запоминается', () => {
+    склад['wayshop:версия-кабинета'] = 'старая';
+    адрес('?v=new');
+
+    expect(версияКабинета()).toBe('новая');
+    // Чтобы второй раз ссылка не понадобилась.
+    expect(склад['wayshop:версия-кабинета']).toBe('новая');
+  });
+
+  it('чужой хвост в адресе ничего не меняет', () => {
+    склад['wayshop:версия-кабинета'] = 'новая';
+    адрес('?utm_source=telegram&page=2');
+    expect(версияКабинета()).toBe('новая');
+  });
+
+  it('ссылка собирается правильно', () => {
+    expect(ссылкаНаВерсию('https://waystea.ru/sklad/', 'новая')).toBe(
+      'https://waystea.ru/sklad/?v=new',
+    );
+    expect(ссылкаНаВерсию('https://waystea.ru/sklad/?a=1', 'старая')).toBe(
+      'https://waystea.ru/sklad/?a=1&v=old',
+    );
   });
 });
 

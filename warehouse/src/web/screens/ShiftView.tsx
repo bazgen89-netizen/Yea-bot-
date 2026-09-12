@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   infoValue: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   tabs: { flexDirection: 'row', marginTop: 10 },
   tab: { paddingHorizontal: 22, paddingVertical: 11, borderWidth: 1, borderColor: web.border },
-  tabOn: { backgroundColor: '#FFFFFF', borderBottomColor: '#FFFFFF' },
+  tabOn: { backgroundColor: web.bg, borderBottomColor: '#FFFFFF' },
   tabLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
   tabLabelOn: { color: web.text },
   blocks: { gap: 10 },

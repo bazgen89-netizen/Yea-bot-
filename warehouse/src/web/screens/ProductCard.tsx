@@ -1156,7 +1156,7 @@ function round2(value: number): number {
 const styles = StyleSheet.create({
   // Внутри панели заголовок стоит над листом формы, а не на сером поле:
   // `.cs_container > .content .panel` у него теряет тень и поля страницы.
-  screen: { backgroundColor: '#FFFFFF', paddingTop: 22 },
+  screen: { backgroundColor: web.bg, paddingTop: 22 },
   spacer: { flex: 1 },
 
   types: { flexDirection: 'row', gap: 14, marginBottom: 14 },

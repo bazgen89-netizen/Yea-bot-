@@ -10,6 +10,7 @@ import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
 import { полосыГрадиента } from '../domain/градиент';
+import { версияКабинета, темаКабинета, переключитьТему } from '../ui/версияКабинета';
 
 /**
  * Шапка кабинета: логотип, название раздела, кнопка кассира и значки справа.
@@ -99,6 +100,22 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
         <HeaderButton label={t('Смены')} onPress={() => router.push('/shifts')}>
           <WebIcon.calendar color={web.headerText} />
         </HeaderButton>
+
+        {/* Тёмный вид — только в новом кабинете, как и у них: в прежнем
+            такого переключателя нет вовсе. Стоит на том же месте — луной
+            в шапке, рядом с колокольчиком. */}
+        {версияКабинета() === 'новая' ? (
+          <HeaderButton
+            label={темаКабинета() === 'тёмная' ? t('Светлый вид') : t('Тёмный вид')}
+            onPress={() => переключитьТему()}
+          >
+            {темаКабинета() === 'тёмная' ? (
+              <WebIcon.sun color={web.headerText} />
+            ) : (
+              <WebIcon.moon color={web.headerText} />
+            )}
+          </HeaderButton>
+        ) : null}
 
         <HeaderButton label={t('Уведомления')} onPress={() => router.push('/lab')}>
           <WebIcon.bell color={web.headerText} />

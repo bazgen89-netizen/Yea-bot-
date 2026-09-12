@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     fontFamily: WEB_FONT,
     fontSize: 14,
     color: web.text,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
 
   titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
     fontFamily: WEB_FONT,
     fontSize: 15,
     color: web.text,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     lineHeight: 40,
   },
   right: { textAlign: 'right' },

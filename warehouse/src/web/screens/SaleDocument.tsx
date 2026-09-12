@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(34,36,38,0.15)',
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   toolGreen: { backgroundColor: web.green, borderColor: web.green },
   toolDanger: { borderColor: web.danger },
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: FORM_BORDER,
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   searchInput: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
 

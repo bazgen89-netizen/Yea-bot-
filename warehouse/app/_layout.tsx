@@ -10,6 +10,7 @@ import { PosSettingsProvider } from '../src/state/PosSettingsProvider';
 import { ScannerProvider } from '../src/state/ScannerProvider';
 import { colors, followSystemTheme } from '../src/ui/theme';
 import { useDesktop } from '../src/ui/useDesktop';
+import { web } from '../src/ui/webTheme';
 import { Shell } from '../src/web/Shell';
 
 export default function RootLayout() {
@@ -54,7 +55,10 @@ function Screens() {
         headerStyle: { backgroundColor: colors.primary },
         headerTintColor: colors.primaryText,
         headerTitleStyle: { fontWeight: '600' },
-        contentStyle: { backgroundColor: colors.bg },
+        // В кабинете подложку задаёт его палитра, а не телефонная: иначе в
+        // тёмном виде из-под экрана светит белый прямоугольник во всю
+        // рабочую область.
+        contentStyle: { backgroundColor: desktop ? web.pageBg : colors.bg },
         headerShown: !desktop,
       }}
     >

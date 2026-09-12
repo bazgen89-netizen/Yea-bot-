@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   menu: {
     position: 'absolute',
     width: 292,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderRadius: 4,
     paddingVertical: 6,
     shadowColor: '#000000',

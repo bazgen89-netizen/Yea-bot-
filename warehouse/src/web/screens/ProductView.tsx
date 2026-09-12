@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: web.border,
   },
-  tabOn: { backgroundColor: '#FFFFFF', borderBottomColor: '#FFFFFF' },
+  tabOn: { backgroundColor: web.bg, borderBottomColor: '#FFFFFF' },
   tabLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
   tabLabelOn: { color: web.text },
   info: { marginTop: 22, gap: 12 },

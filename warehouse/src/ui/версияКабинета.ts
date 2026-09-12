@@ -109,6 +109,67 @@ export function переключитьВерсию(на: ВерсияКабин�
   return true;
 }
 
+/**
+ * Тёмный вид — только у нового кабинета.
+ *
+ * Так и у них: в прежнем кабинете переключателя нет вовсе, в новом он стоит
+ * в шапке луной, рядом с колокольчиком, и запоминается в `cs:theme`.
+ */
+export type ТемаКабинета = 'светлая' | 'тёмная';
+
+const КЛЮЧ_ТЕМЫ = 'wayshop:тема-кабинета';
+
+export function темаКабинета(): ТемаКабинета {
+  // В прежнем виде тёмной темы нет — как и у них.
+  if (версияКабинета() !== 'новая') return 'светлая';
+
+  const изАдреса = темаИзАдреса();
+  if (изАдреса) {
+    try {
+      (globalThis as { localStorage?: Storage }).localStorage?.setItem(КЛЮЧ_ТЕМЫ, изАдреса);
+    } catch {
+      // Не запомнилось — покажем хотя бы сейчас.
+    }
+    return изАдреса;
+  }
+
+  try {
+    const хранилище = (globalThis as { localStorage?: Storage }).localStorage;
+    return хранилище?.getItem(КЛЮЧ_ТЕМЫ) === 'тёмная' ? 'тёмная' : 'светлая';
+  } catch {
+    return 'светлая';
+  }
+}
+
+function темаИзАдреса(): ТемаКабинета | null {
+  const адрес = (globalThis as { location?: Location }).location;
+  const строка = `${адрес?.search ?? ''}${адрес?.hash ?? ''}`;
+  if (!строка) return null;
+
+  const найдено = /[?&#](?:тема|theme|t)=([^&#]+)/i.exec(строка);
+  if (!найдено) return null;
+
+  const слово = decodeURIComponent(найдено[1]).toLowerCase();
+  if (слово === 'тёмная' || слово === 'темная' || слово === 'dark') return 'тёмная';
+  if (слово === 'светлая' || слово === 'light') return 'светлая';
+  return null;
+}
+
+/** Переключить тёмное на светлое и обратно, с перечитыванием страницы. */
+export function переключитьТему(на?: ТемаКабинета): boolean {
+  const куда = на ?? (темаКабинета() === 'тёмная' ? 'светлая' : 'тёмная');
+  try {
+    const хранилище = (globalThis as { localStorage?: Storage }).localStorage;
+    if (!хранилище) return false;
+    хранилище.setItem(КЛЮЧ_ТЕМЫ, куда);
+  } catch {
+    return false;
+  }
+
+  (globalThis as { location?: Location }).location?.reload();
+  return true;
+}
+
 /** Адрес, открыв который попадаешь сразу в нужную версию. */
 export function ссылкаНаВерсию(адресСайта: string, версия: ВерсияКабинета): string {
   const разделитель = адресСайта.includes('?') ? '&' : '?';

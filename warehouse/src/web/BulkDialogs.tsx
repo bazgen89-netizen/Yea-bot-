@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: 460,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderRadius: 6,
     padding: 24,
     gap: 12,

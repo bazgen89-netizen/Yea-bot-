@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon } from '../../src/ui/icons';
 import { colors, radius, shadow, spacing } from '../../src/ui/theme';
 import { useDesktop } from '../../src/ui/useDesktop';
+import { web } from '../../src/ui/webTheme';
 
 /**
  * Круглая кнопка создания в центре нижней панели. Это не вкладка: она не
@@ -37,7 +38,7 @@ export default function TabsLayout() {
         tabBarStyle: desktop ? { display: 'none' } : styles.bar,
         tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
-        sceneStyle: { backgroundColor: colors.bg },
+        sceneStyle: { backgroundColor: desktop ? web.pageBg : colors.bg },
       }}
     >
       <Tabs.Screen

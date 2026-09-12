@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F8FA',
   },
   previewTag: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: '#B0B4B8',
     padding: 4,

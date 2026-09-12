@@ -115,10 +115,10 @@ export function DrawerButton({
 }
 
 const TONE = StyleSheet.create({
-  plain: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: 'rgba(34,36,38,0.15)' },
+  plain: { backgroundColor: web.bg, borderWidth: 1, borderColor: 'rgba(34,36,38,0.15)' },
   green: { backgroundColor: web.green },
-  orangeOutline: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: web.orange },
-  dangerOutline: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: web.danger },
+  orangeOutline: { backgroundColor: web.bg, borderWidth: 1, borderColor: web.orange },
+  dangerOutline: { backgroundColor: web.bg, borderWidth: 1, borderColor: web.danger },
 });
 
 const TONE_TEXT = StyleSheet.create({
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   panel: {
     height: '100%',
     maxWidth: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     // `box-shadow: -10px 0 15px -5px rgba(0,0,0,.1)` — тень падает влево, на
     // таблицу, из которой панель выехала.
     shadowColor: '#000000',
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: web.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   back: {
     width: 36,

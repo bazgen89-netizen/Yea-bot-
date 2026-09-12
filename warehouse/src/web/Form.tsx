@@ -384,7 +384,7 @@ export function Notice({ title, children }: { title?: string; children: ReactNod
 }
 
 const styles = StyleSheet.create({
-  panel: { backgroundColor: '#FFFFFF', paddingVertical: 35, paddingHorizontal: 100 },
+  panel: { backgroundColor: web.bg, paddingVertical: 35, paddingHorizontal: 100 },
   heading: {
     fontFamily: WEB_FONT,
     fontSize: 18,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     fontFamily: WEB_FONT,
     fontSize: 14,
     color: web.text,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   inputWithUnit: { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 },
   inputDisabled: { backgroundColor: '#FAFAFA', color: web.textMuted },
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     borderColor: FORM_BORDER,
     borderTopRightRadius: 4,
     borderBottomRightRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   unitText: { fontFamily: WEB_FONT, fontSize: 14, color: 'rgba(0,0,0,0.6)' },
 
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     width: 21,
     height: 21,
     borderRadius: 11,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: 'rgba(34,36,38,0.15)',
   },
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   chip: {
     flexDirection: 'row',
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: FORM_BORDER,
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     overflow: 'hidden',
   },
   suggestItem: { paddingHorizontal: 12, paddingVertical: 9 },

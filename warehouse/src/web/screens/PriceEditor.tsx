@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderBottomWidth: 1,
     borderBottomColor: FORM_BORDER,
   },
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: web.text,
     textAlign: 'right',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
 
   empty: { fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted, padding: 40 },

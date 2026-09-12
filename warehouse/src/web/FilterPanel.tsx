@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     width: 420,
     maxHeight: 560,
     zIndex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: web.border,
     borderRadius: 3,

@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: web.pageBg },
   content: { padding: 26, gap: 20 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: web.border,
     borderRadius: 3,

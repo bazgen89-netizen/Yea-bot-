@@ -4,6 +4,8 @@ import {
   подписьПерехода,
   переключитьВерсию,
   ссылкаНаВерсию,
+  темаКабинета,
+  переключитьТему,
 } from '../../ui/версияКабинета';
 
 /**
@@ -151,6 +153,78 @@ describe('версия прямо в адресе', () => {
     expect(ссылкаНаВерсию('https://waystea.ru/sklad/?a=1', 'старая')).toBe(
       'https://waystea.ru/sklad/?a=1&v=old',
     );
+  });
+});
+
+describe('тёмный вид', () => {
+  const былоХранилище = (globalThis as { localStorage?: Storage }).localStorage;
+  const былАдрес = (globalThis as { location?: Location }).location;
+  let склад: Record<string, string>;
+
+  const адрес = (строка: string) =>
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      // `reload` здесь пустышка: в тестах страницу перечитывать нечем, а
+      // проверяем мы то, что записалось, — с этого и начнётся новая загрузка.
+      value: { search: строка, hash: '', reload: () => undefined },
+    });
+
+  beforeEach(() => {
+    склад = {};
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (к: string) => склад[к] ?? null,
+        setItem: (к: string, з: string) => {
+          склад[к] = з;
+        },
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      },
+    });
+    адрес('');
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: былоХранилище });
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: былАдрес });
+  });
+
+  it('в прежнем кабинете тёмного вида нет вовсе — как и у них', () => {
+    склад['wayshop:версия-кабинета'] = 'старая';
+    склад['wayshop:тема-кабинета'] = 'тёмная';
+
+    expect(темаКабинета()).toBe('светлая');
+  });
+
+  it('в новом — включается и запоминается', () => {
+    склад['wayshop:версия-кабинета'] = 'новая';
+    expect(темаКабинета()).toBe('светлая');
+
+    переключитьТему();
+    expect(темаКабинета()).toBe('тёмная');
+
+    переключитьТему();
+    expect(темаКабинета()).toBe('светлая');
+  });
+
+  it('задаётся и ссылкой', () => {
+    склад['wayshop:версия-кабинета'] = 'новая';
+    for (const хвост of ['?t=dark', '?тема=тёмная', '?theme=DARK']) {
+      адрес(хвост);
+      expect(темаКабинета()).toBe('тёмная');
+    }
+
+    адрес('?t=light');
+    expect(темаКабинета()).toBe('светлая');
+  });
+
+  it('ссылка сразу и на новый вид, и на тёмный', () => {
+    адрес('?v=new&t=dark');
+    expect(версияКабинета()).toBe('новая');
+    expect(темаКабинета()).toBe('тёмная');
   });
 });
 

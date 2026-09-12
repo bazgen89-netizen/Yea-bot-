@@ -190,6 +190,12 @@ export const WebIcon = {
     <MaterialCommunityIcons name="barcode" size={p.size ?? 24} color={p.color} />
   ),
   calendar: (p: Props) => <Ionicons name="calendar-outline" size={p.size ?? 22} color={p.color} />,
+  /**
+   * Луна и солнце — переключатель тёмного вида в шапке нового кабинета.
+   * У них на этом месте стоит именно луна, рядом с колокольчиком.
+   */
+  moon: (p: Props) => <Ionicons name="moon-outline" size={p.size ?? 22} color={p.color} />,
+  sun: (p: Props) => <Ionicons name="sunny-outline" size={p.size ?? 22} color={p.color} />,
   // В исходном кабинете это «alarm outline», а не колокольчик уведомлений.
   bell: (p: Props) => <Ionicons name="alarm-outline" size={p.size ?? 22} color={p.color} />,
 

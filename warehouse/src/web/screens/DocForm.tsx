@@ -880,7 +880,7 @@ const styles = StyleSheet.create({
   postedLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   track: { width: 49, height: 21, borderRadius: 11, backgroundColor: '#D4D4D5', padding: 2 },
   trackOn: { backgroundColor: web.green },
-  knob: { width: 17, height: 17, borderRadius: 9, backgroundColor: '#FFFFFF' },
+  knob: { width: 17, height: 17, borderRadius: 9, backgroundColor: web.bg },
   knobOn: { transform: [{ translateX: 30 }] },
 
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

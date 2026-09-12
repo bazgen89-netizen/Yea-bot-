@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     // Две карточки в ряд — его сетка `ui two cards`.
     width: 420,
     maxWidth: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: web.border,
     borderRadius: 4,

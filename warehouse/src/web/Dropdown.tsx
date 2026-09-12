@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     borderColor: FORM_BORDER,
     borderRadius: 4,
     paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
   },
   fieldText: { flex: 1, fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   placeholder: { color: web.textMuted },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     // она оказывается поверх списка.
     zIndex: 1,
     maxHeight: 320,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: web.border,
     borderRadius: 3,

@@ -1,0 +1,66 @@
+name: Warehouse web
+
+# Собирает веб-версию склада и выкладывает её на GitHub Pages —
+# постоянный публичный адрес, который можно открыть с любого телефона.
+#
+# Один раз включите Pages: Settings → Pages → Build and deployment →
+# Source: GitHub Actions. После этого адрес появляется здесь же.
+
+on:
+  push:
+    branches:
+      - claude/warehouse-management-app-i7jnvr
+      - main
+    paths:
+      - 'warehouse/**'
+      - '.github/workflows/warehouse-pages.yml'
+  workflow_dispatch:
+
+# Страница читается всеми, писать в Pages разрешаем только этому запуску.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные выкладки не нужны: важна последняя.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: warehouse
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: warehouse/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build single-file web app
+        run: npm run web:build
+
+      - name: Check the page is self-contained
+        run: test -f dist/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: warehouse/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

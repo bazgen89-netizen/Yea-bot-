@@ -1,0 +1,36 @@
+name: Warehouse
+
+on:
+  push:
+    paths:
+      - 'warehouse/**'
+      - '.github/workflows/warehouse.yml'
+  pull_request:
+    paths:
+      - 'warehouse/**'
+      - '.github/workflows/warehouse.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: warehouse
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: warehouse/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test

@@ -1,0 +1,386 @@
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../Translated';
+
+import { InlineFilter, type FilterValue, type InlineField } from '../InlineFilter';
+import { CELL, Column, HeadRow, Row, Toolbar } from '../Table';
+import { MoneyDocumentDrawer } from './MoneyDocument';
+import { PartyCard } from './PartyCard';
+import {
+  formatDay,
+  formatTime,
+  groupMoneyByDay,
+  lastMoneyDay,
+  listMoney,
+  moneyOptions,
+  moneyTitle,
+  type MoneyEntry,
+  type MoneyFilter as MoneyFilterInput,
+} from '../../db/journal';
+import { findCounterpartyByName } from '../../db/counterparties';
+import type { MoneySource, MoneyType } from '../../db/money';
+import { weekEndingAt } from '../../domain/calendar';
+import { formatMoneyWeb } from '../../domain/money';
+import { useDatabase, useQuery } from '../../state/DatabaseProvider';
+import { WebIcon } from '../../ui/icons';
+import { web, webText, WEB_FONT } from '../../ui/webTheme';
+
+/**
+ * Поле «тип».
+ *
+ * У него в отборе движения денег ровно два значения и в таком порядке:
+ * `{name:"EXPENSE",_id:"credit"}`, `{name:"INCOME",_id:"debit"}` — «Расход»
+ * и «Приход». Перевода между счетами в отборе нет: у него перевод — это
+ * пара «расход со счёта» и «приход на счёт», и в списке он виден дважды.
+ * У нас перевод хранится одной записью, поэтому третье слово оставлено:
+ * без него перевод не отобрать вовсе.
+ */
+const TYPES = [
+  { value: 'expense', label: 'Расход' },
+  { value: 'income', label: 'Приход' },
+  { value: 'transfer', label: 'Перевод' },
+];
+
+/**
+ * Поле «статус» — его `DOCUMENT_IS_APPLIED` и `DOCUMENT_IS_DELAYED`.
+ *
+ * В движении денег он подписывает статус длиннее, чем в движении товара:
+ * там «Проведён», а здесь «Документ проведён». Это его слова, не мои.
+ *
+ * Отложенных денежных документов у нас пока не бывает — приход и расход
+ * заводятся сразу проведёнными, — поэтому отбор «Документ не проведён»
+ * честно показывает пусто.
+ */
+const STATUS = [
+  { value: 'posted', label: 'Документ проведён' },
+  { value: 'draft', label: 'Документ не проведён' },
+];
+
+/**
+ * Ширины — из их же таблицы стилей, как и в движении товара:
+ * `.table.order-table tr td[data-name=…]` — статус 60, название 180,
+ * дата 80, суммы 110, контрагент, счёт, категория и автор по 180.
+ */
+const COLUMNS: Column[] = [
+  { key: 'order', title: 'Заказ', width: 180 },
+  { key: 'time', title: 'Время', width: 80 },
+  { key: 'income', title: 'Приход, руб', width: 110 },
+  { key: 'expense', title: 'Расход, руб', width: 110 },
+  { key: 'party', title: 'Контрагент', width: 180 },
+  { key: 'account', title: 'Счёт', width: 180 },
+  { key: 'category', title: 'Категория платежа', width: 180 },
+  { key: 'author', title: 'Автор', width: 180 },
+];
+
+/** «Движение денег» — журнал кабинета. */
+export function MoneyTable() {
+  const router = useRouter();
+  const { db } = useDatabase();
+  /** Открытый ордер — панелью поверх списка. */
+  const [openDoc, setOpenDoc] = useState<{ id: number; source: MoneySource } | null>(null);
+  /** Открытая карточка контрагента — панелью поверх списка. */
+  const [partyOpen, setPartyOpen] = useState<number | null>(null);
+
+  const last = useQuery((db) => lastMoneyDay(db));
+  const [values, setValues] = useState<Record<string, FilterValue>>(() => {
+    const { from, to } = weekEndingAt(last);
+    return { dateFrom: from, dateTo: to };
+  });
+
+  const filter = useMemo<MoneyFilterInput>(
+    () => ({
+      search: values.search as string | undefined,
+      from: values.dateFrom as string | undefined,
+      to: values.dateTo as string | undefined,
+      account: values.account as string | undefined,
+      counterparty: values.counterparty as string | undefined,
+      author: values.author as string | undefined,
+      category: values.category as string | undefined,
+      types: values.type ? ([values.type] as MoneyType[]) : undefined,
+      status: values.status as 'posted' | 'draft' | undefined,
+    }),
+    [values],
+  );
+
+  const entries = useQuery((db) => listMoney(db, 500, filter), [filter]);
+  const options = useQuery((db) => moneyOptions(db));
+
+  /**
+   * Поля отбора — его набор из `moneyCtrl.filter.fields`, в его порядке:
+   * поиск, дата, счёт, контрагент, автор, статус, тип, категория. В строке
+   * с самого начала стоят поиск, статус и тип (у него `show: true`) и дата
+   * — у неё значение по умолчанию.
+   *
+   * «Категория» у него названа `CATEGORY` — «Категория»; в столбце таблицы
+   * то же поле подписано длиннее, «Категория платежа».
+   */
+  const fields: InlineField[] = [
+    {
+      key: 'search',
+      label: 'Поиск по номеру или комментарию',
+      kind: 'text',
+      show: true,
+      required: true,
+      width: 306,
+    },
+    { key: 'date', label: 'Дата', kind: 'date', width: 186 },
+    {
+      key: 'account',
+      label: 'Счёт',
+      kind: 'select',
+      width: 196,
+      options: options.accounts.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'counterparty',
+      label: 'Контрагент',
+      kind: 'select',
+      width: 196,
+      options: options.counterparties.map((value) => ({ value, label: value })),
+    },
+    {
+      key: 'author',
+      label: 'Автор',
+      kind: 'select',
+      width: 168,
+      options: options.authors.map((value) => ({ value, label: value })),
+    },
+    { key: 'status', label: 'Статус', kind: 'select', show: true, width: 196, options: STATUS },
+    { key: 'type', label: 'Тип', kind: 'select', show: true, options: TYPES },
+    {
+      key: 'category',
+      label: 'Категория',
+      kind: 'select',
+      width: 196,
+      options: options.categories.map((value) => ({ value, label: value })),
+    },
+  ];
+
+  const groups = groupMoneyByDay(entries);
+  const set = (key: string, value: FilterValue) =>
+    setValues((current) => ({ ...current, [key]: value }));
+
+  /**
+   * Что открывает строка.
+   *
+   * В их таблице (`js/components/money-table/_view.html`) на
+   * `card.money_show({orderId})` ведёт **каждая** строка, а не только
+   * заведённая руками: приход по чеку у них тоже ордер.
+   *
+   * И открывается он панелью поверх списка, а не отдельной страницей — в
+   * присланном им адресе стоит `card/money/m/money/show/…`, и кусок `/m/`
+   * это их «панель». Список остаётся слева: закрыл — и ты там же, где был,
+   * с тем же отбором и тем же местом прокрутки.
+   */
+  const open = (entry: MoneyEntry) => setOpenDoc({ id: entry.id, source: entry.source });
+
+  return (
+    <View style={styles.screen}>
+      <Toolbar>
+        {/* Отбор — строкой полей, как у него: поиск, дата, статус, тип, а
+            за кнопкой «Фильтр» остальные — счёт, контрагент, автор,
+            категория. Выбрал поле из списка — оно встало в строку и
+            открылось; крестик убирает его обратно в список. */}
+        <InlineFilter fields={fields} values={values} onChange={set} />
+      </Toolbar>
+
+      {openDoc ? (
+        <MoneyDocumentDrawer
+          id={openDoc.id}
+          source={openDoc.source}
+          onClose={() => setOpenDoc(null)}
+        />
+      ) : null}
+
+      {partyOpen !== null ? (
+        <PartyCard id={partyOpen} kind="customer" onClose={() => setPartyOpen(null)} />
+      ) : null}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.table}
+        // Без `flexGrow` содержимое горизонтальной прокрутки не получает
+        // высоты, и вложенная вертикальная прокрутка растёт по содержимому —
+        // тогда последние строки уезжают под подвал.
+        contentContainerStyle={styles.tableContent}
+      >
+        <View style={styles.tableInner}>
+          <HeadRow
+            columns={COLUMNS}
+            celled
+            lead={
+              <View style={styles.statusHead}>
+                <Text style={webText.column}>Статус</Text>
+              </View>
+            }
+          />
+
+          <ScrollView style={styles.body}>
+            {groups.map((group) => (
+              <View key={group.day}>
+                <Text style={styles.day}>{formatDay(group.day)}</Text>
+                {group.entries.map((entry) => (
+                  <MoneyRow
+                    key={`${entry.source}${entry.id}`}
+                    entry={entry}
+                    onOpen={() => open(entry)}
+                    onParty={() => {
+                      // Карточка панелью, а не список и не телефонный экран:
+                      // синее имя должно открывать именно карточку.
+                      const party =
+                        entry.counterparty_id ??
+                        (entry.counterparty ? findCounterpartyByName(db, entry.counterparty) : null);
+
+                      if (party) setPartyOpen(party);
+                      else router.push('/counterparties');
+                    }}
+                    onAccount={() => router.push('/accounts')}
+                    onAuthor={() => router.push('/staff')}
+                  />
+                ))}
+              </View>
+            ))}
+
+            {groups.length === 0 ? (
+              <Text style={styles.empty}>
+                {values.search ? 'Ничего не нашлось' : 'Движения денег пока нет'}
+              </Text>
+            ) : null}
+          </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Полоска слева: приход зелёный, расход красный, перевод синий. */
+const STRIPE: Record<MoneyEntry['type'], string> = {
+  income: web.stripeMoney,
+  expense: web.danger,
+  transfer: web.link,
+};
+
+/**
+ * Строка движения денег.
+ *
+ * Синие столбцы ведут ровно туда же, куда у него: контрагент — в его
+ * карточку (`item.contragent.go()`), счёт — на счета
+ * (`card.account_show`), автор — в сотрудников (`card.profile`). Сама
+ * строка открывает документ.
+ */
+function MoneyRow({
+  entry,
+  onOpen,
+  onParty,
+  onAccount,
+  onAuthor,
+}: {
+  entry: MoneyEntry;
+  onOpen: () => void;
+  onParty: () => void;
+  onAccount: () => void;
+  onAuthor: () => void;
+}) {
+  const [order, time, income, expense, party, account, category, author] = COLUMNS;
+  const stripe = STRIPE[entry.type];
+
+  return (
+    <View style={styles.rowWrap}>
+      <View style={[styles.stripe, { backgroundColor: stripe }]} />
+
+      <View style={styles.rowInner}>
+        <Row onPress={onOpen} celled>
+          {/* Галочка синяя у всех, цветом отличается только полоска слева:
+              так в их разметке — `ng-class="{red: credit, green: debit}"`
+              на полоске и `color: '#4183C4'` на галочке. Я красил галочку
+              в цвет полоски, и красная галочка у расхода читалась как
+              «что-то не так с документом». */}
+          <View style={styles.status}>
+            <WebIcon.done color={web.link} />
+          </View>
+
+          {/* Название ордера и значок комментария рядом — как в их
+              movement-таблице денег: тот же `<i class="comment icon">`, что и
+              в движении товара. У прихода по чеку комментарий — это
+              комментарий самого чека. */}
+          <View style={[styles.orderCell, { width: order.width }, styles.cell]}>
+            <Text style={webText.rowLink} numberOfLines={1}>
+              {moneyTitle(entry)}
+            </Text>
+            {entry.note ? (
+              <View accessibilityLabel={`Комментарий: ${entry.note}`}>
+                <WebIcon.comment size={13} color="rgba(0,0,0,0.3)" />
+              </View>
+            ) : null}
+          </View>
+          <Text style={[webText.rowNumber, { width: time.width }, styles.cell]}>
+            {formatTime(entry.created_at)}
+          </Text>
+          <Text style={[webText.rowNumber, { width: income.width }, styles.cell]}>
+            {entry.income ? formatMoneyWeb(entry.income) : ''}
+          </Text>
+          <Text style={[webText.rowNumber, { width: expense.width }, styles.cell]}>
+            {entry.expense ? formatMoneyWeb(entry.expense) : ''}
+          </Text>
+          <Text
+            accessibilityRole="link"
+            style={[webText.rowLink, { width: party.width }, styles.cell]}
+            numberOfLines={1}
+            onPress={onParty}
+          >
+            {entry.counterparty}
+          </Text>
+          <Text
+            accessibilityRole="link"
+            style={[webText.rowLink, { width: account.width }, styles.cell]}
+            numberOfLines={1}
+            onPress={onAccount}
+          >
+            {entry.account}
+          </Text>
+          <Text style={[webText.rowCell, { width: category.width }, styles.cell]} numberOfLines={1}>
+            {entry.category}
+          </Text>
+          {/* Автор — тот, кто провёл документ. Раньше здесь стояло слово
+              «waystea» прямо в разметке, у всех строк одинаково. */}
+          <Text
+            accessibilityRole={entry.author ? 'link' : 'text'}
+            style={[webText.rowLink, { width: author.width }, styles.cell]}
+            numberOfLines={1}
+            onPress={entry.author ? onAuthor : undefined}
+          >
+            {entry.author ?? ''}
+          </Text>
+        </Row>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: web.bg },
+  /**
+   * Ячейка с линией справа — как у него в `celled`-таблице.
+   *
+   * Без `justifyContent`: у ячейки суммы направление строкой (число и значок
+   * «%»), и выравнивание по центру согнало бы числа к середине столбца. У
+   * него они стоят по левому краю.
+   */
+  cell: { ...CELL },
+  orderCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  /** Лента кончается над подвалом, а не уходит под него. */
+  table: { flex: 1 },
+  tableContent: { flexGrow: 1 },
+  tableInner: { flex: 1 },
+  body: { flex: 1 },
+  statusHead: { width: 60, justifyContent: 'center', alignItems: 'center', ...CELL },
+  day: { fontFamily: WEB_FONT, fontSize: 20, color: web.text, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 10 },
+  rowWrap: { flexDirection: 'row', position: 'relative' },
+  /** Их `i.indicator`: `top:4 bottom:4 left:4 width:4 radius:2`. */
+  stripe: { position: 'absolute', top: 4, bottom: 4, left: 4, width: 4, borderRadius: 2 },
+  rowInner: { flex: 1 },
+  status: { width: 60, alignItems: 'center', justifyContent: 'center', ...CELL },
+  empty: { padding: 40, fontFamily: WEB_FONT, fontSize: 15, color: web.textMuted },
+});

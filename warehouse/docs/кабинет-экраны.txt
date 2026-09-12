@@ -1,0 +1,137 @@
+состояний: 135 
+
+authenticated.card.doc                                     /doc                                 Документы
+authenticated.card.doc.edit                                /show/:id                            Редактирование документа
+authenticated.card.doc_create                              /docs?save                           Создание документа
+authenticated.card.doc_create.sell                         /sell?fromDoc                        Продажа
+authenticated.card.doc_create.purchase                     /purchase?fromDoc                    Закупка
+authenticated.card.doc_create.return_sell                  /return-sell?fromDoc                 Возврат продажи
+authenticated.card.doc_create.return_purchase              /return-purchase?fromDoc             Возврат закупки
+authenticated.card.doc_create.changes                      /changes?fromDoc                     Корректировка
+authenticated.card.doc_create.changes_inventory            /changes-inventory                   Инвентаризация
+authenticated.card.doc_create.changes_in                   /changes-in?fromDoc                  Оприходование
+authenticated.card.doc_create.changes_out                  /changes-out?fromDoc                 Списание
+authenticated.card.doc_create.moving                       /moving?fromDoc                      Перемещение
+authenticated.card.company                                 /company                             Компания
+authenticated.card.company.settings                        /company/settings                    Настройки
+authenticated.card.company.settings.main                   /main/                               Настройки компании
+authenticated.card.company.settings.requisites             /requisites/                         Реквизиты
+authenticated.card.company.settings.taxes                  /taxes/                              Налоги
+authenticated.card.company.settings.newsletter             /daily-report/                       Email-отчет
+authenticated.card.company.settings.data                   /data/                               Данные
+authenticated.card.company_requisites_sidebar              /requisites-s/                       Реквизиты компании
+authenticated.card.company.staff                           /staff/                              Сотрудники
+authenticated.card.company.stores                          /stores/                             Магазины
+authenticated.card.company.accounts                        /accounts/                           Счета
+authenticated.card.company.loyalty                         /loyalty                             Лояльность
+authenticated.card.company.loyalty.bonus                   /bonus                               Бонусная система
+authenticated.card.company.loyalty.discounts               /discounts                           Скидки
+authenticated.card.register.cash                           /cash                                Кассы
+authenticated.card.register.download                       /download                            Скачать программу
+authenticated.card.register.addBox                         /add                                 Создание кассы
+authenticated.card.register.editBox                        /edit/:register_id                   Редактирование кассы
+authenticated.card.register.showBox                        /show/:register_id                   Просмотр кассы
+authenticated.card.register.shift                          /shift                               Смены
+authenticated.card.register.showShift                      /show-shift/:shift_id                Просмотр смены
+authenticated.card.integrations                                                                 Интеграции
+authenticated.card.integrations.list                       /integrations/                       Интеграции
+authenticated.card.integrations.item                       /integrations/:pluginName?tab        Настройки
+authenticated.card.integrations.installedItem              /integrations/installed/:pluginId    Настройки
+authenticated.card.integrations.log                        /integrations/log/:pluginId          Журнал действий
+authenticated.card.doc_print_templates                     /print-templates                     Печатные формы
+authenticated.card.catalog.import                          /import                              Импорт товаров
+authenticated.card.events                                  /events                              Предстоящие события
+authenticated.card.supplier                                /supplier                            Поставщики
+authenticated.card.supplier_add                            /suppliers/add                       Создание поставщика
+authenticated.card.supplier_show                           /suppliers/show/:suppliers_id        Просмотр поставщика
+authenticated.card.supplier_edit                           /suppliers/edit/:suppliers_id        Редактирование поставщика
+authenticated.card.reports                                 /reports                             Отчеты
+authenticated.card.reports_product                         /reports/product                     Отчеты
+authenticated.card.reports_categories                      /reports/categories                  Отчеты
+authenticated.card.reports_set                             /reports/set                         Отчеты
+authenticated.card.reports_day                             /reports/day                         Отчеты
+authenticated.card.reports_week                            /reports/week                        Отчеты
+authenticated.card.reports_month                           /reports/month                       Отчеты
+authenticated.card.reports_motion                          /reports/motion                      Отчеты
+authenticated.card.reports_agent                           /reports/agent                       Отчеты
+authenticated.card.reports_finance                         /reports/finance                     Отчеты
+authenticated.card.reports_staff                           /reports/staff                       Отчеты
+authenticated.card.reports_stock                           /reports/stock                       Отчеты
+authenticated.card.reports_accounts                        /reports/accounts                    Отчеты
+authenticated.card.report_constructor                      /report-constructor                  Конструктор отчетов
+authenticated.card.report_constructor.history              /report-constructor/history          Просмотр документов
+authenticated.card.journal                                 /journal                             Движение товара
+authenticated.card.journal.item                            /journal/:document_id                Просмотр документа
+authenticated.card.holddocs                                /holddocs                            Непроведенные документы
+authenticated.card.clients                                 /clients                             Клиенты
+authenticated.card.clients_import                          /import                              Импорт клиентов
+authenticated.card.client_add                              /clients/add                         Создание клиента
+authenticated.card.client_show                             /clients/show/:clients_id            Просмотр клиента
+authenticated.card.client_edit                             /clients/edit/:clients_id            Редактирование клиента
+authenticated.card.profile                                 /profile/:staff_id                   Профиль
+authenticated.card.profile_edit                            /profile/edit/:staff_id              Редактирование профиля
+authenticated.card.staff_add                               /staff/add/                          Создание сотрудника
+authenticated.card.staff_edit                              /staff/edit/:staff_id                Редактирование сотрудника
+authenticated.card.support                                 /support/:post                       Открыть справку
+authenticated.card.store_add                               /store/add/                          Создание магазина
+authenticated.card.store_show                              /store/:stores_id                    Просмотр магазина
+authenticated.card.store_edit                              /store/edit/:stores_id               Редактирование магазина
+authenticated.card.catalog                                 /catalog                             Товары и услуги
+authenticated.card.catalog.list                            /list                                Справочник
+authenticated.card.catalog.changePrices                    /list/changeprices                   Редактор цен
+authenticated.card.catalog.get                             /get/:productId                      Просмотр товара
+authenticated.card.catalog.pageHistory                     /history/:productId                  Движение товара
+authenticated.card.catalog.scanner                         /scanner/?type                       Сканирование
+authenticated.card.catalog.category_manager                /category-manager                    Создание категории
+authenticated.card.catalog.create                          /create/?type&group_id               Создание товара
+authenticated.card.catalog.groupcreate                     /group-create/                       Создание группы
+authenticated.card.catalog.groupedit                       /group-edit/:group_id                Редактирование группы
+authenticated.card.catalog.update                          /update/:productId                   Редактирование товара
+authenticated.card.catalog.group                           /group/:tab                          Работа с группой товаров
+authenticated.card.catalog.stock                           /stock/                              Оценка склада
+authenticated.card.account_list                            /accounts/                           Счета
+authenticated.card.account_show                            /account/:accounts_id                Просмотр счёта
+authenticated.card.account_edit                            /account/edit/:accounts_id           Редактирование счёта
+authenticated.card.account_add                             /account/add/                        Создание счёта
+anonymous.login                                            /login/?action                       Авторизация
+anonymous.register                                         /register/?_partner?hl               Регистрация
+anonymous.passwordReset                                    /reset/                              Восстановление пароля
+anonymous.passwordResetSuccess                             /reset-success-letter/               Проверьте почту
+anonymous.passwordChangeSuccess                            /reset-success-change/               Пароль успешно изменен
+anonymous.passwordResetError                               /reset-error/                        Ошибка
+anonymous.changePassword                                   /new-password/:code/:email           Изменение пароля
+authenticated.card.permission_denied                       /permission-denied/                  Ошибка доступа
+authenticated.card.yandex                                  /yandex                              
+authenticated.card.trash                                   /trash/:category                     Корзина
+authenticated.start                                        /start?signup                        Стартуем!
+authenticated.plugin                                       /plugin/:name                        Приложения
+authenticated.payment                                      /payment?plan                        Тарифы и оплата
+authenticated.payment_archive                              /payment_archive                     Тарифы и оплата
+authenticated.card.laboratory                              /laboratory                          Лаборатория
+authenticated.card.laboratory_production                   /laboratory/production               Лаборатория
+authenticated.card.laboratory_salary                       /laboratory/salary                   Лаборатория
+authenticated.card.money                                   /money                               Движение денег
+authenticated.card.pay_create                              /pay                                 Создание ордера
+authenticated.card.money_show                              /money/show/:orderId                 Просмотр ордера
+authenticated.card.pay_create.cash_parish                  /cash-parish                         Приход
+authenticated.card.pay_create.cash_outflow                 /cash-outflow                        Расход
+authenticated.card.pay_create.cash_transfer                /cash-transfer                       Перевод
+authenticated.card.source_form                             /source-form/:id                     Создание категории платежа
+authenticated.card.gift                                    /gift                                Подарок
+authenticated.card.ecommerce-admin                         /ecommerce-admin                     Интернет-витрина
+authenticated.card.ecommerce.start                         /start/                              Старт
+authenticated.card.ecommerce.theme                         /theme/                              Внешний вид
+authenticated.card.ecommerce.settings.main                 /settings/main                       О магазине
+authenticated.card.ecommerce.settings.domain               /settings/domain                     Настройки витрины
+authenticated.card.ecommerce.settings.products             /settings/products                   товар
+authenticated.card.ecommerce.settings.other                /settings/other                      Другое
+authenticated.card.ecommerce.settings.analytics            /settings/analytics                  Аналитика
+authenticated.dashboard                                    /?signup                             Главная
+authenticated.card.sidebar_history                         /history_sidebar/:query              
+authenticated.card.sidebar_journal                         /journal_sidebar/:query              
+authenticated.card.sidebar_orders                          /orders_sidebar/:query               
+authenticated.card.sidebar_accounts                        /accounts_sidebar/:account_id/:query Детали счета
+authenticated                                                                                   
+authenticated.card                                         /card                                
+anonymous                                                  /anonymous                           
+authenticated.modal                                        /m                                   

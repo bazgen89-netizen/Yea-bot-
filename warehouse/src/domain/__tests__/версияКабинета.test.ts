@@ -228,6 +228,119 @@ describe('тёмный вид', () => {
   });
 });
 
+describe('возврат на страницу, которая откроется', () => {
+  /*
+   * Вазген: «когда я кликаю на солнце, страница обновляется и перекидывает
+   * на ненайденную страницу».
+   *
+   * Так и было. Программа — один файл по адресу папки, а внутренние переходы
+   * меняют адрес в строке браузера на `/sklad/catalog`. Такого файла на
+   * сервере нет, и обычная перезагрузка с внутреннего экрана упиралась в
+   * «не найдено».
+   */
+  const былоХранилище = (globalThis as { localStorage?: Storage }).localStorage;
+  const былАдрес = (globalThis as { location?: Location }).location;
+
+  const поставитьАдрес = (href: string) => {
+    const внутри = new URL(href);
+    let ушлиНа: string | null = null;
+    let перечитали = false;
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: {
+        get href() {
+          return ушлиНа ?? href;
+        },
+        set href(куда: string) {
+          ушлиНа = куда;
+        },
+        search: внутри.search,
+        hash: внутри.hash,
+        reload: () => {
+          перечитали = true;
+        },
+      },
+    });
+    return {
+      кудаУшли: () => ушлиНа,
+      перечитали: () => перечитали,
+      /** Внутренний переход: адрес в строке браузера сменился сам. */
+      перейтиНа: (куда: string) => {
+        ушлиНа = куда;
+      },
+    };
+  };
+
+  const хранилище = () => {
+    const склад: Record<string, string> = {};
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (к: string) => склад[к] ?? null,
+        setItem: (к: string, з: string) => {
+          склад[к] = з;
+        },
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      },
+    });
+    return склад;
+  };
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: былоХранилище });
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: былАдрес });
+    jest.resetModules();
+  });
+
+  it('с внутреннего экрана уводит на адрес папки, а не перезагружает', () => {
+    // Как в жизни: программу открыли по адресу папки…
+    const следы = поставитьАдрес('https://waystea.ru/sklad/');
+    const склад = хранилище();
+    склад['wayshop:версия-кабинета'] = 'новая';
+
+    jest.isolateModules(() => {
+      // …модуль при загрузке этот адрес запомнил…
+      const модуль = require('../../ui/версияКабинета') as typeof import('../../ui/версияКабинета');
+      // …а потом человек ушёл в каталог, и адрес в строке браузера сменился.
+      следы.перейтиНа('https://waystea.ru/sklad/catalog');
+      модуль.переключитьТему();
+    });
+
+    expect(следы.кудаУшли()).toBe('https://waystea.ru/sklad/');
+    expect(следы.перечитали()).toBe(false);
+  });
+
+  it('с самой папки просто перечитывает', () => {
+    const следы = поставитьАдрес('https://waystea.ru/sklad/');
+    хранилище();
+
+    jest.isolateModules(() => {
+      const модуль = require('../../ui/версияКабинета') as typeof import('../../ui/версияКабинета');
+      модуль.переключитьВерсию();
+    });
+
+    expect(следы.кудаУшли()).toBeNull();
+    expect(следы.перечитали()).toBe(true);
+  });
+
+  it('наши хвосты в адресе не тянутся за собой', () => {
+    // Иначе `?v=new` переживал бы переключение обратно и возвращал новый вид.
+    const следы = поставитьАдрес('https://waystea.ru/sklad/?v=new&t=dark&utm=telegram');
+    хранилище();
+
+    jest.isolateModules(() => {
+      const модуль = require('../../ui/версияКабинета') as typeof import('../../ui/версияКабинета');
+      следы.перейтиНа('https://waystea.ru/sklad/journal');
+      модуль.переключитьВерсию('старая');
+    });
+
+    expect(следы.кудаУшли()).toBe('https://waystea.ru/sklad/?utm=telegram');
+  });
+});
+
 describe('когда хранилища нет вовсе', () => {
   const было = (globalThis as { localStorage?: Storage }).localStorage;
 

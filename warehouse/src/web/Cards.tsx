@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: web.bg,
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     overflow: 'hidden',
   },
   dashed: {
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   createLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.text },
 
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     backgroundColor: '#F3F4F5',
   },
   headText: { flex: 1 },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   editButton: { flex: 1, borderColor: web.green },
   editLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.greenText },
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
 
   notice: {
     backgroundColor: '#F8F8F9',
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     paddingHorizontal: 18,
     paddingVertical: 14,
     gap: 6,

@@ -1094,7 +1094,7 @@ const styles = StyleSheet.create({
   },
   statNote: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted },
 
-  historyTabs: { flexDirection: 'row', alignSelf: 'center', borderRadius: 4, overflow: 'hidden' },
+  historyTabs: { flexDirection: 'row', alignSelf: 'center', borderRadius: web.radiusControl, overflow: 'hidden' },
   historyTab: {
     paddingHorizontal: 16,
     paddingVertical: 9,
@@ -1141,7 +1141,7 @@ const styles = StyleSheet.create({
     borderColor: FORM_BORDER,
     borderLeftWidth: 4,
     borderLeftColor: web.link,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     padding: 14,
     marginBottom: 10,
   },
@@ -1224,7 +1224,7 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     paddingHorizontal: 10,
     fontFamily: WEB_FONT,
     fontSize: 14,
@@ -1240,7 +1240,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   removeSign: { fontSize: 13, color: web.textMuted },
 
@@ -1263,7 +1263,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 16,
     backgroundColor: '#F8F8F9',
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   loyaltyLine: { fontFamily: WEB_FONT, fontSize: 13, color: web.textMuted },
 

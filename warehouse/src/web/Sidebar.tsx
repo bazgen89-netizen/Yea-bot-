@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 10,
     height: 38,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginHorizontal: 5,
     marginBottom: 1,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     height: 43,
   },
   // `.smallMenu … .item { padding: 0; height: 40px; margin: 0 5px }`.

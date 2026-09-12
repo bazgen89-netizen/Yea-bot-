@@ -104,6 +104,33 @@ const ПРЕЖНИЙ_КАБИНЕТ = {
   chartAxis: '#B0B0B0',
   chartGrid: '#EFEFEF',
 
+  /**
+   * Ссылка в строке таблицы: название товара, номер документа.
+   *
+   * В прежнем кабинете она синяя, в новом — нет. Замерено у них на строках
+   * каталога и журнала: `rgb(51,65,85)`, то есть обычный тёмный текст.
+   * Пока мы красили её синим, таблицы нового вида пестрели там, где у него
+   * спокойные.
+   */
+  rowLink: '#2185D0',
+
+  /**
+   * Заголовок колонки: размер, начертание и регистр.
+   *
+   * Прежний кабинет: `.fixed-title .ui.table thead th > div` — 0.8em (10 при
+   * базе 14), начертание 400, ПРОПИСНЫМИ. Новый: 12,6 пикселя, начертание
+   * 600 и обычным регистром — замерено у них на `th`.
+   */
+  columnSize: 10,
+  columnWeight: '400' as '400' | '600',
+  columnUpper: true,
+
+  /**
+   * Скругление полей и кнопок. У Semantic UI, на котором собран прежний
+   * кабинет, это `.28571429rem` — 4 при базе 14. У нового замерено 6.
+   */
+  radiusControl: 4,
+
   /** Радиус карточек. В прежнем кабинете углы почти прямые. */
   radius: 4,
   /** Заголовок блока: «Документы», «Оценка склада». */
@@ -161,6 +188,23 @@ const НОВЫЙ_КАБИНЕТ: typeof ПРЕЖНИЙ_КАБИНЕТ = {
   tableHead: '#F8FAFC',
   radius: 12,
   blockTitle: '#0F172A',
+
+  /*
+   * Ссылка на товар у них синяя и в новом виде — замерено на строках
+   * каталога: rgb(29,78,216), 13 пикселей, начертание 500. Сперва я снял
+   * цвет с другой ссылки на той же странице и записал серый — ошибка,
+   * названия товаров именно синие.
+   */
+  rowLink: '#1D4ED8',
+  columnSize: 12.6,
+  columnWeight: '600',
+  columnUpper: false,
+  /*
+   * Кнопка «Создать товар» у них 4 — та же, что в прежнем кабинете. Поля
+   * фильтров при этом 6, но одним числом у нас заданы и кнопки, и поля:
+   * ставим по кнопке, она заметнее.
+   */
+  radiusControl: 4,
 };
 
 /**
@@ -211,6 +255,10 @@ const НОВЫЙ_КАБИНЕТ_ТЁМНЫЙ: typeof ПРЕЖНИЙ_КАБИНЕ
 
   chartAxis: '#94A3B8',
   chartGrid: '#293548',
+
+  // Замерено у них в тёмном каталоге: rgb(147,197,253) — светло-голубая,
+  // не белая и не серая.
+  rowLink: '#93C5FD',
 
   // Предупреждение на тёмном — не бледно-жёлтое, иначе оно светит.
   warningBg: '#3B3320',
@@ -486,11 +534,11 @@ export const webText = StyleSheet.create({
    */
   column: {
     fontFamily: WEB_FONT,
-    fontSize: 10,
-    color: 'rgba(0,0,0,0.87)',
-    fontWeight: '400' as const,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.2,
+    fontSize: web.columnSize,
+    color: web.columnUpper ? 'rgba(0,0,0,0.87)' : web.columnHead,
+    fontWeight: web.columnWeight,
+    textTransform: (web.columnUpper ? 'uppercase' : 'none') as 'uppercase' | 'none',
+    letterSpacing: web.columnUpper ? 0.2 : 0,
   },
   /**
    * Заголовок колонки в отчётах — другой: прописные, синие, без полужирного.
@@ -525,10 +573,10 @@ export const webText = StyleSheet.create({
     color: web.text,
     fontVariant: ['tabular-nums'] as const,
   },
-  rowLink: { fontFamily: WEB_FONT, fontSize: 13, color: web.link },
+  rowLink: { fontFamily: WEB_FONT, fontSize: 13, color: web.rowLink },
   cellNumber: { fontFamily: WEB_FONT, fontSize: 14, color: web.text, fontVariant: ['tabular-nums'] as const },
   /** Название товара, номер документа — 15 пикселей, крупнее остальных ячеек. */
-  link: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },
+  link: { fontFamily: WEB_FONT, fontSize: 15, color: web.rowLink },
   /** Вторая строка в ячейке: артикул, дата, комментарий. */
   cellSmall: { fontFamily: WEB_FONT, fontSize: 11, color: web.textMuted },
 });

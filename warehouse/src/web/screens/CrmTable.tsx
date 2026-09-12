@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     flexBasis: 150,
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     padding: 12,
     gap: 2,
   },

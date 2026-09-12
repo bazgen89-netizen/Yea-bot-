@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   listRemoveSign: { fontSize: 13, color: web.textMuted },
   subTitle: { fontFamily: WEB_FONT, fontSize: 15, fontWeight: '700', color: web.text, marginTop: 10 },

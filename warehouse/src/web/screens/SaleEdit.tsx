@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 42,
     paddingHorizontal: 22,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     borderWidth: 1,
     borderColor: 'rgba(34,36,38,0.15)',
     backgroundColor: web.bg,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     paddingHorizontal: 14,
     fontFamily: WEB_FONT,
     fontSize: 15,
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     backgroundColor: web.bg,
   },
 
-  table: { borderWidth: 1, borderColor: FORM_BORDER, borderRadius: 4, backgroundColor: web.bg },
+  table: { borderWidth: 1, borderColor: FORM_BORDER, borderRadius: web.radiusControl, backgroundColor: web.bg },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

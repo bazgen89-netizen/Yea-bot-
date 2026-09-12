@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   standing: {
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     padding: 12,
     gap: 4,
   },

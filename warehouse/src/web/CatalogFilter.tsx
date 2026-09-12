@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     width: 560,
     maxHeight: '82%',
     backgroundColor: web.bg,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     borderWidth: 1,
     borderColor: web.border,
     shadowColor: '#0B1220',
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     marginTop: 6,
   },
   kind: {
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     color: web.text,
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: web.text,
   },
-  nameInput: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 12 },
+  nameInput: { borderWidth: 1, borderRadius: web.radiusControl, paddingHorizontal: 12 },
   unit: { fontFamily: WEB_FONT, fontSize: 15, color: web.text, width: 54 },
 
   footer: {
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   button: {
     paddingHorizontal: 22,
     paddingVertical: 11,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     borderWidth: 1,
     borderColor: web.border,
     backgroundColor: web.bg,

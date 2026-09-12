@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   firedLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
 
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderWidth: 1,
     borderColor: web.orange,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
   },
   restoreLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.orange },
 });

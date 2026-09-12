@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     height: 38,
     borderWidth: 1,
     borderColor: FORM_BORDER,
-    borderRadius: 4,
+    borderRadius: web.radiusControl,
     paddingHorizontal: 14,
     backgroundColor: web.bg,
   },

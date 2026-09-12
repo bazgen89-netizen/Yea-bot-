@@ -191,7 +191,7 @@ function Curve({
             cx={x(active)}
             cy={y(values[active])}
             r={6}
-            fill="#FFFFFF"
+            fill={web.bg}
             stroke="#2F80C8"
             strokeWidth={3}
           />
@@ -201,7 +201,7 @@ function Curve({
             textAnchor={active > values.length - 5 ? 'end' : 'start'}
             fontSize={15}
             fontWeight={600}
-            fill="#3A3A3A"
+            fill={web.text}
             fontFamily={WEB_FONT}
           >
             {spaced(values[active])}
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   tick: {
     fontFamily: WEB_FONT,
     fontSize: 12,
-    color: '#B0B0B0',
+    color: web.chartAxis,
     fontWeight: '300' as const,
     textAlign: 'right',
   },
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'space-between',
   },
-  gridLine: { height: 1, backgroundColor: '#EFEFEF' },
+  gridLine: { height: 1, backgroundColor: web.chartGrid },
   bars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
   // Ограничение ширины нужно для периода «сегодня»: один столбец на всю
   // ширину графика выглядел бы залитой плашкой, а не данными.
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
   dayCell: { flex: 1 },
-  day: { fontFamily: WEB_FONT, fontSize: 10, color: '#B0B0B0', fontWeight: '300' as const, textAlign: 'center' },
+  day: { fontFamily: WEB_FONT, fontSize: 10, color: web.chartAxis, fontWeight: '300' as const, textAlign: 'center' },
   dayMarked: { color: web.link },
   dayActive: { color: web.text, fontWeight: '700' },
 });

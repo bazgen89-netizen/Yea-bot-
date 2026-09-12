@@ -1,5 +1,7 @@
 import { StyleSheet } from 'react-native';
 
+import { версияКабинета } from './версияКабинета';
+
 /**
  * Палитра веб-кабинета — она своя, не та, что в телефоне.
  *
@@ -7,8 +9,11 @@ import { StyleSheet } from 'react-native';
  * с градиентом, боковое меню белое, кнопки действий зелёные и оранжевые.
  * Смешивать их в одном наборе нельзя: значения снимались с разных экранов,
  * и «поправил синий» в одном месте молча испортило бы другое.
+ *
+ * Ниже — прежний кабинет. Новый лежит в `НОВЫЙ_КАБИНЕТ`, а что показывать,
+ * решает `версияКабинета()`.
  */
-export const web = {
+const ПРЕЖНИЙ_КАБИНЕТ = {
   /**
    * Шапка. В оригинале `linear-gradient(310deg, #01579b, #0288d1)` — значения
    * взяты из его же таблицы стилей, а не подобраны на глаз по скриншоту.
@@ -88,7 +93,68 @@ export const web = {
 
   /** Подложка шапки таблицы — из Semantic UI, на котором собран оригинал. */
   tableHead: '#F9FAFB',
+
+  /** Радиус карточек. В прежнем кабинете углы почти прямые. */
+  radius: 4,
+  /** Заголовок блока: «Документы», «Оценка склада». */
+  blockTitle: '#37474F',
 };
+
+/**
+ * Новый кабинет CloudShop — тот, что живёт на `web-beta.cloudshop.ru`.
+ *
+ * Это не перекраска прежнего, а другой набор: прежний собран на Semantic UI,
+ * новый — на Tailwind, и палитра у него оттуда (slate и blue-600).
+ *
+ * Все значения **замерены на живых элементах** через `getComputedStyle` в их
+ * кабинете, а не сняты пипеткой со снимка и не взяты из головы:
+ *
+ *   header    background-image: linear-gradient(310deg, rgb(30,64,175), rgb(37,99,235))
+ *             высота 46 — та же, что в прежнем
+ *   body      background-color: rgb(248,250,252)
+ *   текст     color: rgb(15,23,42)
+ *   подписи   color: rgb(51,65,85)
+ *   карточка  background rgb(255,255,255), border-radius 12px
+ *   шапка табл. background rgb(248,250,252), 12,6px, начертание 600
+ *   меню      белое, активный пункт — rgba(0,0,0,.12)
+ *   шрифт     Lato (файлы `/assets/LatoLatin-*.woff2` у них свои)
+ *
+ * Чего здесь нет — того, чего я не замерил: полоски журнала, зелёный и
+ * оранжевый кнопок, блок «Внимание». Они остаются прежними, и это честнее,
+ * чем подобрать похожее на глаз и выдать за их цвет.
+ */
+const НОВЫЙ_КАБИНЕТ: typeof ПРЕЖНИЙ_КАБИНЕТ = {
+  ...ПРЕЖНИЙ_КАБИНЕТ,
+
+  headerFrom: '#1E40AF',
+  headerTo: '#2563EB',
+  headerButton: '#3B6FE0',
+
+  sidebarText: '#0F172A',
+  sidebarIcon: '#0F172A',
+  sidebarActive: 'rgba(0,0,0,0.12)',
+  sidebarChild: '#334155',
+  sidebarBorder: '#E2E8F0',
+
+  createButton: '#2563EB',
+  link: '#2563EB',
+
+  pageBg: '#F8FAFC',
+  border: '#E2E8F0',
+  gridLine: '#EEF2F6',
+  rowHover: '#F8FAFC',
+
+  text: '#0F172A',
+  textMuted: '#334155',
+  columnHead: '#0F172A',
+
+  tableHead: '#F8FAFC',
+  radius: 12,
+  blockTitle: '#0F172A',
+};
+
+/** Та палитра, которую человек выбрал в меню. */
+export const web = версияКабинета() === 'новая' ? НОВЫЙ_КАБИНЕТ : ПРЕЖНИЙ_КАБИНЕТ;
 
 /**
  * Экран кассира — отдельное приложение со своей палитрой и своим шрифтом.
@@ -253,9 +319,16 @@ export function applyPosTheme(theme: 'auto' | 'light' | 'dark'): void {
 /**
  * Шрифт кабинета — тот же, что в оригинале.
  * Со шрифтом, отличным от Roboto, не сойдутся ни ширины колонок, ни высоты строк.
+ *
+ * У нового кабинета шрифт другой — Lato, и это не догадка: в их таблице
+ * стилей стоит `font-family: Lato, system-ui, …`, а сам файл они раздают
+ * сами, `/assets/LatoLatin-Regular-*.woff2`. Список запасных — их же,
+ * слово в слово, чтобы при отсутствии Lato подставилось то же, что у них.
  */
 export const WEB_FONT =
-  'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+  версияКабинета() === 'новая'
+    ? 'Lato, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    : 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
 /** Ширина, с которой показываем кабинет вместо телефонной вёрстки. */
 export const DESKTOP_WIDTH = 1000;
@@ -324,9 +397,9 @@ export const webText = StyleSheet.create({
    * Заголовок дашборда. У него он не `h1`, а выпадающий список внутри
    * заголовка, и размер задан явно: 28 пикселей начертанием 300.
    */
-  dashboardTitle: { fontFamily: WEB_FONT, fontSize: 28, color: '#33425B', fontWeight: '300' },
+  dashboardTitle: { fontFamily: WEB_FONT, fontSize: 28, color: web.text, fontWeight: '300' },
   /** «Документы», «Оценка склада по всем магазинам» — `h2`, 1.6rem. */
-  blockTitle: { fontFamily: WEB_FONT, fontSize: 22, color: '#37474F', fontWeight: '400' },
+  blockTitle: { fontFamily: WEB_FONT, fontSize: 22, color: web.blockTitle, fontWeight: '400' },
   /** Крупные суммы показателей. */
   metric: { fontFamily: WEB_FONT, fontSize: 28, color: web.text, fontVariant: ['tabular-nums'] as const },
   metricLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.textMuted },

@@ -8,6 +8,7 @@ import { usePermissions } from '../state/usePermissions';
 import { useLanguage } from '../state/LanguageProvider';
 import { WebIcon } from '../ui/icons';
 import { SIDEBAR_WIDTH, SIDEBAR_SMALL_WIDTH, web, WEB_FONT } from '../ui/webTheme';
+import { другаяВерсия, переключитьВерсию, подписьПерехода } from '../ui/версияКабинета';
 
 /** Боковое меню кабинета. Разделы с вложенными пунктами раскрываются. */
 export function Sidebar() {
@@ -67,6 +68,19 @@ export function Sidebar() {
             отделённая чертой. Прижатым книзу блоком они наезжали на «Корзину»:
             на экране 900 точек оба оказывались на одной высоте. */}
         <View style={styles.divider} />
+
+        {/* Переход между версиями кабинета — там же, где у них: отдельной
+            строкой выше «Что нового». Ведёт не на страницу, а перекрашивает
+            кабинет целиком, поэтому не `go`, а `переключитьВерсию`. */}
+        <Row
+          entry={{
+            label: подписьПерехода(),
+            icon: другаяВерсия() === 'новая' ? 'rocket' : 'history',
+          }}
+          active={false}
+          small={small}
+          onPress={() => переключитьВерсию()}
+        />
 
         {MENU_FOOTER.map((entry) => (
           <Row

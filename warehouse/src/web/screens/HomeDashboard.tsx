@@ -23,6 +23,20 @@ import { formatQtyWeb } from '../../domain/qty';
 import { useQuery } from '../../state/DatabaseProvider';
 import { useLanguage } from '../../state/LanguageProvider';
 import { web, webText, WEB_FONT } from '../../ui/webTheme';
+import { версияКабинета } from '../../ui/версияКабинета';
+
+/**
+ * Новый вид кабинета расставляет главную иначе, и это самое заметное в нём.
+ *
+ * У них показатели стоят в ряд четырьмя карточками во всю ширину, а график
+ * — широкой полосой под ними. В прежнем показатели колонкой слева, график
+ * справа. Замерено у них: карточка «Показатели» 1258×658 при меню 210 и
+ * шапке 46, то есть занимает всю оставшуюся ширину.
+ *
+ * Считается один раз при загрузке: версия не меняется на ходу, переключение
+ * перечитывает страницу.
+ */
+const новыйВид = версияКабинета() === 'новая';
 
 /** Периоды выпадающего списка — те же и в том же порядке, что в оригинале. */
 const PERIODS: Option<PeriodKind>[] = [
@@ -96,8 +110,8 @@ export function HomeDashboard() {
         />
       </View>
 
-      <View style={styles.top}>
-        <View style={styles.metrics}>
+      <View style={[styles.top, новыйВид && styles.topNew]}>
+        <View style={[styles.metrics, новыйВид && styles.metricsNew]}>
           <Metric
             label={t('Выручка')}
             value={formatMoneyWeb(summary.revenue)}
@@ -121,7 +135,7 @@ export function HomeDashboard() {
           />
         </View>
 
-        <View style={styles.chartCard}>
+        <View style={[styles.chartCard, новыйВид && styles.chartCardNew]}>
           <View style={styles.chartLegend}>
             <Text style={styles.chartLegendText}>{t('Выручка')}</Text>
           </View>
@@ -254,7 +268,14 @@ function Metric({
   highlight?: boolean;
 }) {
   return (
-    <View style={[styles.metric, highlight && styles.metricHighlight]}>
+    <View
+      style={[
+        styles.metric,
+        highlight && styles.metricHighlight,
+        новыйВид && styles.metricNew,
+        новыйВид && highlight && styles.metricHighlightNew,
+      ]}
+    >
       <Text style={webText.metric}>{value}</Text>
       <View style={styles.metricRow}>
         <Text style={webText.metricLabel}>{label}</Text>
@@ -293,6 +314,29 @@ const styles = StyleSheet.create({
   metrics: { width: 350, gap: 4 },
   metric: { paddingVertical: 16, paddingHorizontal: 18, gap: 4 },
   metricHighlight: { backgroundColor: '#F4F5F7' },
+
+  /* Новый вид: показатели в ряд карточками, график полосой под ними. */
+  topNew: { flexDirection: 'column', gap: 16 },
+  metricsNew: { width: '100%', flexDirection: 'row', gap: 16 },
+  metricNew: {
+    flex: 1,
+    backgroundColor: web.bg,
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: web.radius,
+    paddingVertical: 20,
+    paddingHorizontal: 22,
+  },
+  /* Выбранный показатель у них обведён синим — это переключатель графика. */
+  metricHighlightNew: { backgroundColor: web.bg, borderColor: web.link, borderWidth: 2 },
+  chartCardNew: {
+    width: '100%',
+    backgroundColor: web.bg,
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: web.radius,
+    paddingVertical: 18,
+  },
   chartCard: { flex: 1, minHeight: 300, justifyContent: 'flex-end' },
   chartLegend: {
     alignSelf: 'center',

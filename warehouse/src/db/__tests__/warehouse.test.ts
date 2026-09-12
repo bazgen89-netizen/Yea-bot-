@@ -356,6 +356,40 @@ describe('отчёты', () => {
     expect(stockValue(db).positions).toBe(0);
   });
 
+  it('минусовой остаток считается вместе со всеми, а не выбрасывается', () => {
+    /*
+     * Так у него в кабинете, сверено на его данных: «в розничных ценах»
+     * стоит −664 492,34, потому что служебные позиции вроде «Чайного сбора»
+     * продают, не приходуя, и остаток уходит глубоко в минус.
+     *
+     * Пока минусовые выбрасывались, у нас на тех же данных выходило
+     * +4 255 318,30 — не разница в копейках, а разница в знаке.
+     */
+    const сбор = makeProduct({ name: 'Чайный сбор', cost_price: 100000, sale_price: 300000 });
+    adjustStock(db, сбор, -4000);
+
+    const вышло = stockValue(db);
+
+    // 4 единицы в минусе: −4 × 3000,00 в рознице и −4 × 1000,00 по себестоимости.
+    expect(вышло.retailValue).toBe(-1200000);
+    expect(вышло.costValue).toBe(-400000);
+    expect(вышло.positions).toBe(1);
+  });
+
+  it('плюс и минус складываются, а не разъезжаются по разным итогам', () => {
+    const чай = makeProduct({ name: 'Улун', cost_price: 100000, sale_price: 300000 });
+    const сбор = makeProduct({ name: 'Чайный сбор', cost_price: 100000, sale_price: 300000 });
+    adjustStock(db, чай, 5000);
+    adjustStock(db, сбор, -2000);
+
+    const вышло = stockValue(db);
+
+    // (5 − 2) × 3000,00 = 900,00 в рознице.
+    expect(вышло.retailValue).toBe(900000);
+    expect(вышло.costValue).toBe(300000);
+    expect(вышло.positions).toBe(2);
+  });
+
   it('продажи по дням группируются по дате', () => {
     const { puer } = setup();
     createSale(db, { lines: [cartLine(puer, { qty: 1000 })] });

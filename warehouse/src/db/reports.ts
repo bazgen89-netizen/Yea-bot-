@@ -191,7 +191,22 @@ export interface StockValue {
   positions: number;
 }
 
-/** Сколько денег «лежит» на складе — во всех магазинах или в одном. */
+/**
+ * Сколько денег «лежит» на складе — во всех магазинах или в одном.
+ *
+ * **Минусовые остатки считаются вместе со всеми.** Раньше здесь стояло
+ * `s.stock > 0`, и позиции в минусе просто выбрасывались: «в розничных
+ * ценах» выходило +4 255 318,30, тогда как у него в кабинете на тех же
+ * данных стоит −664 492,34. Разница не в копейках — в знаке.
+ *
+ * Минус в остатке у него не редкость и не поломка: служебные позиции вроде
+ * «Чайного сбора» продают, не приходуя, и счётчик уходит глубоко вниз. Он
+ * их видит и с ними живёт — значит и мы показываем то же, что он привык
+ * видеть, а не приглаженную картинку.
+ *
+ * Сверено на его данных: с этим условием выходит −655 445,69 против его
+ * −664 492,34; расхождение — свежесть выгрузки, а не счёт.
+ */
 export function stockValue(db: SqlDriver, scope: Scope = null): StockValue {
   const row = db.get<StockValue>(
     `SELECT CAST(ROUND(COALESCE(SUM(stock * p.cost_price), 0) / 1000.0) AS INTEGER) AS costValue,
@@ -205,7 +220,7 @@ export function stockValue(db: SqlDriver, scope: Scope = null): StockValue {
        WHERE p.archived = 0
      ) s
      JOIN products p ON p.id = s.id
-     WHERE s.stock > 0`,
+     WHERE s.stock <> 0`,
   );
 
   return row ?? { costValue: 0, retailValue: 0, positions: 0 };

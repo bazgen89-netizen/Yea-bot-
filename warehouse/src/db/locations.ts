@@ -158,7 +158,7 @@ export function archiveLocation(db: SqlDriver, id: Id): void {
   if ((row?.stock ?? 0) !== 0) {
     throw new Error('В магазине есть остаток — сначала переместите или спишите товар');
   }
-  db.run('UPDATE locations SET archived = 1 WHERE id = ?', [id]);
+  db.run("UPDATE locations SET archived = 1, archived_at = datetime('now') WHERE id = ?", [id]);
 }
 
 /**

@@ -461,11 +461,11 @@ export function updateProduct(db: SqlDriver, id: Id, input: ProductInput): void 
  * и удаление сломало бы историю продаж и отчёты за прошлые периоды.
  */
 export function archiveProduct(db: SqlDriver, id: Id): void {
-  db.run('UPDATE products SET archived = 1 WHERE id = ?', [id]);
+  db.run("UPDATE products SET archived = 1, archived_at = datetime('now') WHERE id = ?", [id]);
 }
 
 export function restoreProduct(db: SqlDriver, id: Id): void {
-  db.run('UPDATE products SET archived = 0 WHERE id = ?', [id]);
+  db.run('UPDATE products SET archived = 0, archived_at = NULL WHERE id = ?', [id]);
 }
 
 export function listCategories(db: SqlDriver): Category[] {

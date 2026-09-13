@@ -302,11 +302,11 @@ export function updateCounterparty(db: SqlDriver, id: Id, input: PartyInput): vo
  * и удаление стёрло бы «кто это купил» из истории продаж.
  */
 export function archiveCounterparty(db: SqlDriver, id: Id): void {
-  db.run('UPDATE counterparties SET archived = 1 WHERE id = ?', [id]);
+  db.run("UPDATE counterparties SET archived = 1, archived_at = datetime('now') WHERE id = ?", [id]);
 }
 
 export function restoreCounterparty(db: SqlDriver, id: Id): void {
-  db.run('UPDATE counterparties SET archived = 0 WHERE id = ?', [id]);
+  db.run('UPDATE counterparties SET archived = 0, archived_at = NULL WHERE id = ?', [id]);
 }
 
 export interface ImportPartyResult {

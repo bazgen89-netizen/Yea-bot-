@@ -56,7 +56,7 @@ export function setCategoryFor(db: SqlDriver, ids: Id[], categoryId: Id | null):
 export function archiveProducts(db: SqlDriver, ids: Id[]): void {
   db.tx(() => {
     for (const id of ids) {
-      db.run('UPDATE products SET archived = 1 WHERE id = ?', [id]);
+      db.run("UPDATE products SET archived = 1, archived_at = datetime('now') WHERE id = ?", [id]);
     }
   });
 }

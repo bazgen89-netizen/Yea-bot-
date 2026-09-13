@@ -951,6 +951,24 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX idx_client_tasks_due ON client_tasks(done_at, due_date);
   CREATE INDEX idx_client_tasks_party ON client_tasks(counterparty_id);
   `,
+
+  /*
+   * Когда вещь убрали из работы.
+   *
+   * Пока у нас был только признак `archived`, «Корзина» не могла показать
+   * главного — даты удаления. У Вазгена в кабинете она есть: «Пуэр Шэн Бин
+   * Дао Ча Чжу — 12.09.2026 13:24», и по ней же там отбирают за период.
+   *
+   * Колонка пустая у всего, что убрали раньше: задним числом дату взять
+   * неоткуда, и придумывать её нельзя — в «Корзине» такие строки честно
+   * стоят без даты.
+   */
+  `
+  ALTER TABLE products        ADD COLUMN archived_at TEXT;
+  ALTER TABLE counterparties  ADD COLUMN archived_at TEXT;
+  ALTER TABLE locations       ADD COLUMN archived_at TEXT;
+  ALTER TABLE accounts        ADD COLUMN archived_at TEXT;
+  `,
 ];
 
 /** Применяет неприменённые миграции. Безопасно вызывать при каждом запуске. */

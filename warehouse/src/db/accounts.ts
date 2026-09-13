@@ -214,14 +214,14 @@ export function archiveAccount(db: SqlDriver, id: Id): void {
   );
 
   if ((used?.n ?? 0) > 0) {
-    db.run('UPDATE accounts SET archived = 1 WHERE id = ?', [id]);
+    db.run("UPDATE accounts SET archived = 1, archived_at = datetime('now') WHERE id = ?", [id]);
     return;
   }
   db.run('DELETE FROM accounts WHERE id = ?', [id]);
 }
 
 export function restoreAccount(db: SqlDriver, id: Id): void {
-  db.run('UPDATE accounts SET archived = 0 WHERE id = ?', [id]);
+  db.run('UPDATE accounts SET archived = 0, archived_at = NULL WHERE id = ?', [id]);
 }
 
 /** Общий баланс — сумма счетов, отмеченных «включен в общий баланс». */

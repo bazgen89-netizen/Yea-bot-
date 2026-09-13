@@ -1,7 +1,8 @@
 import { formatMoneyWeb } from '../domain/money';
 import { formatPercent, marginBp, markupBp, formatDate } from '../domain/pricing';
 import { formatQty } from '../domain/qty';
-import type { ProductWithStock } from '../domain/types';
+import { PRODUCT_KIND_LABEL, type ProductWithStock } from '../domain/types';
+import { версияКабинета } from '../ui/версияКабинета';
 
 /**
  * Колонки справочника — все двадцать четыре, в том же порядке и с теми же
@@ -87,10 +88,20 @@ export const CATALOG_COLUMNS: CatalogColumn[] = [
   },
   { key: 'group', title: 'Группа', width: 190, value: (p) => dash(p.category_name) },
   {
+    /*
+     * Налоги. Когда НДС не задан, в новом кабинете стоит прочерк, а не
+     * «Без НДС»: замерено у него — в колонке «Налоги» у всех его товаров
+     * именно прочерк. В прежнем оставляем слова.
+     */
     key: 'taxes',
     title: 'Налоги',
     width: 130,
-    value: (p) => (p.vat_bp === null ? 'Без НДС' : formatPercent(p.vat_bp)),
+    value: (p) =>
+      p.vat_bp === null
+        ? версияКабинета() === 'новая'
+          ? ''
+          : 'Без НДС'
+        : formatPercent(p.vat_bp),
   },
   { key: 'barcode', title: 'Штрих-код', width: 180, value: (p) => dash(p.barcode) },
   { key: 'sku', title: 'Артикул', width: 150, value: (p) => dash(p.sku) },
@@ -171,6 +182,35 @@ export const CATALOG_COLUMNS: CatalogColumn[] = [
     numeric: true,
     value: (p) => (p.min_qty ? formatQty(p.min_qty) : ''),
   },
+  /**
+   * Вид позиции словом: «Товар», «Услуга», «Комплект».
+   *
+   * У него эта колонка стоит в справочнике по умолчанию — видно на записи
+   * экрана и в замере его таблицы. У нас вида не было видно нигде, кроме
+   * карточки.
+   */
+  {
+    key: 'type',
+    title: 'Тип',
+    width: 176,
+    value: (p) => PRODUCT_KIND_LABEL[p.kind],
+    sort: (p) => PRODUCT_KIND_LABEL[p.kind],
+  },
+  /**
+   * Общий остаток — у него он последней колонкой, после колонок магазинов.
+   *
+   * Порядок держит экран: `CatalogTable` рисует сперва магазины, потом её.
+   * Здесь она объявлена как обычная колонка, чтобы её можно было убрать в
+   * «Колонках», как и все остальные.
+   */
+  {
+    key: 'stock',
+    title: 'Остаток',
+    width: 112,
+    numeric: true,
+    value: (p) => formatQty(p.stock),
+    sort: (p) => p.stock,
+  },
 ];
 
 /**
@@ -189,6 +229,26 @@ export const DEFAULT_COLUMNS = [
   'cost',
   'markup',
   'discount',
+];
+
+/**
+ * То же, но для нового кабинета: его набор, снятый с его же таблицы.
+ *
+ * Замерено у него живьём — заголовки `th` идут ровно так: Наименование,
+ * Налоги, Штрих-код, Артикул, Категория, Цена продажи, Создан, Тип, затем
+ * колонка на каждый магазин и Остаток. Ни «Кода», ни «Ед. изм.», ни
+ * «Себестоимости» в справочнике у него не показано.
+ */
+export const НОВЫЕ_КОЛОНКИ = [
+  'name',
+  'taxes',
+  'barcode',
+  'sku',
+  'category',
+  'price',
+  'created',
+  'type',
+  'stock',
 ];
 
 export const COLUMNS_KEY = 'catalog_columns';

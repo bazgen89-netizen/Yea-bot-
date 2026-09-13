@@ -5,7 +5,6 @@ import { Text, TextInput } from './Translated';
 import { MiniChart } from './MiniChart';
 import { visiblePages } from './pagination';
 import { say } from '../ui/alert';
-import { WebIcon } from '../ui/icons';
 import { web, webText, WEB_FONT } from '../ui/webTheme';
 
 /**
@@ -24,15 +23,24 @@ export function SearchBox({
   value,
   onChange,
   placeholder,
-  width = 316,
+  width = web.searchWidth,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   width?: number;
 }) {
+  /*
+   * Лупа у них слева от строки, а не справа: в новом кабинете поле
+   * размечено `padding: 0 10px 0 30px` — тридцать точек слева как раз под
+   * значок. В прежнем она справа, там и оставляем.
+   */
+  const слеваЛупа = web.searchPadH === 10;
+  const лупа = <Text style={styles.searchIcon}>⌕</Text>;
+
   return (
     <View style={[styles.search, { width }]}>
+      {слеваЛупа ? лупа : null}
       <TextInput
         value={value}
         onChangeText={onChange}
@@ -40,13 +48,19 @@ export function SearchBox({
         placeholderTextColor={web.textMuted}
         style={styles.searchInput}
       />
-      <WebIcon.funnel size={0} color="transparent" />
-      <Text style={styles.searchIcon}>⌕</Text>
+      {слеваЛупа ? null : лупа}
     </View>
   );
 }
 
-export type ButtonTone = 'plain' | 'green' | 'greenOutline' | 'orangeOutline' | 'blueOutline';
+export type ButtonTone =
+  | 'plain'
+  | 'green'
+  | 'greenOutline'
+  | 'orangeOutline'
+  | 'blueOutline'
+  /** Голая кнопка-значок: без рамки и заливки — так у них в новом кабинете. */
+  | 'bare';
 
 export function ToolButton({
   label,
@@ -80,7 +94,11 @@ export function ToolButton({
       ]}
     >
       {icon}
-      <Text style={[styles.buttonLabel, { color: palette.text }]}>{label}</Text>
+      {/* Пустую подпись не рисуем вовсе: иначе у кнопки-значка остаётся
+          лишний промежуток справа и она перестаёт быть квадратной. */}
+      {label ? (
+        <Text style={[styles.buttonLabel, { color: palette.text }]}>{label}</Text>
+      ) : null}
       {trailing}
     </Pressable>
   );
@@ -103,6 +121,7 @@ const TONES: Record<ButtonTone, { bg: string; border: string; text: string }> = 
   greenOutline: { bg: web.bg, border: web.action, text: web.actionText },
   orangeOutline: { bg: web.bg, border: web.orange, text: web.orange },
   blueOutline: { bg: web.bg, border: web.link, text: web.link },
+  bare: { bg: 'transparent', border: 'transparent', text: web.text },
 };
 
 /** Ширины колонок задаются на экране: у каждой таблицы они свои. */
@@ -160,8 +179,18 @@ export function HeadRow({
   return (
     <View style={[styles.headRow, celled && styles.rowCelled]}>
       {lead}
-      {columns.map((column) => (
-        <View key={column.key} style={[{ width: column.width }, celled && styles.celledCell]}>
+      {columns.map((column, index) => (
+        <View
+          key={column.key}
+          style={[
+            { width: column.width },
+            // Линии между столбцами у него стоят не везде: у первой колонки
+            // и у последней правой линии нет — замерено на его `th`.
+            celled && (index === 0 || index === columns.length - 1
+              ? styles.celledEdge
+              : styles.celledCell),
+          ]}
+        >
           <View style={[styles.headCell, column.numeric && styles.headCellRight]}>
             <Text
               accessibilityRole={column.sortable && onSort ? 'button' : 'text'}
@@ -169,7 +198,7 @@ export function HeadRow({
               style={[
                 column.report ? webText.reportColumn : webText.column,
                 column.numeric && styles.right,
-                column.sortable && styles.sortable,
+                column.sortable && web.columnUnderline && styles.sortable,
               ]}
               numberOfLines={1}
             >
@@ -297,7 +326,7 @@ export const CELL = {
   paddingLeft: 9,
   paddingRight: 11,
   borderRightWidth: 1,
-  borderRightColor: '#F2F2F2',
+  borderRightColor: web.cellBorder,
 } as const;
 
 const styles = StyleSheet.create({
@@ -309,32 +338,45 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   search: {
-    height: 44,
+    height: web.controlHeight,
     borderWidth: 1,
     borderColor: web.border,
-    borderRadius: 3,
-    paddingHorizontal: 14,
+    borderRadius: web.radiusControl,
+    paddingHorizontal: web.searchPadH,
+    gap: 8,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  searchInput: { flex: 1, fontFamily: WEB_FONT, fontSize: 15, color: web.text, outlineStyle: 'none' } as object,
-  searchIcon: { fontFamily: WEB_FONT, fontSize: 19, color: web.textMuted },
+  searchInput: {
+    flex: 1,
+    fontFamily: WEB_FONT,
+    fontSize: web.controlFont,
+    color: web.text,
+    outlineStyle: 'none',
+  } as object,
+  searchIcon: { fontFamily: WEB_FONT, fontSize: 17, color: web.textMuted },
   button: {
-    height: 44,
+    height: web.controlHeight,
     borderWidth: 1,
-    borderRadius: 3,
-    paddingHorizontal: 18,
+    borderRadius: web.radiusControl,
+    paddingHorizontal: web.controlPadH,
+    minWidth: web.controlHeight,
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: web.controlGap,
   },
-  buttonLabel: { fontFamily: WEB_FONT, fontSize: 15 },
+  buttonLabel: {
+    fontFamily: WEB_FONT,
+    fontSize: web.controlFont,
+    fontWeight: web.controlWeight,
+  },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
     paddingHorizontal: 22,
-    height: 40,
+    height: web.headHeight,
     backgroundColor: web.tableHead,
     borderBottomWidth: 1,
     borderBottomColor: web.border,
@@ -371,7 +413,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     // Их `.ui.table td` — `padding: .78571429em` от 12,6 точек, то есть
     // около десяти сверху и снизу; строка выходит в 38 точек, а не в 46.
-    paddingVertical: 10,
+    // В новом кабинете замерено 45 — высота задаётся палитрой.
+    minHeight: web.rowHeight,
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: web.gridLine,
   },
@@ -381,12 +425,15 @@ const styles = StyleSheet.create({
   /** Разделённые столбцы: промежуток даёт не `gap`, а поля самой ячейки. */
   rowCelled: { gap: 0, paddingHorizontal: 0 },
   /** Та же ячейка для строк таблицы — экспортируется через `CELL`. */
+  /** Крайняя ячейка: поля те же, линии справа нет. */
+  celledEdge: { paddingLeft: 9, paddingRight: 11, justifyContent: 'center' },
   celledCell: {
-    // Их `th > div`: `padding: 11px 11px 11px 9px`, линия справа.
+    // Их `th > div`: `padding: 11px 11px 11px 9px`, линия справа. В новом
+    // кабинете поля ячейки `0 7px`, а линия — `1px solid #E2E8F0`.
     paddingLeft: 9,
     paddingRight: 11,
     borderRightWidth: 1,
-    borderRightColor: '#F2F2F2',
+    borderRightColor: web.cellBorder,
     justifyContent: 'center',
   },
   checkbox: {

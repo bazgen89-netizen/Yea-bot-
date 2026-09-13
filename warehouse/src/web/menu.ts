@@ -4,6 +4,7 @@ import { reportById } from '../db/reportTypes';
 import { DOC_KIND_LABEL } from '../domain/types';
 import type { Permission } from '../domain/permissions';
 import type { WebIcon } from '../ui/icons';
+import { версияКабинета } from '../ui/версияКабинета';
 
 /**
  * Боковое меню кабинета: состав и порядок в точности как в привычном
@@ -194,7 +195,14 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   // Редактор цен — свой экран, а не справочник: у них это отдельное
   // состояние `card.catalog.price_editor`.
   if (pathname.startsWith('/catalog/prices')) return 'Товары и услуги / редактор цен';
-  if (pathname.startsWith('/catalog')) return 'Товары и услуги / справочник';
+  /*
+   * В новом кабинете страница названа одним словом — «Справочник». Замерено
+   * у них: `header` на /catalog начинается ровно с него, без «Товары и
+   * услуги /» впереди.
+   */
+  if (pathname.startsWith('/catalog')) {
+    return версияКабинета() === 'новая' ? 'Справочник' : 'Товары и услуги / справочник';
+  }
   if (pathname.startsWith('/journal')) return 'Движение товара';
   if (pathname.startsWith('/money')) return 'Движение денег';
   if (pathname.startsWith('/reports/')) {

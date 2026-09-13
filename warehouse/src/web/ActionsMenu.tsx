@@ -175,11 +175,11 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#D4D4D5',
+    borderColor: web.softBorder,
     borderRadius: web.radiusControl,
-    backgroundColor: '#F7F7F8',
+    backgroundColor: web.softButton,
   },
-  buttonHover: { backgroundColor: '#EFEFF0' },
+  buttonHover: { backgroundColor: web.softButtonHover },
   buttonLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
 
   menu: {
@@ -209,9 +209,9 @@ const styles = StyleSheet.create({
   },
 
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 42, paddingHorizontal: 20 },
-  itemHover: { backgroundColor: '#F5F6F7' },
+  itemHover: { backgroundColor: web.rowHover },
   itemIcon: { width: 22, alignItems: 'center' },
   itemLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 15, color: web.text },
-  itemDanger: { color: '#DB2828' },
-  itemSoon: { color: '#B0B4B8' },
+  itemDanger: { color: web.danger },
+  itemSoon: { color: web.textMuted },
 });

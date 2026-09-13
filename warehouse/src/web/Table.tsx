@@ -86,12 +86,23 @@ export function ToolButton({
   );
 }
 
+/*
+ * Подложки кнопок берутся из палитры, а не «белый».
+ *
+ * На тёмном виде белые кнопки светили, а их подписи — тёмные по тёмному —
+ * не читались вовсе: Вазген прислал снимок, где «Фильтр», «Колонки» и
+ * «Импорт товаров» видны одними рамками.
+ *
+ * Имена тонов остались прежними («green»), хотя в новом кабинете тот же тон
+ * синий: переименовывать их по всем экранам — отдельная работа, а цвет уже
+ * правильный.
+ */
 const TONES: Record<ButtonTone, { bg: string; border: string; text: string }> = {
-  plain: { bg: '#FFFFFF', border: web.border, text: web.text },
-  green: { bg: web.green, border: web.green, text: '#FFFFFF' },
-  greenOutline: { bg: '#FFFFFF', border: web.green, text: web.greenText },
-  orangeOutline: { bg: '#FFFFFF', border: web.orange, text: web.orange },
-  blueOutline: { bg: '#FFFFFF', border: web.link, text: web.link },
+  plain: { bg: web.bg, border: web.border, text: web.text },
+  green: { bg: web.action, border: web.action, text: '#FFFFFF' },
+  greenOutline: { bg: web.bg, border: web.action, text: web.actionText },
+  orangeOutline: { bg: web.bg, border: web.orange, text: web.orange },
+  blueOutline: { bg: web.bg, border: web.link, text: web.link },
 };
 
 /** Ширины колонок задаются на экране: у каждой таблицы они свои. */
@@ -403,7 +414,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
-  pageButtonActive: { backgroundColor: '#FBF7E8' },
+  pageButtonActive: { backgroundColor: web.pageActive },
   pageLabel: { fontFamily: WEB_FONT, fontSize: 15, color: web.link },
   pageLabelActive: { color: web.text },
 });

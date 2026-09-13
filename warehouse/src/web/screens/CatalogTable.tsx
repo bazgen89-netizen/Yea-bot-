@@ -270,7 +270,7 @@ export function CatalogTable({ openId }: { openId?: string } = {}) {
         <ToolButton
           label="Импорт товаров"
           tone="greenOutline"
-          icon={<WebIcon.excel color={web.greenText} />}
+          icon={<WebIcon.excel color={web.actionText} />}
           onPress={() => router.push('/import?kind=products')}
         />
       </Toolbar>
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 2,
-    backgroundColor: '#F1F3F4',
+    backgroundColor: web.placeholder,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

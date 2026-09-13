@@ -19,8 +19,18 @@ import { web, WEB_FONT } from '../ui/webTheme';
  * `<svg>` в нём — обычный тег. На телефоне такого тега нет, поэтому там
  * остаются столбики: платформа проверяется явно.
  */
-export function Chart({ points, days }: { points: number[]; days: number }) {
+export function Chart({
+  points,
+  days,
+  высокий = false,
+}: {
+  points: number[];
+  days: number;
+  /** Новый кабинет: график во всю карточку, а не полоской. */
+  высокий?: boolean;
+}) {
   const values = Array.from({ length: days }, (_, i) => points[i] ?? 0);
+  const высота = высокий ? PLOT_HEIGHT_BIG : PLOT_HEIGHT;
 
   // Ось размечается круглыми числами: у него это 0, 10 000, 20 000 … 60 000
   // при вершине 46 501. Просто поделить вершину на пять — значит подписать
@@ -37,7 +47,7 @@ export function Chart({ points, days }: { points: number[]; days: number }) {
   const measure = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
 
   return (
-    <View style={styles.chart}>
+    <View style={[styles.chart, { height: высота + 26 }]}>
       <View style={styles.axis}>
         {ticks.map((tick, index) => (
           <Text key={index} style={styles.tick}>
@@ -47,13 +57,13 @@ export function Chart({ points, days }: { points: number[]; days: number }) {
       </View>
 
       <View style={styles.plot}>
-        <View style={styles.area} onLayout={measure}>
+        <View style={[styles.area, { height: высота }]} onLayout={measure}>
           {Platform.OS === 'web' && width > 0 ? (
             <Curve
               values={values}
               peak={peak}
               width={width}
-              height={PLOT_HEIGHT}
+              height={высота}
               active={active}
               lines={ticks.length}
               onHover={setHover}
@@ -96,6 +106,14 @@ export function Chart({ points, days }: { points: number[]; days: number }) {
 }
 
 const PLOT_HEIGHT = 254;
+/**
+ * В новом кабинете график заметно выше.
+ *
+ * Замерено у них: карточка «Показатели» 1258×658, из них заголовок 29 и ряд
+ * карточек показателей — остальное отдано графику. У нас он был вдвое ниже,
+ * и Вазген справедливо сказал, что «графа не такая».
+ */
+const PLOT_HEIGHT_BIG = 460;
 
 /** Сглаженная линия с заливкой и подписью под курсором. */
 function Curve({
@@ -153,7 +171,7 @@ function Curve({
           x2={width}
           y1={(height / (lines - 1)) * index}
           y2={(height / (lines - 1)) * index}
-          stroke="#EFEFEF"
+          stroke={web.chartWeb}
         />
       ))}
 
@@ -165,16 +183,16 @@ function Curve({
             x2={x(index)}
             y1={0}
             y2={height}
-            stroke="#F4F4F4"
+            stroke={web.chartWeb}
           />
         ) : null,
       )}
 
-      <path d={fill} fill="#D6EBF9" />
-      <path d={line} fill="none" stroke="#5BA7DC" strokeWidth={2} />
+      <path d={fill} fill={web.chartFill} />
+      <path d={line} fill="none" stroke={web.chartLine} strokeWidth={2} />
 
       {values.map((value, index) => (
-        <circle key={index} cx={x(index)} cy={y(value)} r={2.5} fill="#5BA7DC" />
+        <circle key={index} cx={x(index)} cy={y(value)} r={2.5} fill={web.chartLine} />
       ))}
 
       {active !== null ? (
@@ -250,7 +268,12 @@ function isMarked(day: number): boolean {
 }
 
 const styles = StyleSheet.create({
-  chart: { flexDirection: 'row', height: 280, gap: 10 },
+  /*
+   * Высота задаётся при отрисовке: в новом кабинете график вдвое выше.
+   * Здесь остаётся прежнее значение — оно же и запасное, если высоту не
+   * передали. Двадцать шесть точек снизу — под ось дней.
+   */
+  chart: { flexDirection: 'row', height: PLOT_HEIGHT + 26, gap: 10 },
   axis: { width: 58, justifyContent: 'space-between', paddingBottom: 26 },
   /**
    * Подписи оси — их же: `.dashboard #dashboard-chart .axis text
@@ -280,7 +303,7 @@ const styles = StyleSheet.create({
   // Ограничение ширины нужно для периода «сегодня»: один столбец на всю
   // ширину графика выглядел бы залитой плашкой, а не данными.
   barSlot: { flex: 1, maxWidth: 60, height: '100%', justifyContent: 'flex-end' },
-  bar: { backgroundColor: '#BBDEFB', borderTopWidth: 2, borderTopColor: '#42A5F5', minHeight: 1 },
+  bar: { backgroundColor: web.chartFill, borderTopWidth: 2, borderTopColor: web.chartLine, minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
   dayCell: { flex: 1 },
   day: { fontFamily: WEB_FONT, fontSize: 10, color: web.chartAxis, fontWeight: '300' as const, textAlign: 'center' },

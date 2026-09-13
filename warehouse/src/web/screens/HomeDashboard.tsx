@@ -91,6 +91,10 @@ export function HomeDashboard() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      {/* В новом виде заголовок, показатели и график лежат в одной карточке:
+          замерено у них — «dashboard-card chart-panel», 1258×658, радиус 12.
+          В прежнем заголовок стоит сам по себе, над всем. */}
+      <View style={новыйВид ? styles.панельНового : null}>
       <View style={styles.pageTitle}>
         <Text style={webText.pageTitle}>{t('Показатели за')}</Text>
         <Dropdown
@@ -136,11 +140,16 @@ export function HomeDashboard() {
         </View>
 
         <View style={[styles.chartCard, новыйВид && styles.chartCardNew]}>
-          <View style={styles.chartLegend}>
-            <Text style={styles.chartLegendText}>{t('Выручка')}</Text>
-          </View>
-          <Chart points={chart} days={chart.length} />
+          {/* Плашки «Выручка» над графиком в новом виде нет: у них подпись
+              стоит только под числом в карточке показателя. */}
+          {новыйВид ? null : (
+            <View style={styles.chartLegend}>
+              <Text style={styles.chartLegendText}>{t('Выручка')}</Text>
+            </View>
+          )}
+          <Chart points={chart} days={chart.length} высокий={новыйВид} />
         </View>
+      </View>
       </View>
 
       <View style={styles.bottom}>
@@ -316,6 +325,14 @@ const styles = StyleSheet.create({
   metricHighlight: { backgroundColor: '#F4F5F7' },
 
   /* Новый вид: показатели в ряд карточками, график полосой под ними. */
+  панельНового: {
+    backgroundColor: web.bg,
+    borderWidth: 1,
+    borderColor: web.border,
+    borderRadius: web.radius,
+    padding: 18,
+    gap: 16,
+  },
   topNew: { flexDirection: 'column', gap: 16 },
   metricsNew: { width: '100%', flexDirection: 'row', gap: 16 },
   metricNew: {
@@ -329,14 +346,8 @@ const styles = StyleSheet.create({
   },
   /* Выбранный показатель у них обведён синим — это переключатель графика. */
   metricHighlightNew: { backgroundColor: web.bg, borderColor: web.link, borderWidth: 2 },
-  chartCardNew: {
-    width: '100%',
-    backgroundColor: web.bg,
-    borderWidth: 1,
-    borderColor: web.border,
-    borderRadius: web.radius,
-    paddingVertical: 18,
-  },
+  /* Своей рамки у графика в новом виде нет — он внутри общей карточки. */
+  chartCardNew: { width: '100%', paddingVertical: 4 },
   chartCard: { flex: 1, minHeight: 300, justifyContent: 'flex-end' },
   chartLegend: {
     alignSelf: 'center',

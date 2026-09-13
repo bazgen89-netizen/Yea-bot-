@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../Translated';
 
 import { ActionsMenu } from '../ActionsMenu';
@@ -724,13 +724,33 @@ function ЗначокВида({ вид }: { вид: ProductWithStock['kind'] }) 
         ? { фон: web.badgeServiceBg, текст: web.badgeServiceText }
         : { фон: web.badgeProductBg, текст: web.badgeProductText };
 
-  return (
+  const слово = PRODUCT_KIND_LABEL[вид];
+
+  const плашка = (
     <View
-      accessibilityLabel={PRODUCT_KIND_LABEL[вид]}
+      accessibilityLabel={слово}
       style={[styles.значок, { backgroundColor: цвет.фон, borderColor: цвет.текст }]}
     >
       <Text style={[styles.значокБуква, { color: цвет.текст }]}>{буква}</Text>
     </View>
+  );
+
+  /*
+   * Подсказка при наведении — обычный `title` разметки: «Т» → «Товар».
+   * Вазген на это и указал: у него значок наводится и пишет слово целиком;
+   * проверено в его кабинете — это именно `title`, а не своё окошко.
+   *
+   * Вешать его на `View` нельзя: `react-native-web` чужие пропсы в разметку
+   * не пропускает — проверил, в собранной странице ни одного `title` не
+   * оказалось. Поэтому оборачиваем в настоящий `<span>`, как уже сделано с
+   * `<svg>` в графике. На телефоне такого тега нет, там просто плашка.
+   */
+  if (Platform.OS !== 'web') return плашка;
+
+  return (
+    <span title={слово} style={{ display: 'flex' }}>
+      {плашка}
+    </span>
   );
 }
 

@@ -46,6 +46,14 @@ interface SeedProduct {
   d: number;
   /** Категория. Пусто — товар без категории. */
   g?: string | null;
+  /**
+   * Вид позиции: «set» — комплект, «service» — услуга, пусто — товар.
+   *
+   * У CloudShop отдельного поля нет: комплект узнаётся по тому, что позиция
+   * упомянута в чужом составе (`components`). Разбор — в
+   * `scripts/import-cloudshop.mjs`.
+   */
+  k?: 'set' | 'service';
   /** Остатки: название магазина → количество в тысячных. */
   q: Record<string, number>;
 
@@ -476,12 +484,15 @@ function seedProducts(db: SqlDriver): void {
 
       db.run(
         `INSERT INTO products
-           (name, sku, code, barcode, category_id, unit, cost_price, purchase_price,
+           (name, kind, sku, code, barcode, category_id, unit, cost_price, purchase_price,
             sale_price, min_qty, discount_bp, photo_uri, created_at, search_text,
             plu_code, description, weight_g, height_mm, width_mm, depth_mm, archived)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.n,
+          // Вид позиции. В выгрузке он стоит только у комплектов — их у него
+          // девяносто два, а остальные пятьсот обычные товары.
+          item.k === 'set' || item.k === 'service' ? item.k : 'product',
           item.s,
           item.c,
           item.bc ?? null,

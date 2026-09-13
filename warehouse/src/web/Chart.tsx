@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LayoutChangeEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './Translated';
 
-import { scaleFor, smooth, spaced } from '../domain/chart';
+import { scaleFor, smooth, spaced, подРукой } from '../domain/chart';
 import { formatMoneyWeb } from '../domain/money';
 import { web, WEB_FONT } from '../ui/webTheme';
 
@@ -31,6 +31,7 @@ export function Chart({
 }) {
   const values = Array.from({ length: days }, (_, i) => points[i] ?? 0);
   const высота = высокий ? PLOT_HEIGHT_BIG : PLOT_HEIGHT;
+  const новыйВид = высокий;
 
   // Ось размечается круглыми числами: у него это 0, 10 000, 20 000 … 60 000
   // при вершине 46 501. Просто поделить вершину на пять — значит подписать
@@ -44,6 +45,15 @@ export function Chart({
   const [pinned, setPinned] = useState<number | null>(null);
   const active = hover ?? pinned;
 
+  /*
+   * Высота курсора внутри графика.
+   *
+   * Живёт здесь, а не в самой кривой, потому что плашка-линейка у него висит
+   * не на графике, а слева на оси — поверх её подписей. Кривая только
+   * сообщает, где сейчас мышь.
+   */
+  const [курсорY, задатьКурсорY] = useState<number | null>(null);
+
   const measure = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
 
   return (
@@ -54,6 +64,12 @@ export function Chart({
             {formatMoneyWeb(tick).replace('.00', '')}
           </Text>
         ))}
+
+        {курсорY !== null ? (
+          <View style={[styles.линейка, { top: курсорY - 11 }]}>
+            <Text style={styles.линейкаЧисло}>{подРукой(peak, курсорY, высота)}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.plot}>
@@ -66,7 +82,10 @@ export function Chart({
               height={высота}
               active={active}
               lines={ticks.length}
+              прежний={!высокий}
+              курсорY={курсорY}
               onHover={setHover}
+              onCursor={задатьКурсорY}
               onPick={(index) => setPinned((was) => (was === index ? null : index))}
             />
           ) : (
@@ -91,8 +110,14 @@ export function Chart({
               <Text
                 style={[
                   styles.day,
-                  isMarked(index + 1) && styles.dayMarked,
-                  active === index && styles.dayActive,
+                  // Синие числа по неделям — разметка прежнего кабинета.
+                  // В новом все подписи одного цвета: у него на записи
+                  // 2-е, 3-е и 29-е одинаково светлые.
+                  !новыйВид && isMarked(index + 1) && styles.dayMarked,
+                  // Число дня под курсором он подсвечивает плашкой — той же,
+                  // что и линейка слева. Пустые подписи не трогаем: плашка
+                  // без числа выглядела бы обрубком.
+                  active === index && index % labelStep === 0 && styles.dayActive,
                 ]}
               >
                 {index % labelStep === 0 ? index + 1 : ''}
@@ -104,6 +129,15 @@ export function Chart({
     </View>
   );
 }
+
+/**
+ * Размеры всплывающей карточки.
+ *
+ * Замерено на его записи экрана: белая карточка 150×66 — сверху число дня,
+ * ниже «● Выручка» и сумма у правого края.
+ */
+const ПОДСКАЗКА_Ш = 150;
+const ПОДСКАЗКА_В = 66;
 
 const PLOT_HEIGHT = 254;
 /**
@@ -123,7 +157,10 @@ function Curve({
   height,
   active,
   lines,
+  прежний,
+  курсорY,
   onHover,
+  onCursor,
   onPick,
 }: {
   values: number[];
@@ -133,7 +170,18 @@ function Curve({
   active: number | null;
   /** Сколько горизонтальных линий — столько же, сколько подписей на оси. */
   lines: number;
+  /**
+   * Прежний кабинет.
+   *
+   * От этого зависит не палитра, а сама разметка: в прежнем под кривой полная
+   * сетка и на каждом дне кружок, в новом — только поперечные линии и чистая
+   * кривая. Проверено по записи экрана, которую прислал Вазген.
+   */
+  прежний: boolean;
+  /** Где мышь по высоте — за ней тянется пунктир-линейка. */
+  курсорY: number | null;
   onHover: (index: number | null) => void;
+  onCursor: (y: number | null) => void;
   onPick: (index: number) => void;
 }) {
   // Отступы, чтобы кружок крайнего дня не срезался краем картинки.
@@ -156,10 +204,14 @@ function Curve({
       width={width}
       height={height}
       style={{ display: 'block', cursor: 'pointer' }}
-      onMouseMove={(event: { nativeEvent: { offsetX: number } }) =>
-        onHover(dayAt(event.nativeEvent.offsetX))
-      }
-      onMouseLeave={() => onHover(null)}
+      onMouseMove={(event: { nativeEvent: { offsetX: number; offsetY: number } }) => {
+        onHover(dayAt(event.nativeEvent.offsetX));
+        onCursor(event.nativeEvent.offsetY);
+      }}
+      onMouseLeave={() => {
+        onHover(null);
+        onCursor(null);
+      }}
       onClick={(event: { nativeEvent: { offsetX: number } }) =>
         onPick(dayAt(event.nativeEvent.offsetX))
       }
@@ -175,55 +227,101 @@ function Curve({
         />
       ))}
 
-      {values.map((_, index) =>
-        index % 5 === 0 ? (
-          <line
-            key={`v${index}`}
-            x1={x(index)}
-            x2={x(index)}
-            y1={0}
-            y2={height}
-            stroke={web.chartWeb}
-          />
-        ) : null,
-      )}
+      {/* Поперечин вдоль дней в новом кабинете нет вовсе — проверено по
+          записи Вазгена: полоса в 1100 точек поперёк графика сплошь цвета
+          карточки, кроме единственной точки пунктира под курсором. В прежнем
+          кабинете сетка полная, там они остаются. */}
+      {прежний
+        ? values.map((_, index) =>
+            index % 5 === 0 ? (
+              <line
+                key={`v${index}`}
+                x1={x(index)}
+                x2={x(index)}
+                y1={0}
+                y2={height}
+                stroke={web.chartWeb}
+              />
+            ) : null,
+          )
+        : null}
 
       <path d={fill} fill={web.chartFill} />
       <path d={line} fill="none" stroke={web.chartLine} strokeWidth={2} />
 
-      {values.map((value, index) => (
-        <circle key={index} cx={x(index)} cy={y(value)} r={2.5} fill={web.chartLine} />
-      ))}
+      {/* Кружки на каждом дне — примета прежнего кабинета. В новом кривая
+          чистая: на плоском участке его записи ровно три цвета в строку —
+          фон, линия и заливка, никаких утолщений. */}
+      {прежний
+        ? values.map((value, index) => (
+            <circle key={index} cx={x(index)} cy={y(value)} r={2.5} fill={web.chartLine} />
+          ))
+        : null}
+
+      {/* Линейка за курсором: пунктир во всю ширину на его высоте. Число к
+          ней рисует ось — плашка у него висит слева, поверх подписей. */}
+      {курсорY !== null ? (
+        <line
+          x1={0}
+          x2={width}
+          y1={курсорY}
+          y2={курсорY}
+          stroke={web.chartAxis}
+          strokeDasharray="4 4"
+        />
+      ) : null}
 
       {active !== null ? (
         <g>
+          {/* Пунктир на дне — во всю высоту, а не от точки вниз: так у них. */}
           <line
             x1={x(active)}
             x2={x(active)}
-            y1={y(values[active])}
+            y1={0}
             y2={height}
-            stroke="#2F80C8"
+            stroke={web.chartAxis}
             strokeDasharray="4 4"
           />
           <circle
             cx={x(active)}
             cy={y(values[active])}
-            r={6}
-            fill={web.bg}
-            stroke="#2F80C8"
-            strokeWidth={3}
+            r={4}
+            fill="#FFFFFF"
+            stroke={web.chartLine}
+            strokeWidth={2}
           />
-          <text
-            x={x(active) + (active > values.length - 5 ? -14 : 14)}
-            y={y(values[active]) + 5}
-            textAnchor={active > values.length - 5 ? 'end' : 'start'}
-            fontSize={15}
-            fontWeight={600}
-            fill={web.text}
-            fontFamily={WEB_FONT}
+          {/* Карточка со значением. У них она светлая и в тёмном виде тоже. */}
+          <g
+            transform={`translate(${
+              active > values.length - 7 ? x(active) - ПОДСКАЗКА_Ш - 14 : x(active) + 14
+            }, ${Math.min(Math.max(y(values[active]) - 8, 0), height - ПОДСКАЗКА_В)})`}
           >
-            {spaced(values[active])}
-          </text>
+            <rect
+              width={ПОДСКАЗКА_Ш}
+              height={ПОДСКАЗКА_В}
+              rx={4}
+              fill="#FFFFFF"
+              stroke="rgba(15,23,42,0.12)"
+            />
+            <text x={14} y={26} fontSize={15} fill="#0F172A" fontFamily={WEB_FONT}>
+              {active + 1}
+            </text>
+            <circle cx={19} cy={48} r={4} fill={web.chartLine} />
+            <text x={30} y={52} fontSize={13} fill="#0F172A" fontFamily={WEB_FONT}>
+              Выручка
+            </text>
+            <text
+              x={ПОДСКАЗКА_Ш - 14}
+              y={52}
+              textAnchor="end"
+              fontSize={13}
+              fontWeight={600}
+              fill="#0F172A"
+              fontFamily={WEB_FONT}
+            >
+              {spaced(values[active])}
+            </text>
+          </g>
         </g>
       ) : null}
     </svg>
@@ -284,7 +382,7 @@ const styles = StyleSheet.create({
   tick: {
     fontFamily: WEB_FONT,
     fontSize: 12,
-    color: web.chartAxis,
+    color: web.chartLabel,
     fontWeight: '300' as const,
     textAlign: 'right',
   },
@@ -305,8 +403,36 @@ const styles = StyleSheet.create({
   barSlot: { flex: 1, maxWidth: 60, height: '100%', justifyContent: 'flex-end' },
   bar: { backgroundColor: web.chartFill, borderTopWidth: 2, borderTopColor: web.chartLine, minHeight: 1 },
   days: { flexDirection: 'row', gap: 2, height: 26, alignItems: 'center' },
-  dayCell: { flex: 1 },
-  day: { fontFamily: WEB_FONT, fontSize: 10, color: web.chartAxis, fontWeight: '300' as const, textAlign: 'center' },
+  dayCell: { flex: 1, alignItems: 'center' },
+  day: {
+    fontFamily: WEB_FONT,
+    fontSize: 10,
+    color: web.chartLabel,
+    fontWeight: '300' as const,
+    textAlign: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
   dayMarked: { color: web.link },
-  dayActive: { color: web.text, fontWeight: '700' },
+  /* Число дня под курсором — белым по плашке, как у него на записи. */
+  dayActive: { color: '#FFFFFF', backgroundColor: web.chartRuler, fontWeight: '400' as const },
+
+  /**
+   * Плашка-линейка слева: число на той высоте, где стоит мышь.
+   *
+   * Лежит поверх подписей оси и закрывает их собой — у него так же: пока
+   * линейка над «30,000», самой подписи не видно.
+   */
+  линейка: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 22,
+    borderRadius: 3,
+    backgroundColor: web.chartRuler,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  линейкаЧисло: { fontFamily: WEB_FONT, fontSize: 11, color: '#FFFFFF' },
 });

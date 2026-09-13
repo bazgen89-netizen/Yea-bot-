@@ -403,10 +403,15 @@ const styles = StyleSheet.create({
   // Размер вложенный пункт наследует у раздела — те же 13.
   childLabel: { flex: 1, fontFamily: WEB_FONT, fontSize: 13, color: web.sidebarChild },
   // `.ui.divider` — поля 1rem сверху и снизу.
+  /*
+   * Черта перед «Что нового». У него отбивка около пяти точек, а не по
+   * четырнадцати с каждой стороны: с прежними отступами меню не влезало в
+   * окно и заводило себе отдельную прокрутку.
+   */
   divider: {
     height: 1,
     backgroundColor: 'rgba(34,36,38,0.15)',
-    marginVertical: 14,
+    marginVertical: 4,
     marginHorizontal: 5,
   },
   // `.bottom-menu { height: 40 }`, каждая ссылка — `flex: 1` во всю высоту.

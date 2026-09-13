@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(CLOUDSHOP_TOKEN=*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(ln:*)",
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "Artifact",
+      "SendUserFile",
+      "Bash(curl:*)"
+    ],
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(wget:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
+  }
+}

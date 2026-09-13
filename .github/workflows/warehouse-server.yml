@@ -1,0 +1,41 @@
+name: Warehouse server
+
+on:
+  push:
+    paths:
+      - 'warehouse-server/**'
+      - '.github/workflows/warehouse-server.yml'
+  pull_request:
+    paths:
+      - 'warehouse-server/**'
+      - '.github/workflows/warehouse-server.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: warehouse-server
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: warehouse-server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # База поднимать не нужно: тесты идут на PGlite — том же PostgreSQL,
+      # собранном в WebAssembly.
+      - name: Tests
+        run: npm test
+
+      - name: Docker build
+        run: docker build -t warehouse-server:ci .

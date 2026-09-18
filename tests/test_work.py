@@ -54,8 +54,14 @@ def test_example_config_is_valid():
     assert len(cfg.points) == 3 and len(cfg.bosses) == 1
     assert len(cfg.staff) == 3                      # по одному человеку на точку
     assert {p.point for p in cfg.staff} == set(cfg.points)
-    # Координаты в примере — нули, и конфиг должен об этом честно сказать
-    assert sum("координаты" in w for w in cfg.warnings()) == 3
+    # Координаты заполнены, точки разнесены по городу — перепутать их геозона не может
+    assert cfg.warnings() == []
+    for point in cfg.points.values():
+        assert point.lat and point.lon
+    coords = [(p.lat, p.lon) for p in cfg.points.values()]
+    for i, a in enumerate(coords):
+        for b in coords[i + 1:]:
+            assert geo.distance_m(*a, *b) > 900
 
 
 def test_config_warnings_catch_typos():

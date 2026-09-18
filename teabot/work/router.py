@@ -51,6 +51,19 @@ async def work_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     raise ApplicationHandlerStop
 
 
+async def where_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """/where — проверить координаты точки, не открывая смену."""
+    person = H.whois(ctx, update.effective_user.id)
+    if person is None:
+        return
+    ctx.user_data["pending"] = {"kind": "geo_check"}
+    await update.message.reply_text(
+        "📍 Пришли геометку — отвечу точными координатами и расстоянием до точки.\n"
+        "Смену это не откроет.",
+        reply_markup=H.location_kb())
+    raise ApplicationHandlerStop
+
+
 async def rules_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """/правила — что именно бот фиксирует. Сотрудник должен видеть это в любой момент."""
     from .scheduler import CONSENT_TEXT
@@ -295,7 +308,7 @@ TEXT_COMMANDS = {
     "люди": people_cmd, "команда": people_cmd,
     "чай": brew_cmd, "заварил": brew_cmd,
     "отзыв": feedback_cmd, "впечатления": feedback_cmd,
-    "правила": rules_cmd, "меню": work_start,
+    "правила": rules_cmd, "меню": work_start, "где я": where_cmd, "координаты": where_cmd,
 }
 
 
@@ -409,6 +422,7 @@ def register_work_handlers(ptb: Application) -> None:
     ptb.add_handler(CommandHandler("people", people_cmd), group=g)
     ptb.add_handler(CommandHandler("task", task_cmd), group=g)
     ptb.add_handler(CommandHandler("rules", rules_cmd), group=g)
+    ptb.add_handler(CommandHandler("where", where_cmd), group=g)
     ptb.add_handler(CommandHandler("brew", brew_cmd), group=g)
     ptb.add_handler(CommandHandler("feedback", feedback_cmd), group=g)
     ptb.add_handler(CallbackQueryHandler(on_work_callback, pattern=f"^{H.CB}"), group=g)

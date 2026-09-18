@@ -157,3 +157,17 @@ def test_digest_reports_missing_shift_and_tasting(tmp_path):
     assert "задачи: 1/2, не закрыто: 1" in digest
     assert "дегустация: не записана" in digest
     assert "Босс" not in digest  # руководителя в сводке о себе нет
+
+
+def test_distance_from_map_link_is_too_rough_for_geofence():
+    """Координаты из ссылки на карту (центр карты) и реальная точка расходятся.
+
+    Отсюда правило: координаты берём калибровкой на месте (/where), а не из ссылки.
+    """
+    # Центр карты из ссылки на организацию
+    map_lat, map_lon = 56.126273, 40.388906
+    # Условная реальная точка в 300 м северо-восточнее
+    real_lat, real_lon = 56.128973, 40.388906
+
+    inside, distance = geo.check(real_lat, real_lon, map_lat, map_lon, 150)
+    assert not inside and 290 < distance < 310

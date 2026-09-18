@@ -88,9 +88,40 @@ async def ask_open_shift(bot, person: Person, point, ctx) -> None:
     )
 
 
+async def report_distance(update: Update, ctx: ContextTypes.DEFAULT_TYPE, person: Person) -> None:
+    """Калибровка точки: где я сейчас и как далеко от записанных координат.
+
+    Координаты из ссылки на карту почти всегда смещены — этой командой их
+    проверяют, стоя в магазине, и правят в конфиге.
+    """
+    loc = update.message.location
+    lines = [f"📍 Твои координаты: <code>{loc.latitude:.6f}, {loc.longitude:.6f}</code>",
+             "<i>(широта, долгота — в таком порядке их и вписывают в конфиг)</i>", ""]
+
+    points = [cfg(ctx).point_of(person)] if person.point else list(cfg(ctx).points.values())
+    for point in filter(None, points):
+        if not point.lat or not point.lon:
+            lines.append(f"• {point.title}: координаты не заполнены")
+            continue
+        inside, distance = geo.check(loc.latitude, loc.longitude, point.lat, point.lon, point.radius_m)
+        verdict = "внутри зоны" if inside else f"ВНЕ зоны (радиус {point.radius_m} м)"
+        lines.append(f"• {point.title}: {distance} м — {verdict}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML",
+                                    reply_markup=ReplyKeyboardRemove())
+
+
 async def on_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     person = whois(ctx, update.effective_user.id)
-    point = cfg(ctx).point_of(person) if person else None
+    if person is None:
+        return  # не сотрудник — геометка бота не касается
+
+    if (ctx.user_data.get("pending") or {}).get("kind") == "geo_check":
+        ctx.user_data.pop("pending", None)
+        await report_distance(update, ctx, person)
+        raise ApplicationHandlerStop
+
+    point = cfg(ctx).point_of(person)
     if point is None:
         await update.message.reply_text(
             "Точка для тебя не задана в конфиге — скажи руководителю.",

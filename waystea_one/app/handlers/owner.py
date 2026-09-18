@@ -60,6 +60,99 @@ async def on_name_command(message) -> None:
     await message.answer(f"Записал ваше имя: {new_name} 👍")
 
 
+RULES_TEXT = (
+    "ℹ️ <b>Что фиксирует бот</b>\n\n"
+    "• Время отметки смены и её закрытия.\n"
+    "• Геометку — <b>один раз</b>, в момент открытия смены, по нажатию кнопки. "
+    "В течение дня местоположение не отслеживается.\n"
+    "• Выполнение задач и комментарии к ним, фото результата.\n"
+    "• Выручку за смену и ответы на вопросы по чаю.\n\n"
+    "Это видит владелец. Между сменами бот не фиксирует ничего.\n"
+    "Вопросы — владельцу."
+)
+
+
+@router.message(Command("rules"))
+async def on_rules_command(message) -> None:
+    """Employees must be able to see what is being recorded, at any moment.
+
+    Russian labour law (ст. 86 ТК РФ) requires employees to be informed of
+    such monitoring; a bot command doesn't replace the signed notice, but it
+    does mean nobody has to take anyone's word for what the bot stores.
+    """
+    await message.answer(RULES_TEXT)
+
+
+@router.message(Command("where"))
+async def on_where_command(message) -> None:
+    """Calibrate a store's coordinates: the ones seeded from the maps card
+    point at the card's centre, not the doorway, so the real ones are taken
+    on site. Answers with the sender's coordinates and the distance to every
+    store; does not open a shift.
+    """
+    from app.models import Store
+    from app.services.geo import check as geo_check
+
+    location = message.location
+    if location is None:
+        await message.answer(
+            "Пришли геометку (скрепка → Геопозиция), и я отвечу точными "
+            "координатами и расстоянием до каждой точки. Смену это не откроет."
+        )
+        return
+
+    lines = [
+        f"📍 Твои координаты: <code>{location.latitude:.6f}, {location.longitude:.6f}</code>",
+        "<i>(широта, долгота — в этом порядке они и вписываются в scripts/seed_stores.py)</i>",
+        "",
+    ]
+    async with get_session() as session:
+        from sqlalchemy import select
+
+        for store in (await session.execute(select(Store))).scalars():
+            verdict = geo_check(
+                location.latitude, location.longitude, store.lat, store.lon, store.radius_m
+            )
+            if verdict is None:
+                lines.append(f"• {store.name}: координаты не заданы")
+                continue
+            inside, distance = verdict
+            state = "внутри зоны" if inside else f"ВНЕ зоны (радиус {store.radius_m} м)"
+            lines.append(f"• {store.name}: {distance} м — {state}")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("brew"))
+async def on_brew_command(message, state: FSMContext) -> None:
+    """Change the brewed tea mid-shift."""
+    from app.handlers.shift import BrewCheck
+    from app.services.brew import ASK_BREWED_TEA
+
+    await message.answer(ASK_BREWED_TEA)
+    await state.set_state(BrewCheck.awaiting_tea)
+
+
+@router.message(Command("feedback"))
+async def on_feedback_command(message, state: FSMContext) -> None:
+    """Record an impression of today's tea on demand, not only when asked."""
+    from app.handlers.shift import BrewCheck, BrewFeedback
+    from app.services.brew import ASK_BREWED_TEA, ASK_FEEDBACK, today_shift
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        shift = await today_shift(session, employee.id) if employee else None
+
+    if shift is None:
+        await message.answer("Смена на сегодня не отмечена.")
+        return
+    if not shift.brewed_tea:
+        await message.answer(ASK_BREWED_TEA)
+        await state.set_state(BrewCheck.awaiting_tea)
+        return
+    await message.answer(ASK_FEEDBACK.format(tea=shift.brewed_tea))
+    await state.set_state(BrewFeedback.awaiting_note)
+
+
 @router.message(Command("report"))
 async def on_report_command(message) -> None:
     if not _is_owner(message):

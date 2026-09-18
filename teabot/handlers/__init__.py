@@ -21,17 +21,12 @@ def get_ai(ctx: ContextTypes.DEFAULT_TYPE) -> GroqClient:
     return ctx.bot_data[AI_KEY]
 
 
-# Группа 1: чайный эксперт. Рабочий контур сидит в группе 0 и, если обновление
-# пришло от сотрудника, останавливает разбор — до этих обработчиков не доходит.
-TEA_GROUP = 1
-
-
 def register_handlers(ptb: Application) -> None:
     from .commands import start_cmd, debug_cmd
     from .messages import on_msg
     from .callbacks import on_cb
 
-    ptb.add_handler(CommandHandler("start", start_cmd), group=TEA_GROUP)
-    ptb.add_handler(CommandHandler("debug", debug_cmd), group=TEA_GROUP)
-    ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg), group=TEA_GROUP)
-    ptb.add_handler(CallbackQueryHandler(on_cb), group=TEA_GROUP)
+    ptb.add_handler(CommandHandler("start", start_cmd))
+    ptb.add_handler(CommandHandler("debug", debug_cmd))
+    ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
+    ptb.add_handler(CallbackQueryHandler(on_cb))

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import (
+    QuizAnswer,
     Employee,
     MusicCheck,
     PurchaseRequest,
@@ -68,10 +69,42 @@ async def build_daily_report(session: AsyncSession, date: datetime.date | None =
     lines.append("Смены:")
     if shifts:
         for shift_log, employee, store in shifts:
-            lines.append(f"  {store.name}: {employee.name}")
+            # Геометка: подтверждена / не сошлась / не прислана. Молча
+            # пропускать последнее нельзя — иначе «нет отметки» и «всё в
+            # порядке» выглядят в отчёте одинаково.
+            if shift_log.geo_ok is True:
+                geo = "📍 на месте"
+            elif shift_log.geo_ok is False:
+                geo = f"⚠️ в {shift_log.geo_distance_m} м от точки"
+            elif shift_log.geo_lat is not None:
+                geo = "📍 координаты точки не выверены"
+            else:
+                geo = "❔ геометка не прислана"
+            lines.append(f"  {store.name}: {employee.name} — {geo}")
+            if shift_log.brewed_tea:
+                treats = f", угостил: {shift_log.treats_given}" if shift_log.treats_given else ""
+                lines.append(f"      🫖 заварен {shift_log.brewed_tea}{treats}")
+            if shift_log.brewed_tea_feedback:
+                note = shift_log.brewed_tea_feedback.replace("\n---\n", " | ")
+                lines.append(f"      ✍️ о чае: {note}")
     else:
         lines.append("  Нет подтверждённых смен.")
     lines.append("")
+
+    quiz_result = await session.execute(
+        select(QuizAnswer, Employee)
+        .join(Employee, QuizAnswer.employee_id == Employee.id)
+        .where(QuizAnswer.date == date)
+    )
+    quiz_answers = quiz_result.all()
+    if quiz_answers:
+        by_employee: dict[str, list[bool]] = {}
+        for answer, employee in quiz_answers:
+            by_employee.setdefault(employee.name, []).append(answer.correct)
+        lines.append("Вопросы по чаю:")
+        for name, results in by_employee.items():
+            lines.append(f"  {name}: {sum(results)}/{len(results)}")
+        lines.append("")
 
     if total_tasks:
         pct_done = round(completed / total_tasks * 100)

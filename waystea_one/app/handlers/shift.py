@@ -34,7 +34,14 @@ import logging
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 
 from app.config import settings
 from app.db import get_session
@@ -54,6 +61,13 @@ from app.services.identity import (
     list_store_options,
     record_shift_start,
 )
+from app.services.brew import (
+    ASK_BREWED_TEA,
+    save_brewed_tea,
+    save_feedback,
+    today_shift,
+)
+from app.services.geo import check as geo_check
 from app.services.intent import resolve_store
 from app.services.knowledge import get_knowledge_base_text
 from app.services.messaging import notify_employee, send_private
@@ -95,6 +109,22 @@ class ShiftClarification(StatesGroup):
     awaiting_store = State()
 
 
+class BrewCheck(StatesGroup):
+    """Reply to "what tea is brewed today?" — asked right after the shift
+    location is confirmed, and again whenever the employee re-brews.
+    """
+
+    awaiting_tea = State()
+
+
+class BrewFeedback(StatesGroup):
+    """Reply to "what do you think of today's tea?" — asked by the scheduler
+    (app/services/brew.py) and on demand.
+    """
+
+    awaiting_note = State()
+
+
 class MoodCheck(StatesGroup):
     """Per owner decision: greet + ask how they're doing, have one short
     exchange, and only *then* hand over the first batch of tasks — not all
@@ -131,6 +161,138 @@ async def _confirm_shift(
     await state.set_state(MoodCheck.awaiting_response)
 
 
+LOCATION_PROMPT = (
+    "📍 И отметься на точке: нажми кнопку — Telegram пришлёт геометку.\n"
+    "Это разовая отметка на старте смены, никакого слежения в течение дня нет (/правила)."
+)
+
+
+def location_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📍 Я на точке", request_location=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def treat_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🤝 Угостил гостя", callback_data="treat"),
+                InlineKeyboardButton(text="🫖 Перезаварил другой", callback_data="rebrew"),
+            ]
+        ]
+    )
+
+
+async def ask_location(bot, employee: Employee) -> None:
+    """Reply keyboards can't go through notify_employee (inline-only), so
+    send straight to the private chat; a failure here must not break the
+    shift, the geofence is a nice-to-have on top of it.
+    """
+    try:
+        await bot.send_message(
+            employee.telegram_user_id, LOCATION_PROMPT, reply_markup=location_keyboard()
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to ask %s for location", employee.name)
+
+
+@router.message(F.location)
+async def receive_location(message: Message, state: FSMContext) -> None:
+    """Shift-start geofence. Registered before the state handlers so a
+    location never gets swallowed by whatever dialog is open.
+    """
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        if employee is None:
+            return
+        shift = await today_shift(session, employee.id)
+        if shift is None:
+            await message.answer(
+                "Геометку принял, но смена на сегодня не отмечена — "
+                "сначала напиши, что ты на точке.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return
+
+        store = await session.get(Store, shift.store_id)
+        location = message.location
+        verdict = geo_check(
+            location.latitude, location.longitude, store.lat, store.lon, store.radius_m
+        )
+        shift.geo_lat = location.latitude
+        shift.geo_lon = location.longitude
+        if verdict is None:
+            shift.geo_ok = None
+            shift.geo_distance_m = None
+        else:
+            shift.geo_ok, shift.geo_distance_m = verdict
+        await session.commit()
+        store_name, distance = store.name, shift.geo_distance_m
+        off_site = verdict is not None and not verdict[0]
+
+    if verdict is None:
+        reply = f"📍 Принято. Координаты «{store_name}» ещё не выверены, расстояние не считаю."
+    elif off_site:
+        reply = (
+            f"⚠️ Ты в {distance} м от «{store_name}». Смену отметил, "
+            f"но владельцу ушло уведомление."
+        )
+    else:
+        reply = f"✅ Ты на «{store_name}». Смена подтверждена геометкой."
+    await message.answer(reply, reply_markup=ReplyKeyboardRemove())
+
+    if off_site:
+        try:
+            await message.bot.send_message(
+                settings.owner_telegram_id,
+                f"⚠️ {employee.name} отметил смену в {distance} м от «{store_name}» "
+                f"(радиус {store.radius_m} м).",
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("Failed to notify owner about off-site check-in")
+
+    await message.answer(ASK_BREWED_TEA)
+    await state.set_state(BrewCheck.awaiting_tea)
+
+
+@router.message(BrewCheck.awaiting_tea)
+async def receive_brewed_tea(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    tea = (message.text or "").strip()
+    if not tea:
+        return
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        shift = await save_brewed_tea(session, employee.id, tea)
+
+    if shift is None:
+        await message.answer("Смена на сегодня не отмечена — сначала отметься на точке.")
+        return
+    await message.answer(
+        f"🫖 Записал: <b>{tea}</b>. Буду напоминать угощать им гостей — "
+        f"особенно тех, кто уже что-то берёт.",
+        reply_markup=treat_keyboard(),
+    )
+
+
+@router.message(BrewFeedback.awaiting_note)
+async def receive_brew_feedback(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    note = (message.text or "").strip()
+    if not note:
+        return
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        await save_feedback(session, employee.id, note)
+
+    await message.answer("🍵 Спасибо, записал в базу по чаю.")
+
+
 @router.message(MoodCheck.awaiting_response)
 async def receive_mood_response(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
@@ -146,6 +308,7 @@ async def receive_mood_response(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         tasks = await create_daily_tasks_for_shift(session, employee.id, store_id)
     await send_daily_checklist(message.bot, employee, tasks, message)
+    await ask_location(message.bot, employee)
 
 
 @router.message(MusicNudge.awaiting_response)

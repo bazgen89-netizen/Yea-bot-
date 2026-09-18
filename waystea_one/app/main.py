@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import logging
+import random
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -9,13 +10,16 @@ from app.bot import bot, dispatcher
 from app.config import settings
 from app.db import get_session, init_models
 from app.health import heartbeat, mark_started, run_health_server
+from app.services.brew import send_feedback_prompts
 from app.services.music import send_music_nudges
+from app.services.quiz import send_quiz_round
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
 from app.services.revenue_reminders import send_revenue_reminders
 from app.services.tasks import sync_stale_tasks_to_templates
 from app.services.upsell import send_upsell_nudges
 from scripts.seed_knowledge_base import seed as seed_knowledge_base
+from scripts.seed_quiz import seed as seed_quiz
 from scripts.seed_stores import seed as seed_stores
 from scripts.seed_task_templates import seed as seed_task_templates
 
@@ -37,6 +41,22 @@ async def _heartbeat_job() -> None:
         logging.getLogger(__name__).exception("Heartbeat: Telegram unreachable")
         return
     heartbeat()
+
+
+# The knowledge check fires somewhere between these hours, local time.
+QUIZ_WINDOW_START_HOUR = 13
+QUIZ_WINDOW_END_HOUR = 17
+
+
+def _schedule_quiz_round(scheduler: AsyncIOScheduler) -> None:
+    delay_minutes = random.randint(0, (QUIZ_WINDOW_END_HOUR - QUIZ_WINDOW_START_HOUR) * 60)
+    scheduler.add_job(
+        send_quiz_round,
+        "date",
+        run_date=datetime.datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(minutes=delay_minutes),
+        args=[bot, get_session],
+    )
 
 
 async def send_daily_report() -> None:
@@ -80,6 +100,7 @@ async def main() -> None:
     await seed_stores()
     await seed_task_templates()
     await seed_knowledge_base()
+    await seed_quiz()
 
     async with get_session() as session:
         synced = await sync_stale_tasks_to_templates(session)
@@ -121,6 +142,21 @@ async def main() -> None:
         send_music_nudges,
         "interval",
         seconds=settings.reminder_poll_seconds,
+        args=[bot, get_session],
+    )
+    # Owner request: check knowledge during the shift, at an unpredictable
+    # moment — a fixed hour would just be waited out. A cron job at the start
+    # of the window schedules the actual round at a random offset inside it.
+    scheduler.add_job(
+        _schedule_quiz_round,
+        CronTrigger(
+            hour=QUIZ_WINDOW_START_HOUR, minute=0, timezone=settings.timezone
+        ),
+        args=[scheduler],
+    )
+    scheduler.add_job(
+        send_feedback_prompts,
+        CronTrigger(hour=17, minute=30, timezone=settings.timezone),
         args=[bot, get_session],
     )
     scheduler.add_job(

@@ -2,6 +2,7 @@ import datetime
 import enum
 
 from sqlalchemy import (
+    Float,
     BigInteger,
     Boolean,
     Date,
@@ -56,6 +57,12 @@ class Store(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    # Geofence for shift start (app/services/geo.py). Nullable on purpose:
+    # a store whose coordinates haven't been calibrated on site yet simply
+    # skips the check instead of flagging everyone as off-site.
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    radius_m: Mapped[int] = mapped_column(default=300)
 
 
 class Employee(Base):
@@ -95,6 +102,18 @@ class ShiftLog(Base):
     last_music_nudge_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Shift-start geofence (app/services/geo.py). All nullable: the location
+    # is asked for, not demanded — a shift still opens without it, and the
+    # owner sees in the daily report who didn't confirm their position.
+    geo_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geo_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geo_distance_m: Mapped[int | None] = mapped_column(nullable=True)
+    geo_ok: Mapped[bool | None] = mapped_column(nullable=True)
+    # The tea brewed at the counter today: what the employee is told to
+    # treat guests with, and what the quiz asks about (app/services/quiz.py).
+    brewed_tea: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    brewed_tea_feedback: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    treats_given: Mapped[int] = mapped_column(default=0)
 
     employee: Mapped["Employee"] = relationship()
     store: Mapped["Store"] = relationship()
@@ -283,3 +302,39 @@ class Task(Base):
 
     employee: Mapped["Employee"] = relationship()
     store: Mapped["Store"] = relationship()
+
+
+class QuizQuestion(Base):
+    """A question from a technological card (how to brew a given tea, what to
+    tell a guest about it). Owner request: check the knowledge of whoever is
+    on shift, preferring the tea they have brewed right now — asking about
+    the cup in their hand beats asking about an abstract one.
+    """
+
+    __tablename__ = "quiz_questions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    card: Mapped[str] = mapped_column(String(200))          # название чая / карты
+    question: Mapped[str] = mapped_column(String(500))
+    options: Mapped[list[str]] = mapped_column(ARRAY(String))
+    answer_index: Mapped[int] = mapped_column()
+    explain: Mapped[str] = mapped_column(String(500), default="")
+
+
+class QuizAnswer(Base):
+    """One answer, so the owner sees in the report who knows what."""
+
+    __tablename__ = "quiz_answers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    question_id: Mapped[int] = mapped_column(ForeignKey("quiz_questions.id"))
+    date: Mapped[datetime.date] = mapped_column(Date)
+    chosen_index: Mapped[int] = mapped_column()
+    correct: Mapped[bool] = mapped_column()
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    question: Mapped["QuizQuestion"] = relationship()

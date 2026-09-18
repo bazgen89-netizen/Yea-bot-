@@ -13,6 +13,13 @@ from app.config import settings
 from app.models import Employee, ShiftLog, UpsellEvent, UpsellType
 from app.services.store_matcher import normalize
 
+
+def treat_keyboard():
+    """Imported lazily-ish here to avoid a handler↔service import cycle."""
+    from app.handlers.shift import treat_keyboard as build
+
+    return build()
+
 logger = logging.getLogger(__name__)
 
 _KEYWORDS: list[tuple[str, UpsellType]] = [
@@ -104,8 +111,18 @@ async def send_upsell_nudges(bot, session_factory) -> None:
                 continue
 
             text = UPSELL_NUDGE_TEXTS[shift_log.upsell_nudges_sent % len(UPSELL_NUDGE_TEXTS)]
+            # Owner request: name the tea that is actually brewed right now.
+            # "Предложи чай" is advice; "у тебя заварен Шу Пуэр 9978, налей
+            # тому, кто уже покупает" is something you can do without thinking.
+            markup = None
+            if shift_log.brewed_tea:
+                text = (
+                    f"🫖 У тебя заварен <b>{shift_log.brewed_tea}</b>. {text}\n"
+                    f"Сегодня угостил: {shift_log.treats_given}."
+                )
+                markup = treat_keyboard()
             try:
-                await bot.send_message(employee.telegram_user_id, text)
+                await bot.send_message(employee.telegram_user_id, text, reply_markup=markup)
             except Exception:
                 logger.exception("Failed to send upsell nudge to %s", employee.telegram_user_id)
                 continue

@@ -1,0 +1,27 @@
+name: WAYSTEA ONE keep-alive
+
+# Render's free Web Service tier spins down after ~15 minutes with no HTTP
+# traffic, causing a 30-60s cold-start delay on the next request/button
+# click. This just pings the bot's health endpoint (app/health.py)
+# regularly so it never fully falls asleep. Crash recovery itself is
+# already handled by Render (it auto-restarts a crashed process) — this
+# workflow only addresses the inactivity-sleep case.
+
+on:
+  schedule:
+    # Every 5 min to try to stay under Render's ~15-min inactivity window.
+    # NOTE: GitHub Actions' scheduler is best-effort and often delays runs
+    # by 10-30+ min on low-traffic repos, so this can't *guarantee* the bot
+    # stays awake. A dedicated uptime monitor (e.g. UptimeRobot's free tier,
+    # which pings every 5 min reliably) pointed at the same health URL is a
+    # more dependable free option; the only fully reliable fix is Render's
+    # paid tier, which doesn't sleep at all.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping WAYSTEA ONE bot
+        run: curl -fsS --max-time 55 https://waystea-one-bot.onrender.com/ || true

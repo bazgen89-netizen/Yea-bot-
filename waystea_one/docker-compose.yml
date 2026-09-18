@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: waystea
+      POSTGRES_PASSWORD: waystea
+      POSTGRES_DB: waystea
+    volumes:
+      - waystea_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  bot:
+    build: .
+    env_file: .env
+    depends_on:
+      - db
+
+volumes:
+  waystea_db_data:

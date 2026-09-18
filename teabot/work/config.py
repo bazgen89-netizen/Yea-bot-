@@ -109,3 +109,18 @@ class WorkConfig:
     @property
     def enabled(self) -> bool:
         return bool(self.people)
+
+    def warnings(self) -> list[str]:
+        """Типовые ошибки заполнения: без них бот стартует, но работает не так, как ждут."""
+        problems = []
+        for point in self.points.values():
+            if not point.lat or not point.lon:
+                problems.append(f"у точки «{point.title}» не заполнены координаты — геопроверка отключена")
+        for person in self.staff:
+            if not person.point:
+                problems.append(f"{person.name}: не указана точка")
+            elif person.point not in self.points:
+                problems.append(f"{person.name}: точка «{person.point}» не найдена в списке points")
+        if not self.bosses:
+            problems.append("нет ни одного человека с role=boss — сводки и эскалации некому слать")
+        return problems

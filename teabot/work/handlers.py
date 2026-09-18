@@ -98,7 +98,10 @@ async def on_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         raise ApplicationHandlerStop
 
     loc = update.message.location
-    inside, distance = geo.check(loc.latitude, loc.longitude, point.lat, point.lon, point.radius_m)
+    if point.lat and point.lon:
+        inside, distance = geo.check(loc.latitude, loc.longitude, point.lat, point.lon, point.radius_m)
+    else:
+        inside, distance = True, 0   # координаты точки не заполнены — проверять не с чем
     record = ShiftRecord(
         date=today_msk(), tg_id=person.tg_id, name=person.name, point=point.title,
         opened_at=now_msk().isoformat(timespec="seconds"),

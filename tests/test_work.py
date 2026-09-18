@@ -51,7 +51,26 @@ def test_example_config_is_valid():
     """Пример из репозитория должен читаться — на него смотрит владелец при настройке."""
     with open("work_config.example.json", encoding="utf-8") as f:
         cfg = WorkConfig.from_dict(json.load(f))
-    assert len(cfg.points) == 2 and len(cfg.bosses) == 1
+    assert len(cfg.points) == 3 and len(cfg.bosses) == 1
+    assert len(cfg.staff) == 3                      # по одному человеку на точку
+    assert {p.point for p in cfg.staff} == set(cfg.points)
+    # Координаты в примере — нули, и конфиг должен об этом честно сказать
+    assert sum("координаты" in w for w in cfg.warnings()) == 3
+
+
+def test_config_warnings_catch_typos():
+    broken = {
+        "points": [{"id": "gag", "title": "Гагарина", "lat": 55.7, "lon": 37.5}],
+        "people": [{"tg_id": 2, "name": "Аня", "point": "gagarin"}],
+    }
+    warnings = WorkConfig.from_dict(broken).warnings()
+    assert any("не найдена" in w for w in warnings)
+    assert any("role=boss" in w for w in warnings)
+
+
+def test_valid_config_has_no_warnings():
+    cfg = WorkConfig.from_dict(CONFIG)
+    assert cfg.warnings() == []
 
 
 def test_regulations_cover_shift():

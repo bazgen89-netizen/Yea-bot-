@@ -368,7 +368,8 @@ async def build_digest(ctx: ContextTypes.DEFAULT_TYPE) -> str:
     for person in cfg.staff:
         pid = str(person.tg_id)
         shift = next((s for s in shifts if str(s.get("tg_id")) == pid), None)
-        lines.append(f"\n<b>{person.name}</b>")
+        point = cfg.points.get(person.point)
+        lines.append(f"\n<b>{person.name}</b> — {point.title if point else 'точка не задана'}")
         if shift is None:
             lines.append("  ❌ смену не открывал")
         else:

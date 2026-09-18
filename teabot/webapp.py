@@ -67,6 +67,8 @@ async def on_startup(app: web.Application):
             await send_consent_notice(ptb)
         logger.info("👷 Рабочий контур: %d сотрудник(ов), %d точк(и)",
                     len(work_cfg.staff), len(work_cfg.points))
+        for problem in work_cfg.warnings():
+            logger.warning("⚠️ Конфиг: %s", problem)
 
 
 async def on_shutdown(app: web.Application):

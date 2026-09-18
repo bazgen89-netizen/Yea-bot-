@@ -27,6 +27,10 @@ class Settings:
     webhook_url: str
     port: int
     groq_model: str = GROQ_MODEL
+    # Рабочий контур (смены, задачи, викторины). Пусто — контур просто выключен.
+    google_sheet_id: str = ""
+    google_credentials: str = ""
+    work_config_path: str = "work_config.json"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -36,6 +40,9 @@ class Settings:
             serper_key=os.getenv("SERPER_KEY", ""),
             webhook_url=os.getenv("RENDER_EXTERNAL_URL", "https://teabot-490p.onrender.com"),
             port=int(os.getenv("PORT", 8080)),
+            google_sheet_id=os.getenv("GOOGLE_SHEET_ID", ""),
+            google_credentials=os.getenv("GOOGLE_CREDENTIALS", ""),
+            work_config_path=os.getenv("WORK_CONFIG_PATH", "work_config.json"),
         )
 
     def validate(self) -> None:

@@ -4,3 +4,9 @@ __pycache__/
 .env
 venv/
 .venv/
+
+# Рабочий контур: реальные данные команды и локальное хранилище
+work_config.json
+tech_cards.json
+regulations.json
+work_data.json

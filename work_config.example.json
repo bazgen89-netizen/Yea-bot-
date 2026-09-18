@@ -1,0 +1,35 @@
+{
+  "_комментарий": "Скопируйте в work_config.json. tg_id узнаётся командой /myid в боте. workdays: 0=понедельник.",
+  "points": [
+    {
+      "id": "gagarinskiy",
+      "title": "Гагаринский",
+      "lat": 55.706500,
+      "lon": 37.576000,
+      "radius_m": 200,
+      "open_at": "10:00",
+      "close_at": "21:00"
+    },
+    {
+      "id": "cheryomushki",
+      "title": "Черёмушки",
+      "lat": 55.669000,
+      "lon": 37.565000,
+      "radius_m": 200,
+      "open_at": "10:00",
+      "close_at": "21:00"
+    }
+  ],
+  "people": [
+    { "tg_id": 111111111, "name": "Вы (руководитель)", "role": "boss" },
+    { "tg_id": 222222222, "name": "Имя сотрудника", "role": "staff", "point": "gagarinskiy", "workdays": [0, 1, 2, 3, 4] },
+    { "tg_id": 333333333, "name": "Имя сотрудника", "role": "staff", "point": "cheryomushki", "workdays": [2, 3, 4, 5, 6] }
+  ],
+  "schedule": {
+    "morning_reminder": "09:45",
+    "evening_close": "20:30",
+    "boss_digest": "21:00",
+    "quiz_window": ["13:00", "17:00"],
+    "quiz_questions": 3
+  }
+}

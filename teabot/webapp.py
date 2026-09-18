@@ -1,5 +1,6 @@
 """Сборка приложения: Telegram-бот (PTB) + aiohttp-сервер webhook."""
 import logging
+import os
 
 from aiohttp import web
 from telegram import Update
@@ -10,6 +11,13 @@ from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
 from .http import create_session, close_session
 from .services import GroqClient, SerperClient
+from .work import WorkConfig
+from .work.handlers import WORK_CFG, WORK_QUIZ, WORK_REGULATIONS, WORK_STORAGE
+from .work.quiz import load_questions
+from .work.regulations import load_regulations
+from .work.router import register_work_handlers
+from .work.scheduler import schedule_jobs, send_consent_notice
+from .work.storage import create_storage
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,14 @@ async def on_startup(app: web.Application):
     )
     ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
 
+    # Рабочий контур: включается, только если в work_config.json есть люди
+    work_cfg: WorkConfig = ptb.bot_data[WORK_CFG]
+    if work_cfg.enabled:
+        ptb.bot_data[WORK_STORAGE] = create_storage(
+            settings.google_sheet_id, settings.google_credentials)
+        ptb.bot_data[WORK_REGULATIONS] = load_regulations()
+        ptb.bot_data[WORK_QUIZ] = load_questions()
+
     await ptb.initialize()
     await ptb.start()
     full_url = f"{settings.webhook_url.rstrip('/')}/webhook"
@@ -44,6 +60,13 @@ async def on_startup(app: web.Application):
     logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
     logger.info(f"🔗 Webhook: {full_url}")
     logger.info(f"🤖 AI: Groq {settings.groq_model}")
+
+    if work_cfg.enabled:
+        schedule_jobs(ptb)
+        if os.getenv("SEND_CONSENT_NOTICE") == "1":
+            await send_consent_notice(ptb)
+        logger.info("👷 Рабочий контур: %d сотрудник(ов), %d точк(и)",
+                    len(work_cfg.staff), len(work_cfg.points))
 
 
 async def on_shutdown(app: web.Application):
@@ -58,6 +81,10 @@ async def on_shutdown(app: web.Application):
 def create_app(settings: Settings) -> web.Application:
     """Собирает aiohttp-приложение с ботом. Вынесено отдельно для тестируемости."""
     ptb = Application.builder().token(settings.telegram_bot_token).build()
+    work_cfg = WorkConfig.load(settings.work_config_path)
+    ptb.bot_data[WORK_CFG] = work_cfg
+    if work_cfg.enabled:
+        register_work_handlers(ptb)   # группа 0 — раньше чайных обработчиков
     register_handlers(ptb)
 
     web_app = web.Application()

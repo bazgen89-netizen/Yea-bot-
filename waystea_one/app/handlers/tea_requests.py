@@ -1,0 +1,78 @@
+"""Owner request: a dedicated "какой чай привезти" chat/topic. A message
+there is treated as a tea-restock request only if it contains at least one
+4- or 8-digit product article code (e.g. "3005 тг", "6242 9978 2023 г.") —
+not any text, since the topic can also carry casual chatter that isn't an
+order list. The store is inferred from whichever store the sender is on
+shift at today (ShiftLog), not from the message text.
+
+Configured via TEA_REQUEST_CHAT_ID (required) and TEA_REQUEST_THREAD_ID
+(only if it's a forum topic inside an existing group rather than its own
+chat) — see app/config.py. Feature is a no-op until TEA_REQUEST_CHAT_ID is
+set. Registered in app/bot.py before shift.py's generic F.text catch-all,
+since a chat/thread match here should never fall through to shift-start/
+task-reply/etc. detection meant for the main work chat.
+"""
+import re
+
+from aiogram import Router
+from aiogram.types import Message
+
+from app.config import settings
+from app.db import get_session
+from app.services.identity import get_employee, get_todays_shift
+from app.services.messaging import notify_employee
+from app.services.purchasing import create_purchase_request
+
+router = Router(name="tea_requests")
+
+# Article codes are exactly 4 or 8 digits, not any digit run — e.g. "3005"
+# or "6242"/"9978" (a following "2023 г." year is 4 digits too but harmless
+# to also match, since the whole message is what gets recorded anyway).
+_ARTICLE_CODE_PATTERN = re.compile(r"(?<!\d)\d{4}(?!\d)|(?<!\d)\d{8}(?!\d)")
+
+
+def _is_tea_request_message(message: Message) -> bool:
+    if settings.tea_request_chat_id is None:
+        return False
+    if message.chat.id != settings.tea_request_chat_id:
+        return False
+    if settings.tea_request_thread_id is not None:
+        if message.message_thread_id != settings.tea_request_thread_id:
+            return False
+    return _ARTICLE_CODE_PATTERN.search(message.text or "") is not None
+
+
+@router.message(_is_tea_request_message)
+async def on_tea_request(message: Message) -> None:
+    product = (message.text or "").strip()
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        if employee is None:
+            # Can't attribute a store to someone we don't know yet. No
+            # Employee object means notify_employee (which needs one) can't
+            # be used — reply directly in this chat instead of staying
+            # silent, which looked like the bot ignoring the message.
+            await message.reply(
+                "Не узнаю вас 🙂 Сначала напишите в рабочий чат, что вы на "
+                "месте (это разово знакомит меня с вами), потом можно писать "
+                "сюда."
+            )
+            return
+
+        shift = await get_todays_shift(session, employee.id)
+        if shift is None:
+            await notify_employee(
+                message.bot,
+                employee,
+                "Сначала отметьте начало смены (напишите в рабочий чат, что вы на месте) — "
+                "иначе не пойму, для какого магазина эта заявка.",
+                message,
+            )
+            return
+
+        await create_purchase_request(session, employee.id, shift.store_id, product)
+
+    await notify_employee(
+        message.bot, employee, f"Записал в закупку чая: {product} 👍", message
+    )

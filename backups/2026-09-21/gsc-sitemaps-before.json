@@ -1,0 +1,96 @@
+{
+ "sitemap": [
+  {
+   "path": "https://waystea.ru/product-category/puer-shen/",
+   "lastSubmitted": "2026-07-27T11:09:13.298Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "lastDownloaded": "2026-09-21T13:11:55.955Z",
+   "warnings": "0",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/otzyvy/",
+   "lastSubmitted": "2026-07-27T11:09:01.872Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "lastDownloaded": "2026-09-18T21:29:04.930Z",
+   "warnings": "0",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/shu-puer/",
+   "lastSubmitted": "2026-07-27T11:08:50.646Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "lastDownloaded": "2026-09-20T21:15:27.221Z",
+   "warnings": "0",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/krasnyj-kitajskij-chaj/",
+   "lastSubmitted": "2026-07-27T11:08:37.082Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "lastDownloaded": "2026-09-20T16:19:42.058Z",
+   "warnings": "0",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/krasnyj-chaj/",
+   "lastSubmitted": "2026-07-27T11:08:08.371Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "lastDownloaded": "2026-09-21T13:02:10.568Z",
+   "warnings": "0",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/sitemap_index.xml",
+   "lastSubmitted": "2026-06-04T20:42:32.296Z",
+   "isPending": false,
+   "isSitemapsIndex": true,
+   "lastDownloaded": "2026-09-15T14:10:58.266Z",
+   "warnings": "0",
+   "errors": "0",
+   "contents": [
+    {
+     "type": "web",
+     "submitted": "521",
+     "indexed": "0"
+    },
+    {
+     "type": "image",
+     "submitted": "382",
+     "indexed": "0"
+    }
+   ]
+  },
+  {
+   "path": "https://waystea.ru/sitemap-feeds.xml",
+   "lastSubmitted": "2021-08-18T00:32:54.377Z",
+   "isPending": false,
+   "isSitemapsIndex": true,
+   "lastDownloaded": "2022-07-12T11:19:35.471Z",
+   "warnings": "3",
+   "errors": "1"
+  },
+  {
+   "path": "https://waystea.ru/sitemap-store.xml",
+   "lastSubmitted": "2021-08-18T00:32:46.562Z",
+   "isPending": false,
+   "isSitemapsIndex": false,
+   "type": "sitemap",
+   "lastDownloaded": "2022-07-05T20:12:39.933Z",
+   "warnings": "0",
+   "errors": "1",
+   "contents": [
+    {
+     "type": "web",
+     "submitted": "94",
+     "indexed": "0"
+    }
+   ]
+  }
+ ]
+}

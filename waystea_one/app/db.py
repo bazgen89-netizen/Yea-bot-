@@ -1,10 +1,49 @@
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
 from app.models import Base
 
-engine = create_async_engine(settings.database_url)
+
+def normalize_database_url(url: str) -> str:
+    """Accept a connection string in whatever form the hosting panel gives it.
+
+    Render, Neon and Supabase all hand out a libpq-style URL meant for psql
+    (`postgres://...?sslmode=require`), while this app talks to Postgres
+    through asyncpg, which needs `postgresql+asyncpg://` and rejects
+    libpq-only query parameters outright. Editing that by hand in a web
+    form is exactly the step that gets mistyped at 2am, so the app fixes it
+    instead of asking anyone to.
+    """
+    if not url:
+        return url
+
+    for legacy, driver in (("postgres://", "postgresql+asyncpg://"),
+                           ("postgresql://", "postgresql+asyncpg://")):
+        if url.startswith(legacy):
+            url = driver + url[len(legacy):]
+            break
+
+    parts = urlsplit(url)
+    params = []
+    for key, value in parse_qsl(parts.query, keep_blank_values=True):
+        if key == "sslmode":
+            # asyncpg spells it `ssl` and knows nothing about libpq's
+            # disable/allow/prefer gradations — anything that asked for TLS
+            # becomes a plain requirement, anything that refused it is dropped.
+            if value in ("require", "verify-ca", "verify-full", "prefer", "allow"):
+                params.append(("ssl", "require"))
+            continue
+        if key in ("channel_binding", "target_session_attrs", "options"):
+            continue  # libpq-only, asyncpg raises on them
+        params.append((key, value))
+
+    return urlunsplit(parts._replace(query=urlencode(params)))
+
+
+engine = create_async_engine(normalize_database_url(settings.database_url))
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 # Base.metadata.create_all only creates tables that don't exist yet — it does

@@ -9,7 +9,7 @@ from .cache import TTLCache
 from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
 from .http import create_session, close_session
-from .services import GroqClient, SerperClient
+from .services import AIClient, SerperClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,9 @@ async def on_startup(app: web.Application):
         settings.serper_key, session,
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
-    ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    ptb.bot_data[AI_KEY] = AIClient(
+        settings.ai_api_key, settings.ai_model, session, settings.ai_base_url,
+    )
 
     await ptb.initialize()
     await ptb.start()
@@ -43,7 +45,7 @@ async def on_startup(app: web.Application):
     await ptb.bot.set_webhook(full_url)
     logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
     logger.info(f"🔗 Webhook: {full_url}")
-    logger.info(f"🤖 AI: Groq {settings.groq_model}")
+    logger.info(f"🤖 AI: {settings.ai_model} @ {settings.ai_base_url}")
 
 
 async def on_shutdown(app: web.Application):

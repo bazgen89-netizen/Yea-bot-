@@ -1,5 +1,5 @@
-"""Клиенты внешних сервисов (Serper, Groq)."""
-from .ai import GroqClient
+"""Клиенты внешних сервисов (Serper, AI)."""
+from .ai import AIClient, GroqClient
 from .search import SerperClient
 
-__all__ = ["GroqClient", "SerperClient"]
+__all__ = ["AIClient", "GroqClient", "SerperClient"]

@@ -27,12 +27,12 @@ flowchart LR
     subgraph APP["🍵 Tea Expert Bot (Render)"]
         WH[webapp.py<br/>aiohttp-сервер] --> H[handlers/<br/>команды, сообщения, кнопки]
         H --> S[services/search.py<br/>SerperClient]
-        H --> A[services/ai.py<br/>GroqClient]
+        H --> A[services/ai.py<br/>AIClient]
         S --> C[(cache.py<br/>TTLCache, 5 мин)]
     end
 
     S -->|поиск cn + ru| SERPER[Serper API<br/>google.serper.dev]
-    A -->|chat completions| GROQ[Groq API<br/>Llama 3.3 70B]
+    A -->|chat completions| GROQ[AI-провайдер<br/>по умолчанию Groq / Llama 3.3 70B]
 ```
 
 Бот работает в **webhook-режиме**: Telegram сам доставляет обновления HTTP-запросом на `/webhook`, поэтому не нужен постоянный long-polling и приложение хорошо подходит для платформ типа Render.
@@ -90,7 +90,7 @@ Yea-bot-/
 │   ├── http.py             # общая aiohttp.ClientSession на всё приложение
 │   ├── services/
 │   │   ├── search.py       # SerperClient — поиск (cn + ru параллельно) + кэш
-│   │   └── ai.py           # GroqClient — chat completions + health_check
+│   │   └── ai.py           # AIClient — chat completions + health_check
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
@@ -127,7 +127,7 @@ flowchart TD
 | `teabot/cache.py` | Кэш в памяти | `TTLCache(ttl=300, max_size=200)` |
 | `teabot/http.py` | Жизненный цикл общей HTTP-сессии | `create_session()`, `close_session()` |
 | `teabot/services/search.py` | Поиск Serper: китайские + российские источники параллельно, кэширование | `SerperClient.search_china()`, `.health_check()` |
-| `teabot/services/ai.py` | Генерация ответов Groq (Llama 3.3 70B), обработка 429/401/таймаутов | `GroqClient.ask()`, `.health_check()` |
+| `teabot/services/ai.py` | Генерация ответов через OpenAI-совместимый API (по умолчанию Groq / Llama 3.3 70B), обработка 429/401/таймаутов | `AIClient.ask()`, `.health_check()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
@@ -141,7 +141,7 @@ flowchart TD
 | Сервис | Назначение | Протокол |
 |---|---|---|
 | **Telegram Bot API** | Приём/отправка сообщений | Webhook (входящие) + HTTPS (исходящие), библиотека `python-telegram-bot` |
-| **Groq API** | LLM-генерация ответов (`llama-3.3-70b-versatile`) | OpenAI-совместимый REST, тайм-аут 30 с |
+| **AI-провайдер** | LLM-генерация ответов; по умолчанию Groq (`llama-3.3-70b-versatile`) | OpenAI-совместимый REST (`{AI_BASE_URL}/chat/completions`), тайм-аут 30 с. Провайдер меняется переменными окружения, без правки кода |
 | **Serper API** | Поиск Google (zh-cn и ru локали) | REST, тайм-аут 8 с, результаты кэшируются на 5 мин |
 | **Render** | Хостинг, даёт `RENDER_EXTERNAL_URL` и `PORT` | — |
 
@@ -150,7 +150,9 @@ flowchart TD
 | Переменная | Обязательна | Описание |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | ✅ да | Токен бота от @BotFather; без него приложение не стартует |
-| `GROQ_API_KEY` | нет | Ключ Groq; без него бот отвечает заглушкой «AI отключён» |
+| `AI_API_KEY` | нет | Ключ AI-провайдера; без него бот отвечает заглушкой «AI отключён». Синоним для совместимости — `GROQ_API_KEY` |
+| `AI_BASE_URL` | нет | Базовый URL OpenAI-совместимого API, по умолчанию `https://api.groq.com/openai/v1`. Сюда подставляется адрес любого другого провайдера или self-hosted шлюза-агрегатора |
+| `AI_MODEL` | нет | ID модели, по умолчанию `llama-3.3-70b-versatile`. Синоним — `GROQ_MODEL` |
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |

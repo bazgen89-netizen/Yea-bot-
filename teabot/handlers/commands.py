@@ -24,11 +24,12 @@ async def debug_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     search = get_search(ctx)
 
     lines = ["🔧 <b>Диагностика:</b>\n"]
-    lines.append(f"🔑 GROQ_API_KEY: {'✅ задан' if ai.api_key else '❌ не задан'}")
+    lines.append(f"🔑 AI_API_KEY: {'✅ задан' if ai.api_key else '❌ не задан'}")
     lines.append(f"🔑 SERPER_KEY: {'✅ задан' if search.api_key else '⚠️ не задан'}")
-    lines.append(f"🤖 Модель: {ai.model}\n")
+    lines.append(f"🤖 Модель: {ai.model}")
+    lines.append(f"🌐 Endpoint: {ai.base_url}\n")
 
-    lines.append("🤖 <b>Groq AI:</b>")
+    lines.append("🤖 <b>AI:</b>")
     lines.append(f"  {await ai.health_check()}")
 
     lines.append("\n🔍 <b>Поиск Serper:</b>")

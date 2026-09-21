@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 
 from ... import branches
-from ..base import CAP_INBOX, CAP_REPLY, ConnectorError, HttpConnector
+from ..base import CAP_INBOX, CAP_PUBLISH, CAP_REPLY, ConnectorError, HttpConnector
 from ..models import KIND_REVIEW, PublishResult, SocialItem
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -24,7 +24,7 @@ STARS = {"ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5}
 class GoogleBusinessConnector(HttpConnector):
     network = "google_maps"
     title = "Google Карты"
-    capabilities = frozenset({CAP_INBOX, CAP_REPLY})
+    capabilities = frozenset({CAP_INBOX, CAP_REPLY, CAP_PUBLISH})
     required_env = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
                     "GOOGLE_REFRESH_TOKEN", "GOOGLE_LOCATION")
 
@@ -102,6 +102,30 @@ class GoogleBusinessConnector(HttpConnector):
         )
         self._unwrap(status, body)
         return PublishResult(self.network, True, url=item.url)
+
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
+        """Пост в карточке Google Карт (то, что в интерфейсе — «Новости»).
+
+        Пост живёт у конкретной точки, поэтому у трёх магазинов выйдет
+        три поста — каждый в своей карточке.
+        """
+        location = self.creds["location"].strip("/")
+        post: dict = {"languageCode": "ru", "summary": text[:1500],
+                      "topicType": "STANDARD"}
+        if image_url:
+            post["media"] = [{"mediaFormat": "PHOTO", "sourceUrl": image_url}]
+        if link:
+            post["callToAction"] = {"actionType": "LEARN_MORE", "url": link}
+
+        created = await self._post(
+            f"{MYBUSINESS}/{location}/localPosts",
+            headers=await self._auth_headers(), json=post,
+        )
+        return PublishResult(
+            self.network, True,
+            url=(created or {}).get("searchUrl", "") if isinstance(created, dict) else "",
+        )
 
     async def _probe(self) -> str:
         location = self.creds["location"].strip("/")

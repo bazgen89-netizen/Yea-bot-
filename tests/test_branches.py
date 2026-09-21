@@ -166,8 +166,10 @@ class FakeResponse:
 class FakeSession:
     def __init__(self, payload):
         self.payload = payload
+        self.calls = []
 
     def request(self, method, url, **kwargs):
+        self.calls.append({"method": method, "url": url, **kwargs})
         return FakeResponse(self.payload)
 
 
@@ -302,3 +304,46 @@ def test_platforms_without_branch_stay_common():
         {"VK_GROUP_TOKEN": "v", "VK_GROUP_ID": "1"}, session=None) if c.enabled]
     groups = group_by_branch(enabled)
     assert [t for t, _ in groups] == ["🌐 Общие сети"]
+
+
+# ------------------------------------------- посты в карточках Google Карт
+
+def test_google_publishes_post_to_its_own_card():
+    connector = google_connectors(google_env(
+        GOOGLE_LOCATIONS="gagarina:accounts/1/locations/11"))[0]
+    connector._token, connector._token_expires = "t", 9e12
+    connector.session = FakeSession({"searchUrl": "https://maps.google.com/post"})
+
+    result = run(connector.publish("Собрали новые подарочные наборы",
+                                   link="https://waystea.ru",
+                                   image_url="https://waystea.ru/foto.jpg"))
+
+    assert result.ok
+    call = connector.session.calls[0]
+    assert call["url"].endswith("accounts/1/locations/11/localPosts")
+    body = call["json"]
+    assert body["summary"].startswith("Собрали новые")
+    assert body["languageCode"] == "ru"
+    assert body["media"][0]["sourceUrl"] == "https://waystea.ru/foto.jpg"
+    assert body["callToAction"]["url"] == "https://waystea.ru"
+
+
+def test_google_post_without_picture_and_link():
+    connector = google_connectors(google_env(
+        GOOGLE_LOCATIONS="cheryomushki:accounts/1/locations/33"))[0]
+    connector._token, connector._token_expires = "t", 9e12
+    connector.session = FakeSession({})
+
+    assert run(connector.publish("Новое поступление улунов")).ok
+    body = connector.session.calls[0]["json"]
+    assert "media" not in body and "callToAction" not in body
+
+
+def test_post_goes_to_every_store_card():
+    from teabot.social import CAP_PUBLISH as PUBLISH
+
+    env = google_env(GOOGLE_LOCATIONS=(
+        "gagarina:accounts/1/locations/11,gastromarket:accounts/1/locations/22,"
+        "cheryomushki:accounts/1/locations/33"))
+    publishing = [c for c in google_connectors(env) if c.can(PUBLISH)]
+    assert len(publishing) == 3

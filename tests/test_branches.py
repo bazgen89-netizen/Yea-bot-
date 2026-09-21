@@ -257,3 +257,48 @@ def test_google_review_carries_its_branch():
     assert item.branch == "gagarina"
     assert item.network == "google_maps_gagarina"
     assert item.rating == 5
+
+
+# ------------------------------------------------- панель сгруппирована
+
+def test_panel_groups_platforms_by_store():
+    from teabot.handlers.social import group_by_branch
+
+    env = {"YANDEX_BUSINESS_TOKEN": "t",
+           "GOOGLE_CLIENT_ID": "c", "GOOGLE_CLIENT_SECRET": "s",
+           "GOOGLE_REFRESH_TOKEN": "r",
+           "GOOGLE_LOCATIONS": "gagarina:accounts/1/locations/11",
+           "VK_GROUP_TOKEN": "v", "VK_GROUP_ID": "1"}
+    enabled = [c for c in build_connectors(env, session=None) if c.enabled]
+
+    groups = dict((title, [c.network for c in found])
+                  for title, found in group_by_branch(enabled))
+    titles = list(groups)
+
+    # Гагарина собирает обе свои карточки — Яндекс и Google
+    gagarina = next(t for t in titles if "Гагарина" in t)
+    assert groups[gagarina] == ["yandex_maps_gagarina", "google_maps_gagarina"]
+    assert "ул. Гагарина, 5А" in gagarina
+
+    # Точки идут первыми, общие сети — последними
+    assert titles[-1] == "🌐 Общие сети"
+    assert "vk" in groups["🌐 Общие сети"]
+
+
+def test_grouping_keeps_order_of_branches():
+    from teabot.handlers.social import group_by_branch
+
+    enabled = [c for c in build_connectors({"YANDEX_BUSINESS_TOKEN": "t"}, session=None)
+               if c.enabled]
+    titles = [t for t, _ in group_by_branch(enabled)]
+    assert ["Гагарина" in titles[0], "Гастромаркет" in titles[1],
+            "Черёмушки" in titles[2]] == [True, True, True]
+
+
+def test_platforms_without_branch_stay_common():
+    from teabot.handlers.social import group_by_branch
+
+    enabled = [c for c in build_connectors(
+        {"VK_GROUP_TOKEN": "v", "VK_GROUP_ID": "1"}, session=None) if c.enabled]
+    groups = group_by_branch(enabled)
+    assert [t for t, _ in groups] == ["🌐 Общие сети"]

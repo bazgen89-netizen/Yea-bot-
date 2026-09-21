@@ -48,6 +48,9 @@ class SocialSettings:
     meta_app_secret: str = ""
     vk_confirmation: str = ""
     vk_callback_secret: str = ""
+    wp_url: str = ""
+    wp_user: str = ""
+    wp_app_password: str = ""
     env: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -71,6 +74,10 @@ class SocialSettings:
             meta_app_secret=env.get("META_APP_SECRET", ""),
             vk_confirmation=env.get("VK_CONFIRMATION", ""),
             vk_callback_secret=env.get("VK_CALLBACK_SECRET", ""),
+            wp_url=env.get("WP_URL", "https://waystea.ru"),
+            wp_user=env.get("WP_USER", ""),
+            wp_app_password=env.get("WP_APP_PASSWORD")
+            or env.get("WAYSTEA_WP_APP_PASSWORD", ""),
             env=dict(env),
         )
 

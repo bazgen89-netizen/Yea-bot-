@@ -24,15 +24,27 @@ class TelegramChannelConnector(HttpConnector):
             raise ConnectorError(str(data.get("description", "ошибка Telegram"))[:100])
         return data.get("result", {}) if isinstance(data, dict) else {}
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
         body = text if not link else f"{text}\n\n{link}"
-        res = await self._call(
-            "sendMessage",
-            chat_id=self.creds["channel_id"],
-            text=body[:4000],
-            parse_mode="HTML",
-            disable_web_page_preview=False,
-        )
+        if image_url:
+            # С картинкой пост выглядит как в остальных сетях,
+            # но подпись у фото ограничена 1024 символами
+            res = await self._call(
+                "sendPhoto",
+                chat_id=self.creds["channel_id"],
+                photo=image_url,
+                caption=body[:1024],
+                parse_mode="HTML",
+            )
+        else:
+            res = await self._call(
+                "sendMessage",
+                chat_id=self.creds["channel_id"],
+                text=body[:4000],
+                parse_mode="HTML",
+                disable_web_page_preview=False,
+            )
         chat = res.get("chat", {}) or {}
         username = chat.get("username")
         msg_id = res.get("message_id")

@@ -46,6 +46,11 @@ class Connector:
     def enabled(self) -> bool:
         return all(self.creds.get(k) for k in self._cred_keys())
 
+    @property
+    def branch_code(self) -> str:
+        """Код точки Waystea, если площадка привязана к магазину."""
+        return (self.creds.get("branch") or "").strip().lower()
+
     def _cred_keys(self) -> tuple:
         return tuple(self.creds.keys())
 
@@ -59,7 +64,10 @@ class Connector:
     async def reply(self, item: SocialItem, text: str) -> PublishResult:
         return PublishResult(self.network, False, error="ответы не поддерживаются")
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
+        """image_url — публичная ссылка на картинку; сети, которым она не
+        нужна, просто её игнорируют, а Instagram без неё не публикует."""
         return PublishResult(self.network, False, error="публикация не поддерживается")
 
     async def health_check(self) -> str:

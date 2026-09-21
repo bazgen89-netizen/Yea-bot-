@@ -38,7 +38,8 @@ class OKConnector(HttpConnector):
             raise ConnectorError(str(data.get("error_msg", "ошибка OK"))[:100])
         return data if isinstance(data, dict) else {"result": data}
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
         group_id = self.creds.get("group_id")
         if not group_id:
             return PublishResult(self.network, False, error="не задан OK_GROUP_ID")

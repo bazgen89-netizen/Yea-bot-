@@ -35,10 +35,10 @@ class FakeConnector(Connector):
         self.sent.append((item.uid, text))
         return PublishResult(self.network, True)
 
-    async def publish(self, text, link=""):
+    async def publish(self, text, link="", image_url=""):
         if self._fail:
             raise ConnectorError(self._fail)
-        self.posted.append(text)
+        self.posted.append({"text": text, "image_url": image_url})
         return PublishResult(self.network, True, url=f"https://{self.network}/1")
 
 

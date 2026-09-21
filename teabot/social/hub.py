@@ -142,9 +142,13 @@ class SocialHub:
 
     # ---------------------------------------------------------- публикация
 
-    async def publish(self, text: str, link: str = "",
+    async def publish(self, text: str, link: str = "", image_url: str = "",
                       networks: Optional[Iterable[str]] = None) -> list[PublishResult]:
-        """Кросспостинг во все сети, умеющие публиковать (или в выбранные)."""
+        """Кросспостинг во все сети, умеющие публиковать (или в выбранные).
+
+        image_url — публичная ссылка на картинку: Instagram без неё не
+        публикует, остальные сети добавят её к посту, если умеют.
+        """
         targets = self.with_capability(CAP_PUBLISH)
         if networks is not None:
             wanted = set(networks)
@@ -153,7 +157,7 @@ class SocialHub:
             return []
 
         results = await asyncio.gather(
-            *(c.publish(text, link) for c in targets), return_exceptions=True
+            *(c.publish(text, link, image_url) for c in targets), return_exceptions=True
         )
         out: list[PublishResult] = []
         for connector, result in zip(targets, results):

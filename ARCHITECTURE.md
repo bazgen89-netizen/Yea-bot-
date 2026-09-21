@@ -101,6 +101,7 @@ Yea-bot-/
 │   │   ├── base.py         # Connector / HttpConnector — контракт площадки
 │   │   ├── registry.py     # сборка коннекторов из переменных окружения
 │   │   ├── state.py        # SeenStore — память о показанных элементах
+│   │   ├── media.py        # медиатека сайта: публичные ссылки на картинки
 │   │   ├── webhooks.py     # разбор событий Meta и Callback API ВКонтакте
 │   │   ├── hub.py          # SocialHub — чтение, ответы, кросспостинг
 │   │   └── connectors/     # VK, Telegram, OK, Meta, WhatsApp, Авито, Яндекс/Google Карты
@@ -148,6 +149,7 @@ flowchart TD
 | `teabot/services/gemini.py` | Второй мозг: Google Gemini с тем же интерфейсом | `GeminiClient.ask()`, `.health_check()` |
 | `teabot/services/router.py` | Выбор мозга и переход на запасной при сбое | `AIRouter.ask()`, `.switch()`, `is_error_answer()` |
 | `teabot/social/` | Единый хаб соцсетей: общий формат, коннекторы, кросспостинг | `SocialHub`, `Connector`, `SeenStore`, `build_connectors()` |
+| `teabot/social/media.py` | Хостинг картинок для постов (Instagram берёт только ссылку) | `WordPressMedia.upload()`, `check_for_instagram()` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/handlers/social.py` | Панель соцсетей, доставка входящих в админский чат, фоновый опрос | `social_cmd`, `deliver_items()`, `poll_job` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
@@ -226,6 +228,7 @@ flowchart TD
 | `SOCIAL_STATE_PATH` | нет | Файл памяти о показанных входящих |
 | `META_VERIFY_TOKEN` | нет | Подтверждение подписки Meta; без него точка приёма `/social/meta` отключена |
 | `META_APP_SECRET` | нет | Проверка подписи событий Meta |
+| `WP_URL`, `WP_USER`, `WP_APP_PASSWORD` | нет | Медиатека сайта для картинок постов; без них Instagram не опубликует |
 | `VK_CONFIRMATION` | нет | Строка подтверждения Callback API; без неё `/social/vk` отключена |
 | `VK_CALLBACK_SECRET` | нет | Секретный ключ сообщества для проверки событий |
 | ключи площадок | нет | По одной группе переменных на сеть — см. [docs/SOCIAL.md](docs/SOCIAL.md) |

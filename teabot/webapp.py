@@ -9,10 +9,11 @@ from telegram.ext import Application
 from .cache import TTLCache
 from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
-from .handlers.social import ADMIN_KEY, HUB_KEY, deliver_items, poll_job
+from .handlers.social import ADMIN_KEY, HUB_KEY, MEDIA_KEY, deliver_items, poll_job
 from .http import create_session, close_session
 from .services import AIRouter, GeminiClient, GroqClient, SerperClient
 from .social import SeenStore, SocialHub, build_connectors
+from .social.media import WordPressMedia
 from .social.webhooks import parse_meta_payload, parse_vk_payload, verify_signature
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,9 @@ def setup_social(ptb: Application, settings: Settings,
     )
     ptb.bot_data[HUB_KEY] = hub
     ptb.bot_data[ADMIN_KEY] = social.admin_chat_id
+    ptb.bot_data[MEDIA_KEY] = WordPressMedia(
+        social.wp_url, social.wp_user, social.wp_app_password, session,
+    )
 
     if not social.polling_enabled:
         logger.warning("⚠️ SOCIAL_ADMIN_CHAT_ID не задан — автономный опрос соцсетей выключен")

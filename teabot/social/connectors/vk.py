@@ -80,7 +80,8 @@ class VKConnector(HttpConnector):
         )
         return PublishResult(self.network, True)
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
         group_id = self.creds.get("group_id")
         if not group_id:
             return PublishResult(self.network, False, error="не задан VK_GROUP_ID")

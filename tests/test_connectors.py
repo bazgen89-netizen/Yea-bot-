@@ -6,8 +6,8 @@ import pytest
 
 from teabot.social import ConnectorError
 from teabot.social.connectors import (
-    AvitoConnector, GoogleBusinessConnector, InstagramConnector,
-    TelegramChannelConnector, VKConnector,
+    AvitoConnector, FacebookConnector, GoogleBusinessConnector,
+    InstagramConnector, TelegramChannelConnector, VKConnector,
 )
 from teabot.social.models import KIND_REVIEW, SocialItem
 
@@ -228,7 +228,47 @@ def test_instagram_flattens_comments():
     assert items[0].thread_id == "c1"
 
 
-def test_instagram_publish_is_not_supported():
+def test_instagram_needs_a_picture():
     ig = InstagramConnector(FakeSession(), user_id="42", token="t")
     result = run(ig.publish("текст"))
-    assert not result.ok and "медиа" in result.error
+    assert not result.ok and "картинкой" in result.error
+
+
+def test_instagram_publishes_in_two_steps():
+    session = FakeSession({"id": "container-1"}, {"id": "media-9"})
+    ig = InstagramConnector(session, user_id="42", token="t")
+
+    result = run(ig.publish("Новый шэн", image_url="https://waystea.ru/foto.jpg"))
+
+    assert result.ok and "media-9" in result.url
+    assert session.calls[0]["url"].endswith("42/media")
+    assert session.calls[0]["params"]["image_url"] == "https://waystea.ru/foto.jpg"
+    assert session.calls[1]["url"].endswith("42/media_publish")
+    assert session.calls[1]["params"]["creation_id"] == "container-1"
+
+
+def test_instagram_reports_missing_container():
+    ig = InstagramConnector(FakeSession({}), user_id="42", token="t")
+    result = run(ig.publish("текст", image_url="https://waystea.ru/foto.jpg"))
+    assert not result.ok and "контейнер" in result.error
+
+
+def test_facebook_photo_post_uses_photos_endpoint():
+    session = FakeSession({"post_id": "p-1"})
+    fb = FacebookConnector(session, page_id="7", token="t")
+
+    result = run(fb.publish("Подпись", image_url="https://waystea.ru/foto.jpg"))
+
+    assert result.ok and result.url.endswith("p-1")
+    assert session.calls[0]["url"].endswith("7/photos")
+    assert session.calls[0]["json"]["url"] == "https://waystea.ru/foto.jpg"
+
+
+def test_telegram_channel_sends_photo_when_picture_given():
+    session = FakeSession({"ok": True, "result": {
+        "message_id": 5, "chat": {"username": "waystea"}}})
+    tg = TelegramChannelConnector(session, token="123:ABC", channel_id="@waystea")
+
+    run(tg.publish("Подпись", image_url="https://waystea.ru/foto.jpg"))
+    assert session.calls[0]["url"].endswith("sendPhoto")
+    assert session.calls[0]["json"]["photo"] == "https://waystea.ru/foto.jpg"

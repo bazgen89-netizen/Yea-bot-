@@ -85,7 +85,19 @@ class FacebookConnector(_GraphConnector):
         )
         return PublishResult(self.network, True)
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
+        if image_url:
+            res = await self._call(
+                "POST", f"{self.creds['page_id']}/photos",
+                json={"url": image_url, "caption": text},
+            )
+            post_id = res.get("post_id") or res.get("id", "")
+            return PublishResult(
+                self.network, True,
+                url=f"https://facebook.com/{post_id}" if post_id else "",
+            )
+
         payload = {"message": text}
         if link:
             payload["link"] = link
@@ -104,7 +116,7 @@ class FacebookConnector(_GraphConnector):
 class InstagramConnector(_GraphConnector):
     network = "instagram"
     title = "Instagram"
-    capabilities = frozenset({CAP_INBOX, CAP_REPLY})
+    capabilities = frozenset({CAP_INBOX, CAP_REPLY, CAP_PUBLISH})
     required_env = ("IG_USER_ID", "IG_TOKEN")
 
     async def fetch(self, limit: int = 10) -> list[SocialItem]:
@@ -136,10 +148,36 @@ class InstagramConnector(_GraphConnector):
         await self._call("POST", f"{item.reply_to}/replies", params={"message": text})
         return PublishResult(self.network, True, url=item.url)
 
-    async def publish(self, text: str, link: str = "") -> PublishResult:
+    async def publish(self, text: str, link: str = "",
+                      image_url: str = "") -> PublishResult:
+        """Публикация в два шага: сначала контейнер, потом сам пост.
+
+        Instagram не принимает файл — только публичную ссылку на JPEG,
+        которую он скачивает сам (см. teabot/social/media.py).
+        """
+        if not image_url:
+            return PublishResult(
+                self.network, False,
+                error="Instagram публикует только с картинкой — пришлите фото к посту",
+            )
+
+        caption = text if not link else f"{text}\n\n{link}"
+        container = await self._call(
+            "POST", f"{self.creds['user_id']}/media",
+            params={"image_url": image_url, "caption": caption[:2200]},
+        )
+        creation_id = container.get("id")
+        if not creation_id:
+            return PublishResult(self.network, False, error="Instagram не создал контейнер")
+
+        published = await self._call(
+            "POST", f"{self.creds['user_id']}/media_publish",
+            params={"creation_id": creation_id},
+        )
+        media_id = published.get("id", "")
         return PublishResult(
-            self.network, False,
-            error="Instagram публикует только с медиа — используйте отложенный постинг",
+            self.network, True,
+            url=f"https://www.instagram.com/p/{media_id}" if media_id else "",
         )
 
     async def _probe(self) -> str:

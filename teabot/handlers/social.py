@@ -11,26 +11,35 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from .. import branches
 from ..config import SOCIAL_FETCH_LIMIT, SOCIAL_MAX_CARDS
 from ..keyboards import (
     social_draft_kb, social_item_kb, social_panel_kb, social_post_kb,
 )
 from ..social import CAP_INBOX, CAP_PUBLISH, CAP_REPLY, SocialHub, SocialItem
+from ..social.media import MediaError, check_for_instagram
 
 logger = logging.getLogger(__name__)
 
 HUB_KEY = "social_hub"
 ADMIN_KEY = "social_admin_chat_id"
+MEDIA_KEY = "social_media"
 
 # Ключи режимов ввода в user_data
 MODE = "social_mode"
 REPLY_TOKEN = "social_reply_token"
 DRAFT = "social_draft"
 PENDING_POST = "social_pending_post"
+PENDING_IMAGE = "social_pending_image"
 
 
 def get_hub(ctx: ContextTypes.DEFAULT_TYPE) -> Optional[SocialHub]:
     return ctx.bot_data.get(HUB_KEY)
+
+
+def get_media(ctx: ContextTypes.DEFAULT_TYPE):
+    """Хранилище картинок: Instagram принимает только ссылку, не файл."""
+    return ctx.bot_data.get(MEDIA_KEY)
 
 
 def _admin_chat_id(ctx: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
@@ -59,11 +68,34 @@ async def _deny(update: Update) -> None:
 
 # --------------------------------------------------------------- панель
 
+def group_by_branch(connectors: list) -> list:
+    """Группирует площадки по магазинам: у сети шесть карточек на три точки.
+
+    Возвращает [(заголовок, [площадки])]: сначала магазины в порядке
+    branches.py, затем общие сети, не привязанные к точке.
+    """
+    by_code: dict = {code: [] for code in branches.BRANCHES}
+    common: list = []
+    for connector in connectors:
+        code = getattr(connector, "branch_code", "")
+        (by_code[code] if code in by_code else common).append(connector)
+
+    groups = [
+        (f"🏪 {branches.BRANCHES[code].title} — {branches.BRANCHES[code].address}", found)
+        for code, found in by_code.items() if found
+    ]
+    if common:
+        groups.append(("🌐 Общие сети", common))
+    return groups
+
+
 def _panel_text(hub: SocialHub, ctx: ContextTypes.DEFAULT_TYPE) -> str:
     enabled = hub.enabled
     lines = ["🌐 <b>Единый центр соцсетей</b>", ""]
     if enabled:
-        lines.append("Подключено: " + ", ".join(c.title for c in enabled))
+        for title, group in group_by_branch(enabled):
+            lines.append(f"{title}")
+            lines.append(f"   {', '.join(c.title.split(' — ')[0] for c in group)}")
     else:
         lines.append("⚠️ Пока не подключена ни одна сеть — см. docs/SOCIAL.md")
     lines.append(f"🤖 Автопилот: {'включён' if hub.autopilot else 'выключен'}")
@@ -93,18 +125,28 @@ async def social_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def _capabilities(connector) -> str:
+    caps = []
+    if connector.can(CAP_INBOX):
+        caps.append("чтение")
+    if connector.can(CAP_REPLY):
+        caps.append("ответы")
+    if connector.can(CAP_PUBLISH):
+        caps.append("посты")
+    return ", ".join(caps) or "нет операций"
+
+
 async def status_text(hub: SocialHub) -> str:
-    lines = ["📊 <b>Статус площадок</b>", ""]
-    for connector, status in await hub.statuses():
-        caps = []
-        if connector.can(CAP_INBOX):
-            caps.append("чтение")
-        if connector.can(CAP_REPLY):
-            caps.append("ответы")
-        if connector.can(CAP_PUBLISH):
-            caps.append("посты")
-        lines.append(f"• <b>{html.escape(connector.title)}</b> — {html.escape(status)}")
-        lines.append(f"  <i>{', '.join(caps) or 'нет операций'}</i>")
+    """Статус по магазинам, а не плоским списком: карточек больше, чем точек."""
+    statuses = dict(await hub.statuses())
+    lines = ["📊 <b>Статус площадок</b>"]
+
+    for title, group in group_by_branch(list(statuses)):
+        lines.append(f"\n<b>{html.escape(title)}</b>")
+        for connector in group:
+            name = connector.title.split(" — ")[0]
+            lines.append(f"• {html.escape(name)} — {html.escape(statuses[connector])}")
+            lines.append(f"  <i>{_capabilities(connector)}</i>")
     return "\n".join(lines)
 
 
@@ -190,11 +232,65 @@ async def _confirm_post(message, ctx: ContextTypes.DEFAULT_TYPE,
         await message.reply_text("⚠️ Нет сетей, куда можно публиковать.")
         return
     ctx.user_data[PENDING_POST] = text
+
+    image_url = ctx.user_data.get(PENDING_IMAGE, "")
+    names = [c.title for c in targets]
+    if not image_url:
+        # Instagram без картинки откажется — честно предупреждаем заранее
+        names = [f"{n} (без картинки не примет)" if "Instagram" in n else n for n in names]
+    picture = "🖼 с картинкой" if image_url else "без картинки"
+
     await message.reply_text(
-        f"📝 <b>Опубликовать в {len(targets)} сетях?</b>\n"
-        f"{', '.join(c.title for c in targets)}\n\n{html.escape(text[:1000])}",
+        f"📝 <b>Опубликовать в {len(targets)} сетях?</b> {picture}\n"
+        f"{', '.join(names)}\n\n{html.escape(text[:1000])}",
         parse_mode="HTML", reply_markup=social_post_kb(),
     )
+
+
+async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Фото к посту: выкладываем в медиатеку и ждём подпись.
+
+    Отдать площадкам ссылку Telegram нельзя — она временная и содержит
+    токен бота, поэтому картинка перекладывается на сайт.
+    """
+    hub = get_hub(ctx)
+    if hub is None or not is_allowed(update, ctx):
+        return
+    media = get_media(ctx)
+    if media is None or not media.available:
+        await update.message.reply_text(
+            "⚠️ Хостинг картинок не настроен: задайте WP_URL, WP_USER и WP_APP_PASSWORD."
+        )
+        return
+
+    photo = update.message.photo[-1]  # последний размер — самый крупный
+    note = await update.message.reply_text("🖼 Выкладываю картинку...")
+    try:
+        file = await ctx.bot.get_file(photo.file_id)
+        data = bytes(await file.download_as_bytearray())
+    except Exception as e:  # noqa: BLE001 — сбой Telegram не должен ронять бота
+        logger.warning("Не удалось забрать фото: %s", e)
+        await note.edit_text("⚠️ Не удалось забрать фото из Telegram.")
+        return
+
+    problem = check_for_instagram(data, "image/jpeg")
+    if problem:
+        await note.edit_text(f"⚠️ {problem}. В Instagram такой пост не уйдёт.")
+
+    try:
+        url = await media.upload(data, filename=f"{photo.file_unique_id}.jpg")
+    except MediaError as e:
+        await note.edit_text(f"⚠️ {e}")
+        return
+
+    ctx.user_data[PENDING_IMAGE] = url
+    caption = (update.message.caption or "").strip()
+    if caption:
+        await note.edit_text("🖼 Картинка готова.")
+        await _confirm_post(update.message, ctx, hub, caption)
+    else:
+        ctx.user_data[MODE] = "post"
+        await note.edit_text("🖼 Картинка готова. Пришлите текст поста.")
 
 
 async def autopilot_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -285,6 +381,7 @@ async def on_social_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif action == "post_cancel":
         ctx.user_data.pop(PENDING_POST, None)
+        ctx.user_data.pop(PENDING_IMAGE, None)
         await q.message.reply_text("❌ Публикация отменена.")
 
     elif action == "post_go":
@@ -292,8 +389,9 @@ async def on_social_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not text:
             await q.message.reply_text("⚠️ Текст поста потерялся, пришлите заново.")
             return
+        image_url = ctx.user_data.pop(PENDING_IMAGE, "")
         note = await q.message.reply_text("🚀 Публикую...")
-        results = await hub.publish(text)
+        results = await hub.publish(text, image_url=image_url)
         titles = {c.network: c.title for c in hub.connectors}
         await note.edit_text(
             "📣 <b>Результат публикации:</b>\n"

@@ -8,6 +8,14 @@ revenue/upsell module, and (step 9) company knowledge-base Q&A via the AI
 Processing Layer — see "What's not here yet" for what's still missing beyond
 the 10 MVP steps.
 
+## Версия Python на Render
+
+`.python-version` фиксирует 3.12. Без него Render берёт свою последнюю
+версию (в сентябре 2026 это 3.14), под которую у asyncpg и aiogram ещё нет
+собранных пакетов, и деплой падает на установке зависимостей. Dockerfile
+и так использует python:3.12-slim — файл нужен для нативной сборки Render,
+которая Dockerfile не читает.
+
 ## Геометка, чай дня и вопросы по чаю (сентябрь 2026)
 
 - `app/services/geo.py` + координаты в `scripts/seed_stores.py` — отметка

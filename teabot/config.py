@@ -46,6 +46,8 @@ class SocialSettings:
     state_path: str
     meta_verify_token: str = ""
     meta_app_secret: str = ""
+    vk_confirmation: str = ""
+    vk_callback_secret: str = ""
     env: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -67,6 +69,8 @@ class SocialSettings:
             state_path=env.get("SOCIAL_STATE_PATH", "/tmp/teabot_social_seen.json"),
             meta_verify_token=env.get("META_VERIFY_TOKEN", ""),
             meta_app_secret=env.get("META_APP_SECRET", ""),
+            vk_confirmation=env.get("VK_CONFIRMATION", ""),
+            vk_callback_secret=env.get("VK_CALLBACK_SECRET", ""),
             env=dict(env),
         )
 
@@ -79,6 +83,11 @@ class SocialSettings:
     def meta_webhook_enabled(self) -> bool:
         """Meta подтверждает подписку только при заданном verify-токене."""
         return bool(self.meta_verify_token)
+
+    @property
+    def vk_webhook_enabled(self) -> bool:
+        """ВКонтакте подтверждает адрес строкой из настроек сообщества."""
+        return bool(self.vk_confirmation)
 
 
 @dataclass(frozen=True)

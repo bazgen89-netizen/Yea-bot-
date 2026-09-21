@@ -101,7 +101,7 @@ Yea-bot-/
 │   │   ├── base.py         # Connector / HttpConnector — контракт площадки
 │   │   ├── registry.py     # сборка коннекторов из переменных окружения
 │   │   ├── state.py        # SeenStore — память о показанных элементах
-│   │   ├── webhooks.py     # разбор событий Meta (WhatsApp, Instagram, Facebook)
+│   │   ├── webhooks.py     # разбор событий Meta и Callback API ВКонтакте
 │   │   ├── hub.py          # SocialHub — чтение, ответы, кросспостинг
 │   │   └── connectors/     # VK, Telegram, OK, Meta, WhatsApp, Авито, Яндекс/Google Карты
 │   ├── handlers/
@@ -226,6 +226,8 @@ flowchart TD
 | `SOCIAL_STATE_PATH` | нет | Файл памяти о показанных входящих |
 | `META_VERIFY_TOKEN` | нет | Подтверждение подписки Meta; без него точка приёма `/social/meta` отключена |
 | `META_APP_SECRET` | нет | Проверка подписи событий Meta |
+| `VK_CONFIRMATION` | нет | Строка подтверждения Callback API; без неё `/social/vk` отключена |
+| `VK_CALLBACK_SECRET` | нет | Секретный ключ сообщества для проверки событий |
 | ключи площадок | нет | По одной группе переменных на сеть — см. [docs/SOCIAL.md](docs/SOCIAL.md) |
 
 ## Деплой

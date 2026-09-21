@@ -7,7 +7,7 @@ import random
 import time
 
 from ..base import CAP_INBOX, CAP_PUBLISH, CAP_REPLY, ConnectorError, HttpConnector
-from ..models import KIND_MESSAGE, PublishResult, SocialItem
+from ..models import KIND_COMMENT, KIND_MESSAGE, PublishResult, SocialItem
 
 API = "https://api.vk.com/method"
 API_VERSION = "5.199"
@@ -58,6 +58,20 @@ class VKConnector(HttpConnector):
         return items
 
     async def reply(self, item: SocialItem, text: str) -> PublishResult:
+        if item.kind == KIND_COMMENT:
+            # Под постом отвечаем комментарием: личное сообщение автор
+            # комментария может и не получить — он нам не писал.
+            raw = item.raw or {}
+            await self._call(
+                "wall.createComment",
+                owner_id=raw.get("owner_id") or f"-{self.creds.get('group_id', '')}",
+                post_id=raw.get("post_id", ""),
+                reply_to_comment=item.item_id,
+                message=text,
+                from_group=1,
+            )
+            return PublishResult(self.network, True, url=item.url)
+
         await self._call(
             "messages.send",
             peer_id=item.reply_to,

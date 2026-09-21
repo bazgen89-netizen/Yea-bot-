@@ -13,7 +13,7 @@ from .handlers.social import ADMIN_KEY, HUB_KEY, deliver_items, poll_job
 from .http import create_session, close_session
 from .services import AIRouter, GeminiClient, GroqClient, SerperClient
 from .social import SeenStore, SocialHub, build_connectors
-from .social.webhooks import parse_meta_payload, verify_signature
+from .social.webhooks import parse_meta_payload, parse_vk_payload, verify_signature
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,42 @@ async def handle_meta_webhook(request: web.Request) -> web.Response:
         request.app['background'].add(task)
         task.add_done_callback(request.app['background'].discard)
     return web.Response(text="OK")
+
+
+async def handle_vk_webhook(request: web.Request) -> web.Response:
+    """Callback API ВКонтакте: комментарии под постами и сообщения сообщества.
+
+    ВКонтакте ждёт в ответ «ok» и повторяет доставку, пока его не получит,
+    поэтому отвечаем сразу, а карточку отправляем фоновой задачей.
+    """
+    social: SocialSettings = request.app['settings'].social
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.warning(f"VK webhook: тело не разобрано: {e}")
+        return web.Response(text="ok")
+
+    secret = social.vk_callback_secret if social else ""
+    if secret and payload.get("secret") != secret:
+        logger.warning("VK webhook: неверный секрет")
+        return web.Response(status=403, text="forbidden")
+
+    if payload.get("type") == "confirmation":
+        # Подтверждение адреса: ВКонтакте ждёт строку из настроек сообщества
+        return web.Response(text=social.vk_confirmation if social else "")
+
+    ptb: Application = request.app['ptb_app']
+    hub: SocialHub = ptb.bot_data.get(HUB_KEY)
+    admin_chat_id = ptb.bot_data.get(ADMIN_KEY)
+    if hub is None or admin_chat_id is None:
+        return web.Response(text="ok")
+
+    items = hub.seen.filter_new(parse_vk_payload(payload))
+    if items:
+        task = asyncio.create_task(deliver_items(ptb.bot, admin_chat_id, hub, items))
+        request.app['background'].add(task)
+        task.add_done_callback(request.app['background'].discard)
+    return web.Response(text="ok")
 
 
 async def on_startup(app: web.Application):
@@ -134,6 +170,11 @@ def setup_social(ptb: Application, settings: Settings,
     else:
         logger.info("ℹ️ META_VERIFY_TOKEN не задан — WhatsApp не сможет принимать сообщения")
 
+    if social.vk_webhook_enabled:
+        logger.info("🔔 Callback ВКонтакте включён: /social/vk (комментарии и сообщения)")
+    else:
+        logger.info("ℹ️ VK_CONFIRMATION не задан — комментарии ВКонтакте не будут приходить")
+
     ptb.job_queue.run_repeating(
         poll_job, interval=social.poll_interval, first=20, name="social_poll",
     )
@@ -169,6 +210,7 @@ def create_app(settings: Settings) -> web.Application:
     # Одна точка приёма для WhatsApp, Instagram и Facebook
     web_app.router.add_get('/social/meta', handle_meta_verify)
     web_app.router.add_post('/social/meta', handle_meta_webhook)
+    web_app.router.add_post('/social/vk', handle_vk_webhook)
     web_app['background'] = set()
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)

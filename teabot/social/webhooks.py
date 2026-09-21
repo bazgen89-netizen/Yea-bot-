@@ -1,10 +1,12 @@
 """Приём событий, которые площадки присылают сами (webhook).
 
 Опрос работает не везде: WhatsApp вообще не отдаёт входящие по запросу —
-Meta присылает их на webhook. Для Instagram и Facebook webhook снимает
-задержку опроса: сообщение появляется в чате сразу, а не через три минуты.
+Meta присылает их на webhook. У ВКонтакте по запросу читаются только
+диалоги, а комментарии под постами приходят событием Callback API.
+Для Instagram и Facebook webhook вдобавок снимает задержку опроса:
+сообщение появляется в чате сразу, а не через три минуты.
 
-Здесь только разбор входящего тела в SocialItem и проверка подписи.
+Здесь только разбор входящего тела в SocialItem и проверка подлинности.
 Доставку в админский чат делает тот же путь, что и для опроса.
 """
 import hashlib
@@ -111,6 +113,62 @@ def _instagram_comment(value: dict) -> list[SocialItem]:
         url=f"https://www.instagram.com/p/{(value.get('media') or {}).get('id', '')}",
         raw=value,
     )]
+
+
+def _vk_author(payload: dict, user_id) -> str:
+    """Имя автора из блока profiles, если ВКонтакте его прислал."""
+    for profile in (payload.get("profiles") or []):
+        if profile.get("id") == user_id:
+            return f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip()
+    return f"id{user_id}" if user_id else "клиент"
+
+
+def parse_vk_payload(payload: dict) -> list[SocialItem]:
+    """События Callback API ВКонтакте: сообщения и комментарии под постами.
+
+    Комментарии иначе не увидеть: по запросу отдаются только диалоги.
+    Свои же ответы (from_id сообщества — отрицательный) пропускаем.
+    """
+    kind = payload.get("type", "")
+    obj = payload.get("object") or {}
+    group_id = str(payload.get("group_id", ""))
+
+    if kind == "message_new":
+        message = obj.get("message") or obj
+        author_id = message.get("from_id")
+        if not author_id or author_id < 0:
+            return []
+        return [SocialItem(
+            network="vk",
+            kind=KIND_MESSAGE,
+            item_id=str(message.get("id", "")),
+            author=_vk_author(payload, author_id),
+            text=message.get("text", "") or "[вложение]",
+            created_at=_ts(message.get("date")),
+            thread_id=str(message.get("peer_id", author_id)),
+            url=f"https://vk.com/gim{group_id}?sel={author_id}",
+            raw=message,
+        )]
+
+    if kind in ("wall_reply_new", "photo_comment_new", "video_comment_new"):
+        author_id = obj.get("from_id")
+        if not author_id or author_id < 0:
+            return []
+        post_id = obj.get("post_id") or obj.get("photo_id") or obj.get("video_id", "")
+        owner_id = obj.get("owner_id", f"-{group_id}")
+        return [SocialItem(
+            network="vk",
+            kind=KIND_COMMENT,
+            item_id=str(obj.get("id", "")),
+            author=_vk_author(payload, author_id),
+            text=obj.get("text", ""),
+            created_at=_ts(obj.get("date")),
+            thread_id=str(obj.get("id", "")),
+            url=f"https://vk.com/wall{owner_id}_{post_id}",
+            raw={"post_id": post_id, "owner_id": owner_id, **obj},
+        )]
+
+    return []
 
 
 def parse_meta_payload(payload: dict) -> list[SocialItem]:

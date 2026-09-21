@@ -27,19 +27,48 @@ INTRO = (
 )
 
 
-async def pick_scenario(session, employee_id: int) -> GuestScenario | None:
-    """Сценарий, который этот сотрудник ещё не проходил; когда пройдены все —
-    любой, давно не встречавшийся."""
-    answered = select(GuestAnswer.scenario_id).where(GuestAnswer.employee_id == employee_id)
-    fresh = list(
-        (await session.execute(select(GuestScenario).where(GuestScenario.id.not_in(answered))))
-        .scalars()
-    )
+# Сколько дней сценарий не возвращается к тому же сотруднику, если есть
+# из чего выбирать. Повтор сам по себе полезен — через месяц человек
+# отвечает иначе и видит собственный рост, — но не через два дня.
+REPEAT_COOLDOWN_DAYS = 30
+
+
+async def pick_scenario(session, employee_id: int, today: datetime.date | None = None
+                        ) -> GuestScenario | None:
+    """Сначала то, чего сотрудник ещё не видел; потом — самое давнее.
+
+    Когда свежие кончились, берём сценарий с самым старым ответом, а не
+    случайный: случайный выбор способен прислать один и тот же вопрос два
+    дня подряд, и упражнение превращается в шум.
+    """
+    today = today or datetime.date.today()
+
+    answered_rows = (
+        await session.execute(
+            select(GuestAnswer.scenario_id, func.max(GuestAnswer.date))
+            .where(GuestAnswer.employee_id == employee_id)
+            .group_by(GuestAnswer.scenario_id)
+        )
+    ).all()
+    last_seen = {scenario_id: last_date for scenario_id, last_date in answered_rows}
+
+    all_scenarios = list((await session.execute(select(GuestScenario))).scalars())
+    if not all_scenarios:
+        return None
+
+    fresh = [s for s in all_scenarios if s.id not in last_seen]
     if fresh:
         return random.choice(fresh)
 
-    all_scenarios = list((await session.execute(select(GuestScenario))).scalars())
-    return random.choice(all_scenarios) if all_scenarios else None
+    cooled = [
+        s for s in all_scenarios
+        if (today - last_seen[s.id]).days >= REPEAT_COOLDOWN_DAYS
+    ]
+    pool = cooled or all_scenarios
+    # Самый давний. При равных датах — случайный из них, чтобы порядок
+    # повторов не застывал раз и навсегда.
+    oldest = min(last_seen[s.id] for s in pool)
+    return random.choice([s for s in pool if last_seen[s.id] == oldest])
 
 
 async def already_asked_today(session, employee_id: int) -> bool:

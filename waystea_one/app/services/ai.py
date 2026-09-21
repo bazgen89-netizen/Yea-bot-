@@ -175,3 +175,79 @@ async def review_guest_answer(question: str, answer: str, good_points: str) -> s
     except Exception:
         logger.exception("Guest answer review failed")
         return GUEST_REVIEW_FALLBACK
+
+
+DRAFT_POINTS_SYSTEM = (
+    "Ты — наставник продавцов чайного магазина WAYSTEA. Тебе дают вопрос, "
+    "который задаёт покупатель. Напиши 3-5 предложений: что обязательно "
+    "должен затронуть хороший ответ продавца. Это внутренняя подсказка для "
+    "разбора, покупателю её не показывают.\n\n"
+    "Правила: опирайся на стандарты WAYSTEA из базы знаний, если они есть. "
+    "Не выдумывай цены, наличие и внутренние правила — если их нет в базе, "
+    "просто не упоминай. Никаких обещаний лечебного эффекта. Пиши конкретно: "
+    "что спросить у гостя, что предложить, чего не говорить."
+)
+
+EXTRACT_QUESTIONS_SYSTEM = (
+    "Из присланных кусков текста с форумов и поисковой выдачи вытащи "
+    "вопросы, которые покупатель может задать продавцу в чайном магазине.\n\n"
+    "Требования: только вопросы про чай, посуду, заваривание, выбор, "
+    "хранение, цену, подарок. Переформулируй в живую разговорную речь от "
+    "первого лица, как говорят у прилавка. Выброси всё рекламное, "
+    "медицинские обещания, политику и мусор. Каждый вопрос — одной строкой, "
+    "без нумерации и кавычек. Если подходящих вопросов нет — верни пустоту."
+)
+
+
+async def draft_answer_points(question: str, knowledge_base: str) -> str:
+    """Черновик «что стоило затронуть» для нового сценария. Fail-open:
+    без ключа кандидат уходит владельцу с пустым черновиком, а не теряется."""
+    if not settings.anthropic_api_key:
+        return ""
+
+    kb = knowledge_base.strip() or "(база знаний пока пустая)"
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        response = await client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=f"{DRAFT_POINTS_SYSTEM}\n\nБаза знаний WAYSTEA:\n{kb}",
+            messages=[{"role": "user", "content": question}],
+        )
+        return _extract_text(response)
+    except Exception:
+        logger.exception("Draft of answer points failed")
+        return ""
+
+
+async def extract_guest_questions(snippets: list[str], limit: int) -> list[str]:
+    """Вытаскивает из поисковой выдачи формулировки вопросов покупателей."""
+    if not settings.anthropic_api_key or not snippets:
+        return []
+
+    joined = "\n---\n".join(snippets)
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        response = await client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=500,
+            system=f"{EXTRACT_QUESTIONS_SYSTEM}\n\nВерни не больше {limit} вопросов.",
+            messages=[{"role": "user", "content": joined}],
+        )
+        text = _extract_text(response)
+    except Exception:
+        logger.exception("Extracting guest questions failed")
+        return []
+
+    questions = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("-•*0123456789. ").strip()
+        # Отсекаем служебные строки модели и обрывки: вопрос покупателя —
+        # это фраза, а не слово, и он заканчивается вопросительным знаком.
+        if len(line) > 15 and line.endswith("?"):
+            questions.append(line)
+    return questions[:limit]

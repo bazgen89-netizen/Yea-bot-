@@ -8,6 +8,7 @@ from app.config import settings
 from app.handlers.brew import router as brew_router
 from app.handlers.owner import router as owner_router
 from app.handlers.quiz import router as quiz_router
+from app.handlers.scenarios import router as scenarios_router
 from app.handlers.shift import router as shift_router
 from app.handlers.tasks import router as tasks_router
 from app.handlers.tea_requests import router as tea_requests_router
@@ -28,6 +29,9 @@ dispatcher.include_router(brew_router)
 # generic F.text catch-all, or the catch-all would win first and "/report"
 # would never reach on_report_command.
 dispatcher.include_router(owner_router)
+# Приём вопросов из зала и одобрение кандидатов — тоже до catch-all: и
+# команда /ask, и ответ на неё должны попасть сюда, а не в разбор текста.
+dispatcher.include_router(scenarios_router)
 # The tea-request chat/topic (app/handlers/tea_requests.py) must also come
 # before shift_router's generic F.text catch-all, same reasoning as
 # owner_router above — otherwise a message there could get misread as a

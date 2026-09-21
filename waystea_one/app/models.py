@@ -400,3 +400,31 @@ class GuestAnswer(Base):
 
     employee: Mapped["Employee"] = relationship()
     scenario: Mapped["GuestScenario"] = relationship()
+
+
+class PendingScenario(Base):
+    """Кандидат в библиотеку вопросов гостя — до одобрения владельцем.
+
+    Два источника: вопрос, на котором растерялся продавец в зале, и вопрос,
+    найденный в интернете. Ни один не попадает к сотрудникам сам: из зала
+    приходит сырая формулировка, из интернета — чужой контекст и иногда
+    откровенная чушь. Поэтому между источником и библиотекой стоит человек.
+    """
+
+    __tablename__ = "pending_scenarios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question: Mapped[str] = mapped_column(String(500))
+    # Черновик «что стоило затронуть», собранный ИИ из базы знаний.
+    # Владелец может одобрить как есть — или прислать свой текст.
+    draft_points: Mapped[str] = mapped_column(String(1000), default="")
+    source: Mapped[str] = mapped_column(String(20))  # "зал" / "интернет"
+    submitted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="новый")  # новый/добавлен/отклонён
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    submitted_by: Mapped["Employee"] = relationship()

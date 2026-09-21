@@ -14,6 +14,7 @@ from app.services.brew import send_feedback_prompts
 from app.services.guest import send_guest_questions
 from app.services.music import send_music_nudges
 from app.services.quiz import send_quiz_round
+from app.services.scenario_intake import propose_internet_questions
 from app.services.reminders import check_reminders
 from app.services.reports import build_daily_report
 from app.services.revenue_reminders import send_revenue_reminders
@@ -169,6 +170,13 @@ async def main() -> None:
     scheduler.add_job(
         send_feedback_prompts,
         CronTrigger(hour=17, minute=30, timezone=settings.timezone),
+        args=[bot, get_session],
+    )
+    # Раз в неделю: кандидаты в библиотеку вопросов из интернета. По
+    # понедельникам утром, до открытия точек — владельцу спокойнее решать.
+    scheduler.add_job(
+        propose_internet_questions,
+        CronTrigger(day_of_week="mon", hour=9, minute=30, timezone=settings.timezone),
         args=[bot, get_session],
     )
     scheduler.add_job(

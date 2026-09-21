@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.services.roles import skip_for_staff_message
 from app.models import Employee, MusicCheck, ShiftLog
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ async def send_music_nudges(bot, session_factory) -> None:
 
         for shift_log, employee in rows:
             # Director (owner) gets only completion reports, not nudges.
-            if employee.telegram_user_id == settings.owner_telegram_id:
+            if skip_for_staff_message(employee):
                 continue
             if shift_log.music_nudges_sent == 0:
                 anchor = shift_log.confirmed_at

@@ -153,6 +153,22 @@ async def on_feedback_command(message, state: FSMContext) -> None:
     await state.set_state(BrewFeedback.awaiting_note)
 
 
+@router.message(Command("myid"))
+async def on_myid_command(message) -> None:
+    """Числовой Telegram ID. Нужен, чтобы вписать руководителя в
+    OWNER_TELEGRAM_ID — по @нику бот писать не умеет, Telegram даёт
+    отправлять сообщения только по id.
+    """
+    is_owner = _is_owner(message)
+    role = (
+        "Вы записаны как руководитель: задачи и учебные вопросы вам не идут, "
+        "приходят отчёты и эскалации."
+        if is_owner
+        else "Сейчас вы записаны как сотрудник — вам идут задачи и вопросы по чаю."
+    )
+    await message.answer(f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n\n{role}")
+
+
 @router.message(Command("me"))
 async def on_me_command(message) -> None:
     """Личный прогресс: ранг, серия, неделя. Доступна всем сотрудникам."""

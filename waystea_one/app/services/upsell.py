@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Employee, ShiftLog, UpsellEvent, UpsellType
+from app.services.roles import skip_for_staff_message
 from app.services.store_matcher import normalize
 
 
@@ -92,9 +93,7 @@ async def send_upsell_nudges(bot, session_factory) -> None:
             .where(ShiftLog.date == today, ShiftLog.upsell_nudges_sent < MAX_NUDGES_PER_SHIFT)
         )
         for shift_log, employee in result.all():
-            # The director (owner) gets only completion reports, not
-            # employee-facing nudges — skip them here.
-            if employee.telegram_user_id == settings.owner_telegram_id:
+            if skip_for_staff_message(employee):
                 continue
             if shift_log.upsell_nudges_sent == 0:
                 anchor = shift_log.confirmed_at

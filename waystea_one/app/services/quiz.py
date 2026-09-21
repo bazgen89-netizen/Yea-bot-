@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Employee, QuizAnswer, QuizQuestion, QuizReview, ShiftLog
 from app.services.messaging import notify_employee
+from app.services.roles import skip_for_staff_message
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,9 @@ async def send_quiz_round(bot, get_session_factory) -> None:
             ).scalars()
         )
         for shift in shifts:
+            employee_check = await session.get(Employee, shift.employee_id)
+            if skip_for_staff_message(employee_check):
+                continue
             if await already_asked_today(session, shift.employee_id):
                 continue
             questions = await pick_questions(
@@ -207,9 +211,7 @@ async def send_quiz_round(bot, get_session_factory) -> None:
             )
             if not questions:
                 return  # база вопросов пуста — молчим, а не шлём пустое сообщение
-            employee = await session.get(Employee, shift.employee_id)
-            if employee is None:
-                continue
+            employee = employee_check
             await notify_employee(
                 bot,
                 employee,

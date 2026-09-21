@@ -12,8 +12,8 @@ import logging
 
 from sqlalchemy import select
 
-from app.config import settings
 from app.models import Employee, ShiftLog
+from app.services.roles import skip_for_staff_message
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ async def send_feedback_prompts(bot, session_factory) -> None:
             .where(ShiftLog.date == datetime.date.today(), ShiftLog.brewed_tea.is_not(None))
         )
         for shift, employee in result.all():
-            if employee.telegram_user_id == settings.owner_telegram_id:
+            if skip_for_staff_message(employee):
                 continue
             try:
                 await bot.send_message(

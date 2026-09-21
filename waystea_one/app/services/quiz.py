@@ -11,30 +11,44 @@ import random
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Employee, QuizAnswer, QuizQuestion, ShiftLog
+from app.models import Employee, QuizAnswer, QuizQuestion, QuizReview, ShiftLog
 from app.services.messaging import notify_employee
 
 logger = logging.getLogger(__name__)
 
 QUESTIONS_PER_ROUND = 2
 
+# Через сколько дней вопрос возвращается после каждого верного повторения.
+# Ошибся — расписание сбрасывается в начало.
+REVIEW_INTERVALS_DAYS = (2, 7, 30)
+
 
 async def pick_questions(
-    session: AsyncSession, brewed_tea: str | None, limit: int = QUESTIONS_PER_ROUND
+    session: AsyncSession,
+    brewed_tea: str | None,
+    limit: int = QUESTIONS_PER_ROUND,
+    employee_id: int | None = None,
 ) -> list[QuizQuestion]:
-    """Questions for one round: the brewed tea's card first, then others.
+    """Questions for one round.
 
-    Spreading the rest across different cards keeps a round from being two
-    questions about the same tea when the base has more to offer.
+    Order of preference: a question that's due for review (it was answered
+    wrong before — returning to it is the whole point), then the brewed
+    tea's card, then anything else, spread across cards.
     """
     all_questions = list((await session.execute(select(QuizQuestion))).scalars())
     if not all_questions:
         return []
 
     chosen: list[QuizQuestion] = []
-    if brewed_tea:
+    if employee_id is not None:
+        for question in await due_questions(session, employee_id):
+            if len(chosen) >= limit:
+                break
+            chosen.append(question)
+
+    if brewed_tea and len(chosen) < limit:
         card = match_card(all_questions, brewed_tea)
-        matching = [q for q in all_questions if q.card == card]
+        matching = [q for q in all_questions if q.card == card and q not in chosen]
         if matching:
             chosen.append(random.choice(matching))
 
@@ -97,8 +111,70 @@ async def record_answer(
             correct=correct,
         )
     )
+    await _schedule_review(session, employee.id, question.id, correct)
     await session.commit()
     return correct
+
+
+async def _schedule_review(
+    session: AsyncSession, employee_id: int, question_id: int, correct: bool
+) -> None:
+    """Ставит вопрос в личное расписание повторений.
+
+    Ошибка — расписание в начало (через 2 дня), верный ответ — следующий
+    интервал. Верный ответ на последнем интервале закрывает повторение:
+    вопрос считается выученным и больше не возвращается.
+    """
+    review = await session.scalar(
+        select(QuizReview).where(
+            QuizReview.employee_id == employee_id,
+            QuizReview.question_id == question_id,
+        )
+    )
+    today = datetime.date.today()
+
+    if review is None:
+        if correct:
+            return  # ответил верно с первого раза — повторять нечего
+        session.add(
+            QuizReview(
+                employee_id=employee_id,
+                question_id=question_id,
+                stage=0,
+                due_date=today + datetime.timedelta(days=REVIEW_INTERVALS_DAYS[0]),
+            )
+        )
+        return
+
+    if not correct:
+        review.stage = 0
+        review.completed = False
+        review.due_date = today + datetime.timedelta(days=REVIEW_INTERVALS_DAYS[0])
+        return
+
+    next_stage = review.stage + 1
+    if next_stage >= len(REVIEW_INTERVALS_DAYS):
+        review.completed = True
+        review.stage = next_stage
+        return
+    review.stage = next_stage
+    review.completed = False
+    review.due_date = today + datetime.timedelta(days=REVIEW_INTERVALS_DAYS[next_stage])
+
+
+async def due_questions(session: AsyncSession, employee_id: int) -> list[QuizQuestion]:
+    """Вопросы, у которых подошёл срок повторения. Они идут первыми в раунде."""
+    rows = await session.execute(
+        select(QuizQuestion)
+        .join(QuizReview, QuizReview.question_id == QuizQuestion.id)
+        .where(
+            QuizReview.employee_id == employee_id,
+            QuizReview.completed.is_(False),
+            QuizReview.due_date <= datetime.date.today(),
+        )
+        .order_by(QuizReview.due_date)
+    )
+    return list(rows.scalars())
 
 
 async def already_asked_today(session: AsyncSession, employee_id: int) -> bool:
@@ -126,7 +202,9 @@ async def send_quiz_round(bot, get_session_factory) -> None:
         for shift in shifts:
             if await already_asked_today(session, shift.employee_id):
                 continue
-            questions = await pick_questions(session, shift.brewed_tea)
+            questions = await pick_questions(
+                session, shift.brewed_tea, employee_id=shift.employee_id
+            )
             if not questions:
                 return  # база вопросов пуста — молчим, а не шлём пустое сообщение
             employee = await session.get(Employee, shift.employee_id)

@@ -338,3 +338,65 @@ class QuizAnswer(Base):
 
     employee: Mapped["Employee"] = relationship()
     question: Mapped["QuizQuestion"] = relationship()
+
+
+class QuizReview(Base):
+    """Интервальное повторение: вопрос, на котором сотрудник ошибся,
+    возвращается снова — через 2 дня, потом через неделю, потом через месяц.
+
+    Разовая проверка показывает, что человек знал в момент вопроса;
+    возвращающийся вопрос заставляет знание осесть. Поэтому ошибка здесь не
+    штраф, а запись в личное расписание повторений.
+    """
+
+    __tablename__ = "quiz_reviews"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "question_id", name="uq_review_per_question"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    question_id: Mapped[int] = mapped_column(ForeignKey("quiz_questions.id"))
+    # 0 — только что ошибся, дальше растёт с каждым верным повторением
+    stage: Mapped[int] = mapped_column(default=0)
+    due_date: Mapped[datetime.date] = mapped_column(Date, index=True)
+    # Пройденное до конца повторение остаётся в таблице как история знания
+    completed: Mapped[bool] = mapped_column(default=False)
+
+    employee: Mapped["Employee"] = relationship()
+    question: Mapped["QuizQuestion"] = relationship()
+
+
+class GuestScenario(Base):
+    """Реальная ситуация у прилавка, на которую сотрудник отвечает своими
+    словами — не кнопкой.
+
+    Кнопочный тест проверяет узнавание, а у прилавка нужно связно говорить.
+    Поэтому ответ свободный, а разбор даёт LLM: что сказано хорошо, что
+    упущено, как то же самое сказать короче.
+    """
+
+    __tablename__ = "guest_scenarios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question: Mapped[str] = mapped_column(String(500), unique=True)
+    # Что именно должен затронуть хороший ответ — идёт в разбор, сотруднику
+    # заранее не показывается.
+    good_answer_points: Mapped[str] = mapped_column(String(1000), default="")
+
+
+class GuestAnswer(Base):
+    __tablename__ = "guest_answers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("guest_scenarios.id"))
+    date: Mapped[datetime.date] = mapped_column(Date)
+    answer: Mapped[str] = mapped_column(String(4000))
+    feedback: Mapped[str] = mapped_column(String(4000), default="")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    employee: Mapped["Employee"] = relationship()
+    scenario: Mapped["GuestScenario"] = relationship()

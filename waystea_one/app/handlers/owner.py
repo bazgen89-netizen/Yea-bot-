@@ -153,6 +153,20 @@ async def on_feedback_command(message, state: FSMContext) -> None:
     await state.set_state(BrewFeedback.awaiting_note)
 
 
+@router.message(Command("me"))
+async def on_me_command(message) -> None:
+    """Личный прогресс: ранг, серия, неделя. Доступна всем сотрудникам."""
+    from app.services.progress import format_stats, weekly_stats
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        if employee is None:
+            await message.answer("Сначала отметь смену — тогда будет что показывать 😊")
+            return
+        stats = await weekly_stats(session, employee.id)
+    await message.answer(format_stats(employee.name, stats))
+
+
 @router.message(Command("report"))
 async def on_report_command(message) -> None:
     if not _is_owner(message):

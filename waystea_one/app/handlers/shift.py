@@ -46,13 +46,14 @@ from aiogram.types import (
 from app.config import settings
 from app.db import get_session
 from app.handlers.tasks import PROOF_PROMPTS, send_daily_checklist
-from app.models import Employee, ProofType, Store
+from app.models import Employee, GuestScenario, ProofType, Store
 from app.services.ai import (
     ASK_OWNER_MARKER,
     FALLBACK_ERROR,
     FALLBACK_NO_KEY,
     answer_employee_question,
     chat_reply,
+    review_guest_answer,
 )
 from app.services.identity import (
     create_employee,
@@ -68,6 +69,7 @@ from app.services.brew import (
     today_shift,
 )
 from app.services.geo import check as geo_check
+from app.services.guest import record_answer as record_guest_answer
 from app.services.intent import resolve_store
 from app.services.knowledge import get_knowledge_base_text
 from app.services.messaging import notify_employee, send_private
@@ -115,6 +117,12 @@ class BrewCheck(StatesGroup):
     """
 
     awaiting_tea = State()
+
+
+class GuestReply(StatesGroup):
+    """Свободный ответ на вопрос гостя (app/services/guest.py)."""
+
+    awaiting_answer = State()
 
 
 class BrewFeedback(StatesGroup):
@@ -291,6 +299,38 @@ async def receive_brew_feedback(message: Message, state: FSMContext) -> None:
         await save_feedback(session, employee.id, note)
 
     await message.answer("🍵 Спасибо, записал в базу по чаю.")
+
+
+@router.message(GuestReply.awaiting_answer)
+async def receive_guest_answer(message: Message, state: FSMContext) -> None:
+    """Разбирает ответ сотрудника и сразу возвращает его же — разбор ценен,
+    пока ситуация в голове. Ответ сохраняется даже если ИИ-слой недоступен.
+    """
+    data = await state.get_data()
+    scenario_id = data.get("guest_scenario_id")
+    await state.clear()
+
+    answer = (message.text or "").strip()
+    if not answer:
+        await message.answer("Напиши ответ текстом — я разберу его и подскажу.")
+        await state.set_state(GuestReply.awaiting_answer)
+        await state.update_data(guest_scenario_id=scenario_id)
+        return
+
+    async with get_session() as session:
+        employee = await get_employee(session, message.from_user.id)
+        scenario = await session.get(GuestScenario, scenario_id) if scenario_id else None
+        if employee is None or scenario is None:
+            await message.answer("Не нашёл вопрос, к которому это ответ. Бывает — идём дальше 👍")
+            return
+        question, points = scenario.question, scenario.good_answer_points
+
+    feedback = await review_guest_answer(question, answer, points)
+
+    async with get_session() as session:
+        await record_guest_answer(session, employee.id, scenario_id, answer, feedback)
+
+    await message.answer(f"{feedback}")
 
 
 @router.message(MoodCheck.awaiting_response)

@@ -11,6 +11,7 @@ from app.config import settings
 from app.db import get_session, init_models
 from app.health import heartbeat, mark_started, run_health_server
 from app.services.brew import send_feedback_prompts
+from app.services.guest import send_guest_questions
 from app.services.music import send_music_nudges
 from app.services.quiz import send_quiz_round
 from app.services.reminders import check_reminders
@@ -19,6 +20,7 @@ from app.services.revenue_reminders import send_revenue_reminders
 from app.services.tasks import sync_stale_tasks_to_templates
 from app.services.upsell import send_upsell_nudges
 from scripts.seed_knowledge_base import seed as seed_knowledge_base
+from scripts.seed_guest_scenarios import seed as seed_guest_scenarios
 from scripts.seed_quiz import seed as seed_quiz
 from scripts.seed_stores import seed as seed_stores
 from scripts.seed_task_templates import seed as seed_task_templates
@@ -46,6 +48,8 @@ async def _heartbeat_job() -> None:
 # The knowledge check fires somewhere between these hours, local time.
 QUIZ_WINDOW_START_HOUR = 13
 QUIZ_WINDOW_END_HOUR = 17
+# Ситуация у прилавка — ближе к обеду, когда поток гостей обычно спокойнее
+GUEST_QUESTION_HOUR = 12
 
 
 def _schedule_quiz_round(scheduler: AsyncIOScheduler) -> None:
@@ -101,6 +105,7 @@ async def main() -> None:
     await seed_task_templates()
     await seed_knowledge_base()
     await seed_quiz()
+    await seed_guest_scenarios()
 
     async with get_session() as session:
         synced = await sync_stale_tasks_to_templates(session)
@@ -153,6 +158,13 @@ async def main() -> None:
             hour=QUIZ_WINDOW_START_HOUR, minute=0, timezone=settings.timezone
         ),
         args=[scheduler],
+    )
+    # Вопрос от гостя — один раз за смену, отдельно от викторины, чтобы два
+    # «учебных» сообщения не приходили подряд.
+    scheduler.add_job(
+        send_guest_questions,
+        CronTrigger(hour=GUEST_QUESTION_HOUR, minute=15, timezone=settings.timezone),
+        args=[bot, get_session],
     )
     scheduler.add_job(
         send_feedback_prompts,

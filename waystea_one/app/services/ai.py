@@ -129,3 +129,49 @@ async def chat_reply(employee_message: str) -> str:
     except Exception:
         logger.exception("AI chat reply failed")
         return CHAT_FALLBACK
+
+
+GUEST_REVIEW_SYSTEM = (
+    "Ты — наставник продавцов чайного магазина WAYSTEA. Сотрудник ответил "
+    "на вопрос гостя своими словами. Разбери его ответ коротко и по делу, "
+    "в трёх частях и не длиннее 120 слов всего:\n"
+    "1. Что прозвучало хорошо — назови конкретную фразу.\n"
+    "2. Чего не хватило — максимум два пункта, самых важных для продажи.\n"
+    "3. Как это же сказать короче — дай одну готовую фразу, которую можно "
+    "произнести гостю дословно.\n\n"
+    "Тон — доброжелательный коллега, а не экзаменатор. Не ставь оценок и "
+    "баллов. Если ответ хорош — так и скажи, не выдумывай недостатки."
+)
+
+GUEST_REVIEW_FALLBACK = (
+    "Записал твой ответ 👍 Разбор сейчас недоступен (не настроен ИИ-модуль), "
+    "но ответ сохранён — владелец его увидит."
+)
+
+
+async def review_guest_answer(question: str, answer: str, good_points: str) -> str:
+    """Разбор свободного ответа сотрудника. Fail-open: без ключа или при
+    ошибке API ответ всё равно сохраняется, сотрудник не застревает."""
+    if not settings.anthropic_api_key:
+        return GUEST_REVIEW_FALLBACK
+
+    hints = f"\n\nЧто стоило затронуть (для тебя, сотруднику не показывай дословно):\n{good_points}" if good_points else ""
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        response = await client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=500,
+            system=f"{GUEST_REVIEW_SYSTEM}{hints}",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Вопрос гостя: {question}\n\nОтвет сотрудника: {answer}",
+                }
+            ],
+        )
+        return _extract_text(response) or GUEST_REVIEW_FALLBACK
+    except Exception:
+        logger.exception("Guest answer review failed")
+        return GUEST_REVIEW_FALLBACK

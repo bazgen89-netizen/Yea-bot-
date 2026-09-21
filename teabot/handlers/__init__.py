@@ -6,7 +6,7 @@ from telegram.ext import (
 
 from telegram.ext import ContextTypes
 
-from ..services import GroqClient, SerperClient
+from ..services import AIClient, SerperClient
 
 # Ключи сервисов в bot_data (внедрение зависимостей без глобальных переменных)
 SEARCH_KEY = "search_client"
@@ -17,7 +17,7 @@ def get_search(ctx: ContextTypes.DEFAULT_TYPE) -> SerperClient:
     return ctx.bot_data[SEARCH_KEY]
 
 
-def get_ai(ctx: ContextTypes.DEFAULT_TYPE) -> GroqClient:
+def get_ai(ctx: ContextTypes.DEFAULT_TYPE) -> AIClient:
     return ctx.bot_data[AI_KEY]
 
 

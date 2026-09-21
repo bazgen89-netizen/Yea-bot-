@@ -1,22 +1,31 @@
-"""Клиент Groq (OpenAI-совместимый chat completions API)."""
+"""Клиент к OpenAI-совместимому chat completions API (по умолчанию Groq)."""
 import asyncio
 import logging
 
 import aiohttp
 
-from ..config import AI_TIMEOUT, DEBUG_AI_TIMEOUT, AI_ANSWER_MAX_LEN
+from ..config import AI_BASE_URL, AI_TIMEOUT, DEBUG_AI_TIMEOUT, AI_ANSWER_MAX_LEN
 from ..constants import AI_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-
-class GroqClient:
-    def __init__(self, api_key: str, model: str, session: aiohttp.ClientSession):
+class AIClient:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        session: aiohttp.ClientSession,
+        base_url: str = AI_BASE_URL,
+    ):
         self.api_key = api_key
         self.model = model
         self.session = session
+        self.base_url = base_url.rstrip("/")
+
+    @property
+    def url(self) -> str:
+        return f"{self.base_url}/chat/completions"
 
     @property
     def _headers(self) -> dict:
@@ -27,7 +36,7 @@ class GroqClient:
 
     async def ask(self, prompt: str) -> str:
         if not self.api_key:
-            return "⚠️ AI отключён. Задайте GROQ_API_KEY в переменных окружения."
+            return "⚠️ AI отключён. Задайте AI_API_KEY в переменных окружения."
 
         payload = {
             "model": self.model,
@@ -41,7 +50,7 @@ class GroqClient:
 
         try:
             async with self.session.post(
-                GROQ_URL,
+                self.url,
                 headers=self._headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=AI_TIMEOUT),
@@ -53,24 +62,24 @@ class GroqClient:
                 elif resp.status == 429:
                     return "⚠️ Слишком много запросов. Подождите минуту."
                 elif resp.status == 401:
-                    return "⚠️ Неверный GROQ_API_KEY."
+                    return "⚠️ Неверный AI_API_KEY."
                 else:
                     body = await resp.text()
-                    logger.error(f"Groq статус {resp.status}: {body[:200]}")
+                    logger.error(f"AI статус {resp.status}: {body[:200]}")
                     return "⚠️ AI временно недоступен. Попробуйте позже."
         except asyncio.TimeoutError:
             return "⚠️ AI не ответил вовремя. Попробуйте ещё раз."
         except Exception as e:
-            logger.error(f"Groq ошибка: {e}")
+            logger.error(f"AI ошибка: {e}")
             return "⚠️ Ошибка подключения к AI."
 
     async def health_check(self) -> str:
-        """Проверка доступности Groq для /debug."""
+        """Проверка доступности AI-провайдера для /debug."""
         if not self.api_key:
             return "❌ Ключ не задан"
         try:
             async with self.session.post(
-                GROQ_URL,
+                self.url,
                 headers=self._headers,
                 json={
                     "model": self.model,
@@ -92,3 +101,7 @@ class GroqClient:
             return "⏱ Таймаут"
         except Exception as e:
             return f"💥 {str(e)[:60]}"
+
+
+# Историческое имя: бот изначально умел только Groq.
+GroqClient = AIClient

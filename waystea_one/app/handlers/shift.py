@@ -87,6 +87,8 @@ from app.services.revenue import (
     parse_revenue_message,
     record_shift_revenue,
 )
+from app.services import shift_nudge
+from app.services.roles import is_manager
 from app.services.shift_detector import is_shift_start_message
 from app.services.tasks import (
     advance_to_next_batch,
@@ -647,6 +649,32 @@ async def receive_store_clarification(message: Message, state: FSMContext) -> No
     await _confirm_shift(message, state, employee, store.id, store.name)
 
 
+async def _nudge_about_unopened_shift(
+    message: Message, employee: Employee, existing_shift, is_shift_start: bool
+) -> None:
+    """Человек появился в чате утром, а смену не отметил — пишем ему лично.
+
+    Напоминание идёт до обычного разбора сообщения и ничего в нём не меняет:
+    вопрос про чай всё равно будет разобран и получит ответ. Состояние
+    диалога намеренно не ставится — иначе следующая фраза сотрудника
+    («да не работаю я сегодня») была бы прочитана как название магазина.
+    """
+    now = shift_nudge.local_now()
+    if not shift_nudge.should_nudge(
+        now=now,
+        has_shift_today=existing_shift is not None,
+        is_shift_start_message=is_shift_start,
+        is_manager=is_manager(employee.telegram_user_id),
+        already_nudged=shift_nudge.was_nudged(employee.id, now.date()),
+    ):
+        return
+
+    shift_nudge.mark_nudged(employee.id, now.date())
+    await notify_employee(
+        message.bot, employee, shift_nudge.NUDGE_TEXT.format(name=employee.name), message
+    )
+
+
 @router.message(F.text)
 async def handle_text(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
@@ -665,10 +693,14 @@ async def handle_text(message: Message, state: FSMContext) -> None:
             return
 
         is_shift_start = is_shift_start_message(message.text or "")
-        existing_shift = await get_todays_shift(session, employee.id) if is_shift_start else None
+        # Смену смотрим всегда, а не только на фразе про начало смены: она же
+        # нужна, чтобы понять, не пора ли напомнить об отметке (shift_nudge).
+        existing_shift = await get_todays_shift(session, employee.id)
         stores = (
             await list_store_options(session) if is_shift_start and existing_shift is None else []
         )
+
+    await _nudge_about_unopened_shift(message, employee, existing_shift, is_shift_start)
 
     # Session closed above before any slower/network-bound step (task reply,
     # purchase/revenue lookups, resolve_store's AI fallback, and the AI

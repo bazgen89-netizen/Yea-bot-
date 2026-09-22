@@ -28,6 +28,7 @@ def register_handlers(ptb: Application) -> None:
     from .social import (
         autopilot_cmd, inbox_cmd, on_photo, on_social_cb, post_cmd, social_cmd,
     )
+    from .wifi import wifi_cmd
 
     ptb.add_handler(CommandHandler("start", start_cmd))
     ptb.add_handler(CommandHandler("debug", debug_cmd))
@@ -39,6 +40,9 @@ def register_handlers(ptb: Application) -> None:
     ptb.add_handler(CommandHandler("inbox", inbox_cmd))
     ptb.add_handler(CommandHandler("post", post_cmd))
     ptb.add_handler(CommandHandler("autopilot", autopilot_cmd))
+
+    # Контроль рабочих сетей Wi-Fi
+    ptb.add_handler(CommandHandler("wifi", wifi_cmd))
 
     # Фото — заготовка поста: картинка уезжает в медиатеку сайта
     ptb.add_handler(MessageHandler(filters.PHOTO, on_photo))

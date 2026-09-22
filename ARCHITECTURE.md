@@ -105,11 +105,14 @@ Yea-bot-/
 │   │   ├── webhooks.py     # разбор событий Meta и Callback API ВКонтакте
 │   │   ├── hub.py          # SocialHub — чтение, ответы, кросспостинг
 │   │   └── connectors/     # VK, Telegram, OK, Meta, WhatsApp, Авито, Яндекс/Google Карты
+│   ├── security/           # контроль рабочих сетей Wi-Fi (см. docs/WIFI.md)
+│   │   └── devices.py      # DeviceRegistry — реестр устройств по точкам
 │   ├── handlers/
 │   │   ├── __init__.py     # register_handlers(), доступ к сервисам из bot_data
 │   │   ├── commands.py     # /start, /debug, меню
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
 │   │   ├── social.py       # /social, /inbox, /post, /autopilot, фоновый опрос
+│   │   ├── wifi.py         # /wifi: устройства рабочих сетей и предупреждения
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
@@ -150,6 +153,7 @@ flowchart TD
 | `teabot/services/router.py` | Выбор мозга и переход на запасной при сбое | `AIRouter.ask()`, `.switch()`, `is_error_answer()` |
 | `teabot/social/` | Единый хаб соцсетей: общий формат, коннекторы, кросспостинг | `SocialHub`, `Connector`, `SeenStore`, `build_connectors()` |
 | `teabot/social/media.py` | Хостинг картинок для постов (Instagram берёт только ссылку) | `WordPressMedia.upload()`, `check_for_instagram()` |
+| `teabot/security/` | Реестр устройств рабочих сетей, сверка и предупреждения | `DeviceRegistry.check()`, `SeenReport` |
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/handlers/social.py` | Панель соцсетей, доставка входящих в админский чат, фоновый опрос | `social_cmd`, `deliver_items()`, `poll_job` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
@@ -229,6 +233,8 @@ flowchart TD
 | `META_VERIFY_TOKEN` | нет | Подтверждение подписки Meta; без него точка приёма `/social/meta` отключена |
 | `META_APP_SECRET` | нет | Проверка подписи событий Meta |
 | `WP_URL`, `WP_USER`, `WP_APP_PASSWORD` | нет | Медиатека сайта для картинок постов; без них Instagram не опубликует |
+| `WIFI_AGENT_TOKEN` | нет | Секрет агента рабочей сети; без него `/security/wifi` отключена |
+| `WIFI_STATE_PATH` | нет | Файл реестра устройств |
 | `VK_CONFIRMATION` | нет | Строка подтверждения Callback API; без неё `/social/vk` отключена |
 | `VK_CALLBACK_SECRET` | нет | Секретный ключ сообщества для проверки событий |
 | ключи площадок | нет | По одной группе переменных на сеть — см. [docs/SOCIAL.md](docs/SOCIAL.md) |

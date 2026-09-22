@@ -51,6 +51,8 @@ class SocialSettings:
     wp_url: str = ""
     wp_user: str = ""
     wp_app_password: str = ""
+    wifi_agent_token: str = ""
+    wifi_state_path: str = ""
     env: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -78,6 +80,8 @@ class SocialSettings:
             wp_user=env.get("WP_USER", ""),
             wp_app_password=env.get("WP_APP_PASSWORD")
             or env.get("WAYSTEA_WP_APP_PASSWORD", ""),
+            wifi_agent_token=env.get("WIFI_AGENT_TOKEN", ""),
+            wifi_state_path=env.get("WIFI_STATE_PATH", "/tmp/teabot_wifi_devices.json"),
             env=dict(env),
         )
 
@@ -90,6 +94,11 @@ class SocialSettings:
     def meta_webhook_enabled(self) -> bool:
         """Meta подтверждает подписку только при заданном verify-токене."""
         return bool(self.meta_verify_token)
+
+    @property
+    def wifi_enabled(self) -> bool:
+        """Без токена точка приёма отключена: адрес смотрит в интернет."""
+        return bool(self.wifi_agent_token)
 
     @property
     def vk_webhook_enabled(self) -> bool:

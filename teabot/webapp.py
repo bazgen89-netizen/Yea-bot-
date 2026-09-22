@@ -10,10 +10,12 @@ from .cache import TTLCache
 from .config import Settings, SocialSettings, CACHE_TTL, CACHE_MAX_SIZE
 from .handlers import register_handlers, SEARCH_KEY, AI_KEY
 from .handlers.social import ADMIN_KEY, HUB_KEY, MEDIA_KEY, deliver_items, poll_job
+from .handlers.wifi import AGENT_TOKEN_KEY, REGISTRY_KEY, notify
 from .http import create_session, close_session
 from .services import AIRouter, GeminiClient, GroqClient, SerperClient
 from .social import SeenStore, SocialHub, build_connectors
 from .social.media import WordPressMedia
+from .security import DeviceRegistry
 from .social.webhooks import parse_meta_payload, parse_vk_payload, verify_signature
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,47 @@ async def handle_vk_webhook(request: web.Request) -> web.Response:
     return web.Response(text="ok")
 
 
+async def handle_wifi_report(request: web.Request) -> web.Response:
+    """Отчёт агента с точки: какие устройства сейчас в сети магазина.
+
+    Бот живёт в облаке и сам в сеть магазина попасть не может — список
+    присылает агент, запущенный на месте (scripts/wifi_agent.py).
+    """
+    ptb: Application = request.app['ptb_app']
+    expected = ptb.bot_data.get(AGENT_TOKEN_KEY, "")
+    registry: DeviceRegistry = ptb.bot_data.get(REGISTRY_KEY)
+    if not expected or registry is None:
+        return web.Response(status=404, text="disabled")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.Response(status=400, text="bad json")
+
+    token = (request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+             or payload.get("token", ""))
+    if token != expected:
+        logger.warning("Wi-Fi агент: неверный токен")
+        return web.Response(status=403, text="forbidden")
+
+    branch = str(payload.get("branch", "")).strip().lower()
+    devices = payload.get("devices") or []
+    if not branch or not isinstance(devices, list):
+        return web.Response(status=400, text="branch and devices required")
+
+    report = registry.check(branch, devices)
+    admin_chat_id = ptb.bot_data.get(ADMIN_KEY)
+    if admin_chat_id is not None and report.has_news:
+        task = asyncio.create_task(notify(ptb.bot, admin_chat_id, report))
+        request.app['background'].add(task)
+        task.add_done_callback(request.app['background'].discard)
+
+    return web.json_response({
+        "ok": True, "new": len(report.new), "returned": len(report.returned),
+        "known": len(report.known),
+    })
+
+
 async def on_startup(app: web.Application):
     settings: Settings = app['settings']
     ptb: Application = app['ptb_app']
@@ -161,6 +204,10 @@ def setup_social(ptb: Application, settings: Settings,
     ptb.bot_data[MEDIA_KEY] = WordPressMedia(
         social.wp_url, social.wp_user, social.wp_app_password, session,
     )
+    ptb.bot_data[REGISTRY_KEY] = DeviceRegistry(social.wifi_state_path)
+    ptb.bot_data[AGENT_TOKEN_KEY] = social.wifi_agent_token
+    if social.wifi_enabled:
+        logger.info("📶 Контроль Wi-Fi включён: /security/wifi ждёт отчёты агента")
 
     if not social.polling_enabled:
         logger.warning("⚠️ SOCIAL_ADMIN_CHAT_ID не задан — автономный опрос соцсетей выключен")
@@ -215,6 +262,7 @@ def create_app(settings: Settings) -> web.Application:
     web_app.router.add_get('/social/meta', handle_meta_verify)
     web_app.router.add_post('/social/meta', handle_meta_webhook)
     web_app.router.add_post('/social/vk', handle_vk_webhook)
+    web_app.router.add_post('/security/wifi', handle_wifi_report)
     web_app['background'] = set()
     web_app.on_startup.append(on_startup)
     web_app.on_shutdown.append(on_shutdown)

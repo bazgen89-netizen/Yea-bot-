@@ -20,7 +20,7 @@ from aiogram.types import Message
 from app.config import settings
 from app.db import get_session
 from app.services.identity import get_employee, get_todays_shift
-from app.services.messaging import notify_employee
+from app.services.messaging import notify_employee, reply_private, send_private
 from app.services.purchasing import create_purchase_request
 
 router = Router(name="tea_requests")
@@ -53,7 +53,7 @@ async def on_tea_request(message: Message) -> None:
             # Employee object means notify_employee (which needs one) can't
             # be used — reply directly in this chat instead of staying
             # silent, which looked like the bot ignoring the message.
-            await message.reply(
+            await reply_private(message, 
                 "Не узнаю вас 🙂 Сначала напишите в рабочий чат, что вы на "
                 "месте (это разово знакомит меня с вами), потом можно писать "
                 "сюда."

@@ -1,6 +1,14 @@
-"""Routes all employee-facing bot replies (confirmations, task lists,
-clarifying questions) to the employee's private chat — never the group,
-per owner request ("писать не всем в чате, а кто написал что на месте").
+"""Routes every bot reply to a person's private chat — never into a group.
+
+Решение владельца: бот не пишет в общий чат вообще. Ни подтверждений, ни
+уточнений, ни ошибок. Увидел сообщение в чате — отвечает автору в личку;
+не может (человек не открыл диалог) — сообщает руководителю, а в чате
+по-прежнему молчит.
+
+Отсюда правило для всего кода хендлеров: `message.answer()` и
+`message.reply()` использовать нельзя, они отвечают туда, откуда пришло
+сообщение, то есть в группу. Только `reply_private()` / `notify_employee()`
+/ `send_private()`. За этим следит tests/test_no_group_replies.py.
 
 Telegram won't let a bot message someone who's never opened a DM with it.
 When that happens we do NOT post anything in the group (the owner doesn't
@@ -62,6 +70,25 @@ async def _notify_owner_dm_missing(bot: Bot, telegram_user_id: int, name: str) -
         await bot.send_message(settings.owner_telegram_id, OWNER_DM_MISSING_HINT.format(name=name))
     except Exception:
         logger.exception("Failed to notify owner that %s has no DM open", name)
+
+
+async def reply_private(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    """Ответ автору сообщения — всегда в личку, даже если написал он в группу.
+
+    Замена `message.answer()`: та отвечает в исходный чат, и в группе это
+    выглядит как бот, разговаривающий при всех.
+    """
+    await send_private(
+        message.bot,
+        message.from_user.id,
+        message.from_user.full_name,
+        text,
+        reply_markup=reply_markup,
+    )
 
 
 async def notify_employee(

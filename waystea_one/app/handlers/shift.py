@@ -72,7 +72,7 @@ from app.services.geo import check as geo_check
 from app.services.guest import record_answer as record_guest_answer
 from app.services.intent import resolve_store
 from app.services.knowledge import get_knowledge_base_text
-from app.services.messaging import notify_employee, send_private
+from app.services.messaging import notify_employee, reply_private, send_private
 from app.services.music import MusicNudge, record_music_note
 from app.services.purchasing import (
     create_purchase_request,
@@ -218,7 +218,7 @@ async def receive_location(message: Message, state: FSMContext) -> None:
             return
         shift = await today_shift(session, employee.id)
         if shift is None:
-            await message.answer(
+            await reply_private(message, 
                 "Геометку принял, но смена на сегодня не отмечена — "
                 "сначала напиши, что ты на точке.",
                 reply_markup=ReplyKeyboardRemove(),
@@ -250,7 +250,7 @@ async def receive_location(message: Message, state: FSMContext) -> None:
         )
     else:
         reply = f"✅ Ты на «{store_name}». Смена подтверждена геометкой."
-    await message.answer(reply, reply_markup=ReplyKeyboardRemove())
+    await reply_private(message, reply, reply_markup=ReplyKeyboardRemove())
 
     if off_site:
         try:
@@ -262,7 +262,7 @@ async def receive_location(message: Message, state: FSMContext) -> None:
         except Exception:
             logging.getLogger(__name__).exception("Failed to notify owner about off-site check-in")
 
-    await message.answer(ASK_BREWED_TEA)
+    await reply_private(message, ASK_BREWED_TEA)
     await state.set_state(BrewCheck.awaiting_tea)
 
 
@@ -278,9 +278,9 @@ async def receive_brewed_tea(message: Message, state: FSMContext) -> None:
         shift = await save_brewed_tea(session, employee.id, tea)
 
     if shift is None:
-        await message.answer("Смена на сегодня не отмечена — сначала отметься на точке.")
+        await reply_private(message, "Смена на сегодня не отмечена — сначала отметься на точке.")
         return
-    await message.answer(
+    await reply_private(message, 
         f"🫖 Записал: <b>{tea}</b>. Буду напоминать угощать им гостей — "
         f"особенно тех, кто уже что-то берёт.",
         reply_markup=treat_keyboard(),
@@ -298,7 +298,7 @@ async def receive_brew_feedback(message: Message, state: FSMContext) -> None:
         employee = await get_employee(session, message.from_user.id)
         await save_feedback(session, employee.id, note)
 
-    await message.answer("🍵 Спасибо, записал в базу по чаю.")
+    await reply_private(message, "🍵 Спасибо, записал в базу по чаю.")
 
 
 @router.message(GuestReply.awaiting_answer)
@@ -312,7 +312,7 @@ async def receive_guest_answer(message: Message, state: FSMContext) -> None:
 
     answer = (message.text or "").strip()
     if not answer:
-        await message.answer("Напиши ответ текстом — я разберу его и подскажу.")
+        await reply_private(message, "Напиши ответ текстом — я разберу его и подскажу.")
         await state.set_state(GuestReply.awaiting_answer)
         await state.update_data(guest_scenario_id=scenario_id)
         return
@@ -321,7 +321,7 @@ async def receive_guest_answer(message: Message, state: FSMContext) -> None:
         employee = await get_employee(session, message.from_user.id)
         scenario = await session.get(GuestScenario, scenario_id) if scenario_id else None
         if employee is None or scenario is None:
-            await message.answer("Не нашёл вопрос, к которому это ответ. Бывает — идём дальше 👍")
+            await reply_private(message, "Не нашёл вопрос, к которому это ответ. Бывает — идём дальше 👍")
             return
         question, points = scenario.question, scenario.good_answer_points
 
@@ -330,7 +330,7 @@ async def receive_guest_answer(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         await record_guest_answer(session, employee.id, scenario_id, answer, feedback)
 
-    await message.answer(f"{feedback}")
+    await reply_private(message, f"{feedback}")
 
 
 @router.message(MoodCheck.awaiting_response)

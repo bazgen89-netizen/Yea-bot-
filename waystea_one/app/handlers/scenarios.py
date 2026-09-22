@@ -15,6 +15,7 @@ from app.config import settings
 from app.db import get_session
 from app.services.identity import get_employee
 from app.services.scenario_intake import approve, notify_owner, reject, submit_from_floor
+from app.services.messaging import reply_private, send_private
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ async def on_ask_command(message: Message, state: FSMContext) -> None:
         employee = await get_employee(session, message.from_user.id)
     if employee is None:
         return  # не сотрудник — пусть дальше разбирается обычная цепочка
-    await message.answer(ASK_PROMPT)
+    await reply_private(message, ASK_PROMPT)
     await state.set_state(FloorQuestion.awaiting_question)
 
 
@@ -59,7 +60,7 @@ async def receive_floor_question(message: Message, state: FSMContext) -> None:
     await state.clear()
     question = (message.text or "").strip()
     if len(question) < 5:
-        await message.answer("Слишком коротко — напиши вопрос целиком, командой /ask.")
+        await reply_private(message, "Слишком коротко — напиши вопрос целиком, командой /ask.")
         return
 
     async with get_session() as session:
@@ -69,7 +70,7 @@ async def receive_floor_question(message: Message, state: FSMContext) -> None:
         candidate = await submit_from_floor(session, employee, question)
         author = employee.name
 
-    await message.answer(
+    await reply_private(message, 
         "Записал и передал владельцу 👍 Спасибо — из таких вопросов и "
         "собирается наша тренировка."
     )

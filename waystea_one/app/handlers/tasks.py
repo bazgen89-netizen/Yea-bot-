@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.db import get_session
 from app.models import Employee, ProofType, Store, Task, TaskStatus
 from app.services.identity import get_employee
-from app.services.messaging import notify_employee
+from app.services.messaging import notify_employee, reply_private, send_private
 from app.services.reports import forward_task_photo_to_owner, notify_owner_batch_progress
 from app.services.shift_wrapup import send_shift_wrapup
 from app.services.tasks import (
@@ -89,7 +89,7 @@ async def on_task_done(callback: CallbackQuery) -> None:
         employee = await session.get(Employee, task.employee_id)
 
     if proof_needed:
-        await callback.message.answer(PROOF_PROMPTS[proof_needed])
+        await send_private(callback.bot, callback.from_user.id, callback.from_user.full_name, PROOF_PROMPTS[proof_needed])
         await callback.answer()
         return
 

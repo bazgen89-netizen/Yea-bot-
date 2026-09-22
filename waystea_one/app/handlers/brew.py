@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery
 from app.db import get_session
 from app.services.brew import ASK_BREWED_TEA, count_treat
 from app.services.identity import get_employee
+from app.services.messaging import send_private
 
 router = Router(name="brew")
 
@@ -35,5 +36,5 @@ async def on_rebrew(callback: CallbackQuery, state: FSMContext) -> None:
     from app.handlers.shift import BrewCheck
 
     await callback.answer()
-    await callback.message.answer(ASK_BREWED_TEA)
+    await send_private(callback.bot, callback.from_user.id, callback.from_user.full_name, ASK_BREWED_TEA)
     await state.set_state(BrewCheck.awaiting_tea)

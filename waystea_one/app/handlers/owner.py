@@ -8,6 +8,7 @@ from app.db import get_session
 from app.services.identity import create_employee, get_employee
 from app.services.knowledge import create_knowledge_entry
 from app.services.reports import build_daily_report
+from app.services.messaging import reply_private, send_private
 
 router = Router(name="owner")
 
@@ -29,7 +30,7 @@ async def on_start_command(message) -> None:
     app/services/messaging.py). Registered before shift.py's catch-all
     F.text handler so it doesn't get swallowed there.
     """
-    await message.answer(
+    await reply_private(message, 
         "Привет! Я WAYSTEA ONE 😊\n"
         "Пишите в общий рабочий чат как обычно — про начало смены, "
         "выполнение задач, закупки, выручку. А сюда, в личные сообщения, "
@@ -46,7 +47,7 @@ async def on_name_command(message) -> None:
     parts = (message.text or "").split(maxsplit=1)
     new_name = parts[1].strip()[:100] if len(parts) > 1 else ""
     if not new_name:
-        await message.answer("Напишите так: /name Ваше имя")
+        await reply_private(message, "Напишите так: /name Ваше имя")
         return
 
     async with get_session() as session:
@@ -57,7 +58,7 @@ async def on_name_command(message) -> None:
             employee.name = new_name
             await session.commit()
 
-    await message.answer(f"Записал ваше имя: {new_name} 👍")
+    await reply_private(message, f"Записал ваше имя: {new_name} 👍")
 
 
 RULES_TEXT = (
@@ -80,7 +81,7 @@ async def on_rules_command(message) -> None:
     such monitoring; a bot command doesn't replace the signed notice, but it
     does mean nobody has to take anyone's word for what the bot stores.
     """
-    await message.answer(RULES_TEXT)
+    await reply_private(message, RULES_TEXT)
 
 
 @router.message(Command("where"))
@@ -95,7 +96,7 @@ async def on_where_command(message) -> None:
 
     location = message.location
     if location is None:
-        await message.answer(
+        await reply_private(message, 
             "Пришли геометку (скрепка → Геопозиция), и я отвечу точными "
             "координатами и расстоянием до каждой точки. Смену это не откроет."
         )
@@ -119,7 +120,7 @@ async def on_where_command(message) -> None:
             inside, distance = verdict
             state = "внутри зоны" if inside else f"ВНЕ зоны (радиус {store.radius_m} м)"
             lines.append(f"• {store.name}: {distance} м — {state}")
-    await message.answer("\n".join(lines))
+    await reply_private(message, "\n".join(lines))
 
 
 @router.message(Command("brew"))
@@ -128,7 +129,7 @@ async def on_brew_command(message, state: FSMContext) -> None:
     from app.handlers.shift import BrewCheck
     from app.services.brew import ASK_BREWED_TEA
 
-    await message.answer(ASK_BREWED_TEA)
+    await reply_private(message, ASK_BREWED_TEA)
     await state.set_state(BrewCheck.awaiting_tea)
 
 
@@ -143,13 +144,13 @@ async def on_feedback_command(message, state: FSMContext) -> None:
         shift = await today_shift(session, employee.id) if employee else None
 
     if shift is None:
-        await message.answer("Смена на сегодня не отмечена.")
+        await reply_private(message, "Смена на сегодня не отмечена.")
         return
     if not shift.brewed_tea:
-        await message.answer(ASK_BREWED_TEA)
+        await reply_private(message, ASK_BREWED_TEA)
         await state.set_state(BrewCheck.awaiting_tea)
         return
-    await message.answer(ASK_FEEDBACK.format(tea=shift.brewed_tea))
+    await reply_private(message, ASK_FEEDBACK.format(tea=shift.brewed_tea))
     await state.set_state(BrewFeedback.awaiting_note)
 
 
@@ -166,7 +167,7 @@ async def on_myid_command(message) -> None:
         if is_owner
         else "Сейчас вы записаны как сотрудник — вам идут задачи и вопросы по чаю."
     )
-    await message.answer(f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n\n{role}")
+    await reply_private(message, f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n\n{role}")
 
 
 @router.message(Command("me"))
@@ -177,10 +178,10 @@ async def on_me_command(message) -> None:
     async with get_session() as session:
         employee = await get_employee(session, message.from_user.id)
         if employee is None:
-            await message.answer("Сначала отметь смену — тогда будет что показывать 😊")
+            await reply_private(message, "Сначала отметь смену — тогда будет что показывать 😊")
             return
         stats = await weekly_stats(session, employee.id)
-    await message.answer(format_stats(employee.name, stats))
+    await reply_private(message, format_stats(employee.name, stats))
 
 
 @router.message(Command("report"))
@@ -189,7 +190,7 @@ async def on_report_command(message) -> None:
         return
     async with get_session() as session:
         report = await build_daily_report(session)
-    await message.answer(report)
+    await reply_private(message, report)
 
 
 @router.message(Command("addknowledge"))
@@ -201,7 +202,7 @@ async def on_addknowledge_command(message, state: FSMContext) -> None:
     if not _is_owner(message):
         return
     await state.set_state(AddKnowledge.awaiting_title)
-    await message.answer(
+    await reply_private(message, 
         "Добавляем запись в базу знаний.\n"
         "Как назвать тему (например: «Заваривание Улуна» или «Возврат товара»)?"
     )
@@ -211,18 +212,18 @@ async def on_addknowledge_command(message, state: FSMContext) -> None:
 async def receive_knowledge_title(message, state: FSMContext) -> None:
     title = (message.text or "").strip()
     if not title:
-        await message.answer("Название не может быть пустым, напишите ещё раз.")
+        await reply_private(message, "Название не может быть пустым, напишите ещё раз.")
         return
     await state.update_data(knowledge_title=title)
     await state.set_state(AddKnowledge.awaiting_content)
-    await message.answer("Теперь напишите содержание — всё, что сотрудники должны об этом знать.")
+    await reply_private(message, "Теперь напишите содержание — всё, что сотрудники должны об этом знать.")
 
 
 @router.message(AddKnowledge.awaiting_content)
 async def receive_knowledge_content(message, state: FSMContext) -> None:
     content = (message.text or "").strip()
     if not content:
-        await message.answer("Содержание не может быть пустым, напишите ещё раз.")
+        await reply_private(message, "Содержание не может быть пустым, напишите ещё раз.")
         return
 
     data = await state.get_data()
@@ -232,7 +233,7 @@ async def receive_knowledge_content(message, state: FSMContext) -> None:
     async with get_session() as session:
         await create_knowledge_entry(session, title, content)
 
-    await message.answer(
+    await reply_private(message, 
         f"Добавил в базу знаний: «{title}» 👍\n"
         "Сотрудники теперь смогут получить ответ по этой теме."
     )

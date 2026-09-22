@@ -1,0 +1,51 @@
+=== WaysTea — SEO noindex дублей и WC filter [publish]
+
+
+/**
+ * WaysTea — SEO Fix: noindex дублей и WC filter страниц
+ */
+
+// 1. noindex для товаров-дублей (slug оканчивается на -2, -3 и оригинал существует)
+add_action('template_redirect', function() {
+  if (!is_singular('product')) return;
+  global $post;
+  $slug = $post->post_name;
+  if (!preg_match('/^(.+)-([2-9])$/', $slug, $matches)) return;
+  $base_slug = $matches[1];
+  $base = get_posts([
+    'post_type' => 'product',
+    'name' => $base_slug,
+    'post_status' => 'publish',
+    'numberposts' => 1,
+    'fields' => 'ids',
+    'no_found_rows' => true
+  ]);
+  if (empty($base)) return;
+  $base_url = get_permalink($base[0]);
+  add_action('wp_head', function() {
+    echo '<meta name="robots" content="noindex, follow">' . "\n";
+  }, 0);
+  add_filter('wpseo_canonical', function() use ($base_url) {
+    return $base_url;
+  });
+}, 10);
+
+// 2. noindex для WooCommerce страниц с параметрами сортировки/фильтра
+add_action('template_redirect', function() {
+  if (is_singular()) return;
+  if (!is_woocommerce() && !is_shop() && !is_product_category() && !is_product_tag()) return;
+  $noindex_params = ['orderby', 'min_price', 'max_price', 'rating_filter', 'on_sale'];
+  $should_noindex = false;
+  foreach ($noindex_params as $param) {
+    if (isset($_GET[$param])) { $should_noindex = true; break; }
+  }
+  if (!$should_noindex) {
+    foreach ($_GET as $key => $val) {
+      if (strpos($key, 'filter_') === 0) { $should_noindex = true; break; }
+    }
+  }
+  if (!$should_noindex) return;
+  add_action('wp_head', function() {
+    echo '<meta name="robots" content="noindex, follow">' . "\n";
+  }, 0);
+}, 10);

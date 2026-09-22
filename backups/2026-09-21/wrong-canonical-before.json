@@ -1,0 +1,385 @@
+[
+ {
+  "id": 12363,
+  "name": "Шу пуэр Бань чжан гушу, Хэн Фу 2018г, 357гр",
+  "permalink": "https://waystea.ru/product/shu-puer-ban-chzhan-gushu-xen-fu-2018g-357gr-2/",
+  "meta_data": [
+   {
+    "id": 159782,
+    "key": "_cloudshop_data",
+    "value": {
+     "_id": "64412352c4deff48444cd6e8",
+     "name": "Шу пуэр Бань чжан гушу, Хэн Фу 2018г, 357гр",
+     "type": "inventory",
+     "code": "01061",
+     "barcode": "",
+     "sku": "8886150",
+     "categories": [
+      "Шу Пуэр"
+     ],
+     "component": [],
+     "container": [],
+     "created": 1681990482,
+     "updated": 1749221608,
+     "pic": [
+      "https://pic.cloudshop.ru/v2/970915e5-67b0-4714-8e54-6d702728915c.jpg"
+     ],
+     "price": 3750,
+     "purchase": 1400,
+     "discount": 0,
+     "cost": 350,
+     "store_prices": [],
+     "id_group": 0,
+     "unit": "шт ",
+     "is_weighed": false,
+     "free_price": false,
+     "taxes": [],
+     "tax_free": false,
+     "_user": "5d7bdf97cb4d2757224e7591",
+     "_client": "5d7bdf97cb4d2757224e7592",
+     "_app": "IOSAPP",
+     "deleted": false,
+     "created_ms": 1681990482.776,
+     "odate": null,
+     "uuid": "019ec45a-d2b3-4e23-8f8c-4aef991f46e9",
+     "country": null,
+     "description": null,
+     "expiration_date": null,
+     "supplier": null,
+     "last_sale_date": {
+      "5d7bdf99cb4d2757224e7594": {
+       "$date": {
+        "$numberLong": "1747917827000"
+       }
+      },
+      "63bb50890105e5364f55e8bf": {
+       "$date": {
+        "$numberLong": "1748788768000"
+       }
+      }
+     },
+     "last_sale_date_overall": {
+      "$date": {
+       "$numberLong": "1748788768000"
+      }
+     }
+    }
+   },
+   {
+    "id": 159783,
+    "key": "_cloudshop_id",
+    "value": "64412352c4deff48444cd6e8"
+   },
+   {
+    "id": 159784,
+    "key": "_cloudshop_updated",
+    "value": "1758365755"
+   },
+   {
+    "id": 167883,
+    "key": "_eael_post_view_count",
+    "value": "328"
+   },
+   {
+    "id": 167884,
+    "key": "woolentor_views_count_product",
+    "value": "284"
+   },
+   {
+    "id": 167885,
+    "key": "shopengine_product_views_count",
+    "value": "278"
+   },
+   {
+    "id": 220050,
+    "key": "_yoast_wpseo_focuskw",
+    "value": "шу пуэр бань чжан гушу хэн фу"
+   },
+   {
+    "id": 220051,
+    "key": "_yoast_wpseo_metadesc",
+    "value": "Купить Шу пуэр Бань чжан гушу, Хэн Фу в интернет-магазине WAYSTEA. Настоящий пуэр шу из Китая. Доставка по России от 3000₽, во Владимире — от 1800₽."
+   },
+   {
+    "id": 226769,
+    "key": "wpr_featured_video_source",
+    "value": "upload"
+   },
+   {
+    "id": 226770,
+    "key": "wpr_featured_video_id",
+    "value": "0"
+   },
+   {
+    "id": 226771,
+    "key": "wpr_featured_video_url",
+    "value": ""
+   },
+   {
+    "id": 226772,
+    "key": "_price_per_gram",
+    "value": ""
+   },
+   {
+    "id": 226773,
+    "key": "woolentor_total_stock_quantity",
+    "value": ""
+   },
+   {
+    "id": 226774,
+    "key": "_saleflash_text",
+    "value": ""
+   },
+   {
+    "id": 226775,
+    "key": "wpr_secondary_image_id",
+    "value": "0"
+   },
+   {
+    "id": 226776,
+    "key": "_yfym_cargo_types",
+    "value": "default"
+   },
+   {
+    "id": 226777,
+    "key": "yfym_individual_vat",
+    "value": "global"
+   },
+   {
+    "id": 226778,
+    "key": "_yfym_condition",
+    "value": "default"
+   },
+   {
+    "id": 226779,
+    "key": "_yfym_quality",
+    "value": "default"
+   },
+   {
+    "id": 226780,
+    "key": "_yfym_recommend_stock_data_arr",
+    "value": {
+     "availability": "disabled",
+     "transport_unit": "",
+     "min_delivery_pieces": "",
+     "quantum": "",
+     "leadtime": "",
+     "box_count": "",
+     "delivery_weekday_arr": []
+    }
+   },
+   {
+    "id": 226781,
+    "key": "_yoast_wpseo_primary_product_brand",
+    "value": ""
+   },
+   {
+    "id": 226782,
+    "key": "_yoast_wpseo_primary_product_cat",
+    "value": ""
+   },
+   {
+    "id": 226783,
+    "key": "_yoast_wpseo_primary_yfym_collection",
+    "value": ""
+   },
+   {
+    "id": 226784,
+    "key": "_yoast_wpseo_linkdex",
+    "value": "66"
+   },
+   {
+    "id": 226785,
+    "key": "_yoast_wpseo_content_score",
+    "value": "90"
+   },
+   {
+    "id": 226786,
+    "key": "_yoast_wpseo_estimated-reading-time-minutes",
+    "value": "2"
+   },
+   {
+    "id": 230035,
+    "key": "_yoast_wpseo_title",
+    "value": "Купить Шу пуэр Бань чжан гушу, Хэн Фу | WAYSTEA"
+   },
+   {
+    "id": 249625,
+    "key": "_elementor_page_assets",
+    "value": []
+   }
+  ],
+  "_links": {
+   "self": [
+    {
+     "href": "https://waystea.ru/wp-json/wc/v3/products/12363",
+     "targetHints": {
+      "allow": [
+       "GET",
+       "POST",
+       "PUT",
+       "PATCH",
+       "DELETE"
+      ]
+     }
+    }
+   ],
+   "collection": [
+    {
+     "href": "https://waystea.ru/wp-json/wc/v3/products"
+    }
+   ]
+  }
+ },
+ {
+  "id": 15369,
+  "name": "Да Хун Пао Большой красный халат",
+  "permalink": "https://waystea.ru/product/da-xun-pao-bolshoj-krasnyj-xalat-2/",
+  "meta_data": [
+   {
+    "id": 242241,
+    "key": "wpr_featured_video_source",
+    "value": "upload"
+   },
+   {
+    "id": 242242,
+    "key": "wpr_featured_video_id",
+    "value": "0"
+   },
+   {
+    "id": 242243,
+    "key": "wpr_featured_video_url",
+    "value": ""
+   },
+   {
+    "id": 242244,
+    "key": "_price_per_gram",
+    "value": "28"
+   },
+   {
+    "id": 242245,
+    "key": "woolentor_total_stock_quantity",
+    "value": ""
+   },
+   {
+    "id": 242246,
+    "key": "_saleflash_text",
+    "value": ""
+   },
+   {
+    "id": 242268,
+    "key": "wpr_secondary_image_id",
+    "value": "0"
+   },
+   {
+    "id": 242269,
+    "key": "_yfym_cargo_types",
+    "value": "default"
+   },
+   {
+    "id": 242270,
+    "key": "yfym_individual_vat",
+    "value": "global"
+   },
+   {
+    "id": 242271,
+    "key": "_yfym_condition",
+    "value": "default"
+   },
+   {
+    "id": 242272,
+    "key": "_yfym_quality",
+    "value": "default"
+   },
+   {
+    "id": 242274,
+    "key": "_yfym_recommend_stock_data_arr",
+    "value": {
+     "availability": "disabled",
+     "transport_unit": "",
+     "min_delivery_pieces": "",
+     "quantum": "",
+     "leadtime": "",
+     "box_count": "",
+     "delivery_weekday_arr": []
+    }
+   },
+   {
+    "id": 242275,
+    "key": "_yoast_wpseo_primary_product_brand",
+    "value": ""
+   },
+   {
+    "id": 242276,
+    "key": "_yoast_wpseo_primary_product_cat",
+    "value": "69"
+   },
+   {
+    "id": 242277,
+    "key": "_yoast_wpseo_primary_yfym_collection",
+    "value": ""
+   },
+   {
+    "id": 242278,
+    "key": "_yoast_wpseo_content_score",
+    "value": "90"
+   },
+   {
+    "id": 242279,
+    "key": "_yoast_wpseo_estimated-reading-time-minutes",
+    "value": "0"
+   },
+   {
+    "id": 242284,
+    "key": "_eael_post_view_count",
+    "value": "58"
+   },
+   {
+    "id": 242285,
+    "key": "woolentor_views_count_product",
+    "value": "53"
+   },
+   {
+    "id": 242286,
+    "key": "shopengine_product_views_count",
+    "value": "53"
+   },
+   {
+    "id": 242300,
+    "key": "_yoast_wpseo_metadesc",
+    "value": "Да Хун Пао «Большой красный халат» — знаменитый уишаньский скальный улун с орхидейным ароматом и минеральным послевкусием. Купить с доставкой по России в WAYSTEA."
+   },
+   {
+    "id": 242301,
+    "key": "_yoast_wpseo_focuskw",
+    "value": "да хун пао большой красный халат"
+   },
+   {
+    "id": 249922,
+    "key": "_elementor_page_assets",
+    "value": []
+   }
+  ],
+  "_links": {
+   "self": [
+    {
+     "href": "https://waystea.ru/wp-json/wc/v3/products/15369",
+     "targetHints": {
+      "allow": [
+       "GET",
+       "POST",
+       "PUT",
+       "PATCH",
+       "DELETE"
+      ]
+     }
+    }
+   ],
+   "collection": [
+    {
+     "href": "https://waystea.ru/wp-json/wc/v3/products"
+    }
+   ]
+  }
+ }
+]

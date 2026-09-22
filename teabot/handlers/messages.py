@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from . import get_ai, get_search
 from .commands import menu
+from .social import handle_text as handle_social_text
 from ..constants import WAYSTEA_PROMO, is_buy_question
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,10 @@ async def on_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     text = update.message.text.strip()
+
+    # Ответ в соцсеть или текст поста — обрабатывается хабом, а не чайным AI
+    if await handle_social_text(update, ctx):
+        return
 
     if text.lower() in ["привет", "/start", "меню", "старт"]:
         ctx.user_data.clear()

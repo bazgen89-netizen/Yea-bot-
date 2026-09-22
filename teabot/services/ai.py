@@ -13,10 +13,16 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 class GroqClient:
+    name = "Groq"
+
     def __init__(self, api_key: str, model: str, session: aiohttp.ClientSession):
         self.api_key = api_key
         self.model = model
         self.session = session
+
+    @property
+    def available(self) -> bool:
+        return bool(self.api_key)
 
     @property
     def _headers(self) -> dict:
@@ -25,14 +31,15 @@ class GroqClient:
             "Content-Type": "application/json",
         }
 
-    async def ask(self, prompt: str) -> str:
+    async def ask(self, prompt: str, system: str = "") -> str:
+        """system позволяет сменить роль модели (например, ответы в соцсетях)."""
         if not self.api_key:
             return "⚠️ AI отключён. Задайте GROQ_API_KEY в переменных окружения."
 
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "system", "content": system or AI_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": 1500,

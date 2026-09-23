@@ -16,8 +16,12 @@
 # Одна команда — одна точка, где можно споткнуться, вместо двадцати. И если
 # споткнётся, последняя строка вывода скажет, на каком шаге.
 #
-# Скрипт нарочно не трогает git-историю и ничего не коммитит: память задания
-# пишется отдельно, уже после отчёта.
+# Имена переменных здесь латиницей, хотя весь остальной код в этом хозяйстве
+# по-русски: bash кириллицу в именах не принимает вовсе — «bad substitution».
+# Проверено дважды, оба раза на этом же файле.
+#
+# Скрипт нарочно ничего не коммитит: память задания пишется отдельно, уже
+# после отчёта.
 
 set -uo pipefail
 
@@ -25,121 +29,121 @@ set -uo pipefail
 # bash дочитывает скрипт по ходу дела — если файл под ним подменится, он
 # продолжит читать с той же позиции уже в новом тексте. Поэтому первым делом
 # уходим работать с копии во временной папке.
-if [ "${НОЧЬ_КОПИЯ:-}" != да ]; then
-  КОПИЯ=$(mktemp) || exit 1
-  cat "$0" > "$КОПИЯ"
-  НОЧЬ_КОПИЯ=да bash "$КОПИЯ"
-  ИТОГ=$?
-  rm -f "$КОПИЯ"
-  exit $ИТОГ
+if [ "${NIGHT_COPY:-}" != yes ]; then
+  copy=$(mktemp) || exit 1
+  cat "$0" > "$copy"
+  NIGHT_COPY=yes bash "$copy"
+  code=$?
+  rm -f "$copy"
+  exit $code
 fi
 
-КОРЕНЬ=/home/user/Yea-bot-
-ВЕТКА=claude/warehouse-management-app-i7jnvr
-АДРЕС=https://github.com/bazgen89-netizen/Yea-bot-
+root=/home/user/Yea-bot-
+branch=claude/warehouse-management-app-i7jnvr
+origin=https://github.com/bazgen89-netizen/Yea-bot-
 
-шаг=начало
-беда() {
+step='начало'
+fail() {
   echo
-  echo "СОРВАЛОСЬ на шаге: $шаг"
+  echo "СОРВАЛОСЬ на шаге: $step"
   exit 1
 }
 
 # --- 1. Среда ---------------------------------------------------------------
-шаг='1. среда'
-cd "$КОРЕНЬ" 2>/dev/null || git clone "$АДРЕС" "$КОРЕНЬ" || беда
-cd "$КОРЕНЬ" || беда
-git fetch origin "$ВЕТКА" || беда
-git reset --hard FETCH_HEAD || беда
-cd warehouse || беда
-npm install --silent || беда
+step='1. среда'
+cd "$root" 2>/dev/null || git clone "$origin" "$root" || fail
+cd "$root" || fail
+git fetch origin "$branch" || fail
+git reset --hard FETCH_HEAD || fail
+cd warehouse || fail
+npm install --silent || fail
 ln -sfn /opt/node22/lib/node_modules/playwright node_modules/playwright 2>/dev/null
+echo 'среда: готова'
 
 # --- 2. Вчерашняя выгрузка с сайта ------------------------------------------
 # Данные ночуют на его сайте: машина каждую ночь пустая, а в git их нет —
 # там три с лишним тысячи настоящих телефонов.
-шаг='2. забрать выгрузку с сайта'
-node scripts/site-data.mjs взять --с-фото || беда
+step='2. забрать выгрузку с сайта'
+node scripts/site-data.mjs взять --с-фото || fail
 
-БЫЛО=$(node -e "
-  const f = (n) => require('./src/db/seed/local/' + n + '.json').length;
-  console.log(f('sales'));
-" 2>/dev/null) || БЫЛО=0
-echo "чеков было: $БЫЛО"
+was=$(node -e "console.log(require('./src/db/seed/local/sales.json').length)" 2>/dev/null) || was=0
+echo "чеков было: $was"
 
 # --- 3. Догнать свежие чеки -------------------------------------------------
 # Перенос сам смотрит, каким днём кончается прежняя выгрузка, и спрашивает
 # CloudShop только с него. Не задался — не беда: выложим вчерашнее, это
 # лучше, чем ничего.
-шаг='3. перенос из CloudShop'
-if node scripts/import-cloudshop.mjs --no-photos 2>&1 | tail -12; then
-  echo "перенос: прошёл"
+step='3. перенос из CloudShop'
+if node scripts/import-cloudshop.mjs --no-photos 2>&1 | tail -8; then
+  echo 'перенос: прошёл'
 else
-  echo "перенос: НЕ прошёл — собираем из вчерашних данных"
+  echo 'перенос: НЕ прошёл — собираем из вчерашних данных'
 fi
 
 # --- 4. Проверка ------------------------------------------------------------
-шаг='4. тесты и типы'
-npm test --silent >/dev/null 2>&1 || беда
-npm run typecheck >/dev/null 2>&1 || беда
-echo "тесты и типы: чисто"
+step='4. тесты и типы'
+npm test --silent >/dev/null 2>&1 || fail
+npm run typecheck >/dev/null 2>&1 || fail
+echo 'тесты и типы: чисто'
 
 # --- 5. Сборка — один раз ---------------------------------------------------
-шаг='5. сборка'
-node scripts/build-mine.mjs >/dev/null 2>&1 || беда
+step='5. сборка'
+node scripts/build-mine.mjs >/dev/null 2>&1 || fail
+echo 'сборка: готова'
 
 # --- 6. Выложить ------------------------------------------------------------
-шаг='6. выкладка'
+step='6. выкладка'
 node scripts/protect-site.mjs >/dev/null 2>&1
-ВЫЛОЖЕНО=нет
-for попытка in 1 2 3; do
+laid=no
+for try in 1 2 3; do
   if node scripts/deploy-site.mjs 2>&1 | tail -1; then
-    ВЫЛОЖЕНО=да
+    laid=yes
     break
   fi
-  sleep $((попытка * 10))
+  sleep $((try * 10))
 done
-[ "$ВЫЛОЖЕНО" = да ] || беда
+[ "$laid" = yes ] || fail
 
 # Вернуть выгрузку на сайт, чтобы следующая ночь забрала её за шесть секунд.
 # Фотографии не отправляем: они те же, а это лишние 26 мегабайт.
-node scripts/site-data.mjs положить >/dev/null 2>&1 || echo "выгрузка обратно: НЕ легла"
+node scripts/site-data.mjs положить >/dev/null 2>&1 || echo 'выгрузка обратно: НЕ легла'
 
 # --- 7. Проверить, что легло свежее -----------------------------------------
-шаг='7. проверка сайта'
-КОД=$(curl -s -o /dev/null -w '%{http_code}' https://waystea.ru/sklad/)
-ДАТА=$(curl -sI -u "vazgen:matcha-alishan-9600" https://waystea.ru/sklad/ \
+step='7. проверка сайта'
+code=$(curl -s -o /dev/null -w '%{http_code}' https://waystea.ru/sklad/)
+when=$(curl -sI -u "vazgen:matcha-alishan-9600" https://waystea.ru/sklad/ \
   | grep -i '^last-modified' | tr -d '\r')
-СЕГОДНЯ=$(date -u '+%d %b %Y')
+today=$(date -u '+%d %b %Y')
 
 echo
-echo "без пароля: $КОД (ждём 401)"
-echo "на сайте:   $ДАТА"
-case "$ДАТА" in
-  *"$СЕГОДНЯ"*) echo "выкладка:   свежая" ;;
-  *)            echo "выкладка:   НЕ СЕГОДНЯШНЯЯ — разберись и скажи прямо" ;;
+echo "без пароля: $code (ждём 401)"
+echo "на сайте:   $when"
+case "$when" in
+  *"$today"*) echo 'выкладка:   свежая' ;;
+  *)          echo 'выкладка:   НЕ СЕГОДНЯШНЯЯ — разберись и скажи прямо' ;;
 esac
 
 # --- 8. Числа для отчёта ----------------------------------------------------
-шаг='8. числа для отчёта'
-node -e "
+step='8. числа для отчёта'
+WAS="$was" node -e "
   const чеки = require('./src/db/seed/local/sales.json');
   const день = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
   const вчера = чеки.filter((ч) => (ч.at ?? '').slice(0, 10) === день);
 
+  const рубли = (к) => (к / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
   const поМагазинам = new Map();
   for (const ч of вчера) {
     поМагазинам.set(ч.st ?? '—', (поМагазинам.get(ч.st ?? '—') ?? 0) + (ч.t ?? 0));
   }
 
-  const рубли = (к) => (к / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
   console.log('');
-  console.log('чеков всего: ' + чеки.length + ' (было ' + ${БЫЛО:-0} + ')');
+  console.log('чеков всего: ' + чеки.length + ' (было ' + process.env.WAS + ')');
   console.log('за ' + день + ': ' + вчера.length + ' чеков');
   for (const [имя, сумма] of поМагазинам) console.log('  ' + имя + ': ' + рубли(сумма));
+
   const крупный = вчера.reduce((а, б) => ((б.t ?? 0) > (а?.t ?? 0) ? б : а), null);
   if (крупный) console.log('крупнейший чек: ' + рубли(крупный.t) + ' — ' + (крупный.cn ?? 'без клиента'));
-" || echo "числа посчитать не вышло"
+" || echo 'числа посчитать не вышло'
 
 echo
-echo "ГОТОВО: все шаги пройдены"
+echo 'ГОТОВО: все шаги пройдены'

@@ -1,5 +1,5 @@
-import { Section } from '../src/web/screens/Section';
+import { Billing } from '../src/web/screens/Billing';
 
 export default function BillingScreen() {
-  return <Section title={'Тарифы и оплата'} note={'Тариф, срок действия и история платежей.'} />;
+  return <Billing />;
 }

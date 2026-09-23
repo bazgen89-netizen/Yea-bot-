@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './Translated';
 
 import { MiniChart } from './MiniChart';
+import { useDesktop } from '../ui/useDesktop';
 import { visiblePages } from './pagination';
 import { say } from '../ui/alert';
 import { web, webText, WEB_FONT } from '../ui/webTheme';
@@ -37,9 +38,12 @@ export function SearchBox({
    */
   const слеваЛупа = web.searchPadH === 10;
   const лупа = <Text style={styles.searchIcon}>⌕</Text>;
+  // На телефоне — во всю ширину: поиск в 316 точек плюс кнопки рядом делали
+  // страницу шире экрана, и её приходилось таскать пальцем вбок.
+  const desktop = useDesktop();
 
   return (
-    <View style={[styles.search, { width }]}>
+    <View style={[styles.search, desktop ? { width } : styles.searchWide]}>
       {слеваЛупа ? лупа : null}
       <TextInput
         value={value}
@@ -332,6 +336,9 @@ export const CELL = {
 const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
+    // Кнопкам, которым не хватило места, — на следующую строку, а не за край
+    // экрана. На компьютере всё и так умещается в одну.
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 14,
     paddingHorizontal: 22,
@@ -347,6 +354,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  searchWide: { width: '100%' },
   searchInput: {
     flex: 1,
     fontFamily: WEB_FONT,

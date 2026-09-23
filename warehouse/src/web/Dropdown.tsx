@@ -69,7 +69,8 @@ export function Dropdown<T extends string>({
         }}
         style={(state) => [
           styles[variant],
-          width ? { width } : null,
+          // Не шире родителя: на телефоне поле в 420 точек уезжало за край.
+          width ? { width, maxWidth: '100%' } : null,
           isHovered(state) && (variant === 'chip' || variant === 'field') && styles.chipHover,
         ]}
       >

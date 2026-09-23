@@ -748,6 +748,8 @@ const styles = StyleSheet.create({
   toggleLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text },
   tabs: {
     flexDirection: 'row',
+    // На телефоне вкладки не влезают в строку — переносятся, а не за край.
+    flexWrap: 'wrap',
     gap: 4,
     paddingHorizontal: 26,
     paddingTop: 20,
@@ -769,6 +771,8 @@ const styles = StyleSheet.create({
   fieldLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.columnHead },
   input: {
     width: 420,
+    // На телефоне экран 390 — поле в 420 обрезалось справа.
+    maxWidth: '100%',
     height: 42,
     borderWidth: 1,
     borderColor: web.border,

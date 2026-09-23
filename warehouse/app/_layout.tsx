@@ -73,6 +73,28 @@ function Screens() {
       <Stack.Screen name="money/new" options={title('Деньги')} />
       <Stack.Screen name="counterparty/[id]" options={title('Карточка')} />
       <Stack.Screen name="sale/[id]" options={title('Чек')} />
+      {/*
+       * Заголовки экранов, у которых своего нет.
+       *
+       * Без них телефон писал в шапке имя файла: «money/index» вместо
+       * «Движение денег», «registers» вместо «Кассы». Нашлось обходом всех
+       * строк телефонного «Меню» — четырнадцать экранов. Проверку, что у
+       * каждого экрана есть название, держит тест `app-titles.test.ts`.
+       */}
+      <Stack.Screen name="money/index" options={title('Движение денег')} />
+      <Stack.Screen name="registers" options={title('Кассы')} />
+      <Stack.Screen name="shifts" options={title('Смены')} />
+      <Stack.Screen name="accounts" options={title('Счета')} />
+      <Stack.Screen name="stores" options={title('Магазины')} />
+      <Stack.Screen name="staff" options={title('Сотрудники')} />
+      <Stack.Screen name="company" options={title('Настройки компании')} />
+      <Stack.Screen name="loyalty" options={title('Программа лояльности')} />
+      <Stack.Screen name="print-forms" options={title('Печатные формы')} />
+      <Stack.Screen name="trash" options={title('Корзина')} />
+      <Stack.Screen name="billing" options={title('Тарифы и оплата')} />
+      <Stack.Screen name="integrations" options={title('Интеграции')} />
+      <Stack.Screen name="storefront" options={title('Интернет-витрина')} />
+      <Stack.Screen name="partners" options={title('Партнёрская программа')} />
       <Stack.Screen
         name="scan"
         options={desktop ? { headerShown: false } : { title: 'Сканер', presentation: 'modal' }}

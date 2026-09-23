@@ -77,6 +77,8 @@ export const Icon = {
  * значок слева, одного размера у всех строк, и подбирается он по смыслу пункта.
  */
 export const MenuIcon = {
+  /** ИИ-помощник — те же искры, что на кнопке в шапке кабинета. */
+  assistant: (p: Props) => <Ionicons name="sparkles" size={p.size ?? 22} color={p.color ?? '#2563EB'} />,
   gear: (p: Props) => (
     <Ionicons name="settings-outline" size={p.size ?? 23} color={p.color ?? colors.primaryText} />
   ),
@@ -130,6 +132,10 @@ export const MenuIcon = {
  * и свой смысл у пунктов, которых в телефоне нет вовсе.
  */
 export const WebIcon = {
+  /** Чат с ИИ: искры на кнопке в шапке и у реплик помощника. */
+  sparkles: (p: Props) => <Ionicons name="sparkles" size={p.size ?? 18} color={p.color} />,
+  /** Отправить сообщение в чате. */
+  send: (p: Props) => <Ionicons name="arrow-up" size={p.size ?? 18} color={p.color} />,
   // Названия значков — не на глаз со снимка, а из его же разметки меню:
   // `grid layout`, `cube`, `inbox`, `refresh`, `dollar`, `area chart`,
   // `user`, `users`, `world`, `attach`, `flask`, `payment`,

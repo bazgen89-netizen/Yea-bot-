@@ -2,11 +2,13 @@ import { usePathname, useGlobalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { ЧатИИ } from './AiChat';
 import { Header } from './Header';
 import { startsInCashier } from './openCashier';
 import { Cashier } from './screens/Cashier';
 import { Sidebar } from './Sidebar';
 import { titleFor } from './menu';
+import { закрытьЧат, useЧатОткрыт } from '../state/aiChat';
 import { useLanguage } from '../state/LanguageProvider';
 import { useDesktop } from '../ui/useDesktop';
 import { web } from '../ui/webTheme';
@@ -24,6 +26,7 @@ export function Shell({ children }: { children: ReactNode }) {
   // В раскладке параметры экрана видны только через глобальный хук.
   const params = useGlobalSearchParams<{ kind?: string; type?: string }>();
   const { tp } = useLanguage();
+  const чатОткрыт = useЧатОткрыт();
 
   /**
    * Окно, открытое кассой, — это касса, и ничего кроме.
@@ -48,6 +51,12 @@ export function Shell({ children }: { children: ReactNode }) {
       <View style={styles.body}>
         <Sidebar />
         <View style={styles.content}>{children}</View>
+        {/* Чат поверх страницы, а не вместо неё: спросил — и видишь, о чём
+            спрашивал, в самой таблице слева. На странице самого чата панель
+            не нужна — он и так на весь экран. */}
+        {чатОткрыт && !pathname.startsWith('/assistant') ? (
+          <ЧатИИ вид="панель" onClose={закрытьЧат} />
+        ) : null}
       </View>
     </View>
   );

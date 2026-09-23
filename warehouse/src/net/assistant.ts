@@ -3,7 +3,14 @@ import { getServer } from '../db/server';
 import { describeSchema } from '../db/askSchema';
 import { askTarget, getAskSettings, type AskSettings } from '../db/askSettings';
 import { runSql, UnsafeSql, type AskResult } from '../db/ask';
-import { askSystem, разобрать } from '../domain/askPrompt';
+import {
+  askSystem,
+  askSystemChat,
+  разобрать,
+  разобратьЧат,
+  ПАМЯТЬ,
+  type Реплика,
+} from '../domain/askPrompt';
 import { ServerError } from './server';
 
 /**
@@ -44,8 +51,26 @@ export function askWay(db: SqlDriver): 'ключ' | 'сервер' | null {
   return link?.url && link.token ? 'сервер' : null;
 }
 
-export async function askWarehouse(db: SqlDriver, question: string): Promise<Ответ> {
+/**
+ * Как спрашивать.
+ *
+ * `история` — прежние реплики разговора: с ней «а в июле?» понимается как
+ * продолжение. `чат` — спрашивают из чата: тогда модели можно отвечать и
+ * обычным текстом, не только запросом к базе.
+ */
+export interface КакСпросить {
+  история?: Реплика[];
+  чат?: boolean;
+}
+
+export async function askWarehouse(
+  db: SqlDriver,
+  question: string,
+  как: КакСпросить = {},
+): Promise<Ответ> {
   const way = askWay(db);
+  const история = (как.история ?? []).slice(-ПАМЯТЬ);
+  const чат = как.чат ?? false;
 
   if (way === null) {
     throw new ServerError(
@@ -57,8 +82,10 @@ export async function askWarehouse(db: SqlDriver, question: string): Promise<О�
   const schema = describeSchema(db);
   const спросить = (вопрос: string) =>
     way === 'ключ'
-      ? спроситьСвоимКлючом(getAskSettings(db), schema, вопрос)
-      : спроситьСервер(db, schema, вопрос);
+      ? спроситьСвоимКлючом(getAskSettings(db), schema, вопрос, история, чат)
+      : // Серверу память отдаём текстом перед вопросом: его язык запросов
+        // знает только один вопрос, а менять сервер ради чата незачем.
+        спроситьСервер(db, schema, сПамятью(история, вопрос));
 
   let { sql, comment } = await спросить(question);
 
@@ -125,18 +152,21 @@ export async function askWarehouse(db: SqlDriver, question: string): Promise<О�
 /**
  * Свой ключ: вопрос идёт к модели напрямую из программы.
  *
- * Клод для такого просит отдельный заголовок — `anthropic-dangerous-direct-
- * browser-access`. Название пугающее, и не зря: он подтверждает, что ключ
- * лежит у того, кто спрашивает, а не роздан посетителям сайта. У нас именно
- * так — программа стоит у хозяина, ключ его.
+ * Все три — Gemini, ДипСик и ChatGPT — говорят на одном языке запросов
+ * (OpenAI), поэтому дорога одна, различается только адрес. Что каждый из них
+ * отвечает на запрос прямо из браузера, проверено предпроверкой с адреса
+ * waystea.ru: разрешают все трое.
  */
 async function спроситьСвоимКлючом(
   settings: AskSettings,
   schema: string,
   question: string,
+  история: Реплика[] = [],
+  чат = false,
 ): Promise<{ sql: string; comment: string }> {
   const { url, model } = askTarget(settings);
-  const system = askSystem(schema);
+  const system = чат ? askSystemChat(schema) : askSystem(schema);
+  const прежние = история.map((одна) => ({ role: одна.роль, content: одна.текст }));
   const key = settings.key.trim();
 
   // Ключ уезжает заголовком, а в заголовок пролезают только латинские буквы.
@@ -151,31 +181,19 @@ async function спроситьСвоимКлючом(
     );
   }
 
-  const тело =
-    settings.kind === 'claude'
-      ? {
-          model,
-          max_tokens: 1_500,
-          system,
-          messages: [{ role: 'user', content: question }],
-        }
-      : {
-          model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: question },
-          ],
-        };
+  const тело = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      ...прежние,
+      { role: 'user', content: question },
+    ],
+  };
 
-  const headers: Record<string, string> =
-    settings.kind === 'claude'
-      ? {
-          'content-type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        }
-      : { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${key}`,
+  };
 
   let response: Response;
   try {
@@ -194,7 +212,10 @@ async function спроситьСвоимКлючом(
   const text = await response.text();
   let answer: Record<string, unknown> = {};
   try {
-    answer = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    const разбор = text ? (JSON.parse(text) as unknown) : {};
+    // Gemini присылает ошибку списком: `[{"error": {...}}]`. Без этого
+    // «неверный ключ» превращался в безликое «ошибка 400».
+    answer = (Array.isArray(разбор) ? разбор[0] : разбор) as Record<string, unknown>;
   } catch {
     answer = {};
   }
@@ -202,16 +223,11 @@ async function спроситьСвоимКлючом(
   if (!response.ok) throw new ServerError(словамиОбОшибке(response.status, answer));
 
   const said =
-    settings.kind === 'claude'
-      ? ((answer.content as { type: string; text?: string }[] | undefined) ?? [])
-          .filter((part) => part.type === 'text')
-          .map((part) => part.text ?? '')
-          .join('\n')
-      : ((answer.choices as { message?: { content?: string } }[] | undefined)?.[0]?.message
-          ?.content ?? '');
+    (answer.choices as { message?: { content?: string } }[] | undefined)?.[0]?.message
+      ?.content ?? '';
 
   if (!said.trim()) throw new ServerError('Модель ответила пусто. Попробуйте ещё раз.');
-  return разобрать(said);
+  return чат ? разобратьЧат(said) : разобрать(said);
 }
 
 /**
@@ -224,7 +240,10 @@ function словамиОбОшибке(status: number, answer: Record<string, u
   const error = answer.error as { message?: string; type?: string } | string | undefined;
   const сказала = (typeof error === 'string' ? error : error?.message ?? '').trim();
 
-  if (status === 401 || status === 403) {
+  // Gemini о неверном ключе говорит кодом 400, а не 401: «Please pass a
+  // valid API key». Проверено запросом с поддельным ключом.
+  const проКлюч = /api key/i.test(сказала);
+  if (status === 401 || status === 403 || проКлюч) {
     return `Модель не приняла ключ. Проверьте, что вписан он целиком.${сказала ? ` Ответ: ${сказала}` : ''}`;
   }
   if (status === 429) {
@@ -234,6 +253,15 @@ function словамиОбОшибке(status: number, answer: Record<string, u
     return `Такой модели нет. Проверьте название модели в настройках помощника.${сказала ? ` Ответ: ${сказала}` : ''}`;
   }
   return сказала || `Модель ответила ошибкой ${status}.`;
+}
+
+/** Прежний разговор одним текстом — для сервера, который знает один вопрос. */
+function сПамятью(история: Реплика[], вопрос: string): string {
+  if (!история.length) return вопрос;
+  const было = история
+    .map((одна) => `${одна.роль === 'user' ? 'Вопрос' : 'Ответ'}: ${одна.текст}`)
+    .join('\n\n');
+  return `Прежний разговор:\n\n${было}\n\nНовый вопрос: ${вопрос}`;
 }
 
 /** Через сервер магазина: ключ там, наружу от нас уходит только вопрос. */

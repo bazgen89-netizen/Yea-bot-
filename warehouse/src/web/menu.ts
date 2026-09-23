@@ -224,7 +224,7 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   if (pathname.startsWith('/print-forms')) return 'Компания / печатные формы';
   if (pathname.startsWith('/storefront')) return 'Интернет-витрина';
   if (pathname.startsWith('/integrations')) return 'Интеграции';
-  if (pathname.startsWith('/assistant')) return 'Спросить у склада';
+  if (pathname.startsWith('/assistant')) return 'ИИ-помощник';
   if (pathname.startsWith('/lab')) return 'Лаборатория';
   if (pathname.startsWith('/billing')) return 'Тарифы и оплата';
   if (pathname.startsWith('/trash')) return 'Корзина';

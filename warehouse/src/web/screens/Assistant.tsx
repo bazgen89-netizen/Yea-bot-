@@ -4,7 +4,11 @@ import { Text, TextInput } from '../Translated';
 
 import { ToolButton } from '../Table';
 import {
+  ASK_KEY_HINT,
+  ASK_KEY_PAGE,
+  ASK_KINDS,
   ASK_NAMES,
+  askDefaultModel,
   getAskSettings,
   saveAskSettings,
   type AskKind,
@@ -58,18 +62,6 @@ const ПРИМЕРЫ = [
   'На каких товарах я больше всего заработал?',
   'Кто из клиентов покупал больше всех за всё время?',
 ];
-
-/**
- * Где взять ключ — ссылкой, чтобы не искать.
- *
- * Адрес консоли Клода переехал с `console.anthropic.com` на
- * `platform.claude.com`; старый пока переадресует, но вести человека надо
- * сразу туда, где он окажется.
- */
-const ГДЕ_КЛЮЧ: Record<AskKind, string> = {
-  claude: 'https://platform.claude.com/settings/keys',
-  openai: 'https://platform.deepseek.com/api_keys',
-};
 
 export function Assistant() {
   const { db } = useDatabase();
@@ -181,7 +173,7 @@ export function Assistant() {
  * «работает сразу, у себя», сервер — «для многих магазинов сразу». Поэтому
  * на экране стоит ключ, а про сервер сказано одной строкой.
  */
-function Настройка({ onSaved }: { onSaved: () => void }) {
+export function Настройка({ onSaved }: { onSaved: () => void }) {
   const { db, refresh } = useDatabase();
   const saved = useQuery((database) => getAskSettings(database));
 
@@ -201,7 +193,7 @@ function Настройка({ onSaved }: { onSaved: () => void }) {
       </Text>
 
       <View style={styles.actions}>
-        {(['claude', 'openai'] as AskKind[]).map((one) => (
+        {ASK_KINDS.map((one) => (
           <ToolButton
             key={one}
             label={ASK_NAMES[one]}
@@ -216,7 +208,7 @@ function Настройка({ onSaved }: { onSaved: () => void }) {
         <TextInput
           value={key}
           onChangeText={setKey}
-          placeholder={kind === 'claude' ? 'sk-ant-…' : 'sk-…'}
+          placeholder={ASK_KEY_HINT[kind]}
           placeholderTextColor={web.textMuted}
           style={styles.input}
         />
@@ -224,7 +216,7 @@ function Настройка({ onSaved }: { onSaved: () => void }) {
 
       <Pressable
         accessibilityRole="link"
-        onPress={() => void Linking.openURL(ГДЕ_КЛЮЧ[kind])}
+        onPress={() => void Linking.openURL(ASK_KEY_PAGE[kind])}
       >
         <Text style={styles.link}>Где взять ключ {ASK_NAMES[kind]} →</Text>
       </Pressable>
@@ -234,7 +226,7 @@ function Настройка({ onSaved }: { onSaved: () => void }) {
         <TextInput
           value={model}
           onChangeText={setModel}
-          placeholder={kind === 'claude' ? 'claude-opus-5' : 'deepseek-chat'}
+          placeholder={askDefaultModel(kind)}
           placeholderTextColor={web.textMuted}
           style={styles.input}
         />
@@ -309,7 +301,7 @@ function число(value: unknown, деньги: boolean): string {
 /** Сколько строк показываем зараз. Больше человек глазами не осилит. */
 const ПОКАЗЫВАЕМ = 200;
 
-function Ответ_({ ответ }: { ответ: Ответ }) {
+export function Ответ_({ ответ }: { ответ: Ответ }) {
   const { result } = ответ;
   const [видноЗапрос, setВидноЗапрос] = useState(false);
   const [отбор, setОтбор] = useState('');

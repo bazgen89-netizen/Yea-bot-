@@ -7,6 +7,7 @@ import { Dropdown, type Option } from './Dropdown';
 import { LANGUAGES, labelFor, type LanguageCode } from '../i18n/languages';
 import { openCashierWindow } from './openCashier';
 import { useLanguage } from '../state/LanguageProvider';
+import { переключитьЧат, useЧатОткрыт } from '../state/aiChat';
 import { WebIcon } from '../ui/icons';
 import { HEADER_HEIGHT, web, WEB_FONT } from '../ui/webTheme';
 import { полосыГрадиента } from '../domain/градиент';
@@ -43,6 +44,7 @@ const LANGUAGE_OPTIONS: Option<LanguageCode>[] = LANGUAGES.map((language) => ({
 export function Header({ title, unread = 15 }: { title: string; unread?: number }) {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
+  const чатОткрыт = useЧатОткрыт();
 
   return (
     <View style={styles.header}>
@@ -66,6 +68,24 @@ export function Header({ title, unread = 15 }: { title: string; unread?: number 
       </Text>
 
       <View style={styles.right}>
+        {/* Чат с ИИ — кнопкой в шапке, а не строкой меню: так он под рукой
+            на любой странице, а меню не растёт и не начинает прокручиваться
+            само по себе, как было, пока в нём стояла лишняя строка. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('ИИ-помощник')}
+          accessibilityState={{ expanded: чатОткрыт }}
+          onPress={переключитьЧат}
+          style={({ pressed }) => [
+            styles.ии,
+            чатОткрыт && styles.ииОткрыт,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <WebIcon.sparkles size={15} color={web.headerText} />
+          <Text style={styles.cashierLabel}>{t('ИИ-помощник')}</Text>
+        </Pressable>
+
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('Интерфейс кассира')}
@@ -197,6 +217,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cashierLabel: { color: web.headerText, fontFamily: WEB_FONT, fontSize: 15 },
+  ии: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+  },
+  ииОткрыт: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.7)' },
   headerButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   language: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   badge: {

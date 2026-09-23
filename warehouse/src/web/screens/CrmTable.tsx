@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 2,
   },
-  tileOn: { borderColor: web.link, backgroundColor: '#F2F8FD' },
+  tileOn: { borderColor: web.link, backgroundColor: web.tileOnBg },
   tileValue: { fontFamily: WEB_FONT, fontSize: 26, color: web.text, fontVariant: ['tabular-nums'] },
   tileLabel: { fontFamily: WEB_FONT, fontSize: 14, color: web.text, fontWeight: '600' },
   tileNote: { fontFamily: WEB_FONT, fontSize: 12, color: web.textMuted, lineHeight: 16 },

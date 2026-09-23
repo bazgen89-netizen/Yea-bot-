@@ -203,6 +203,8 @@ export function titleFor(pathname: string, kind?: string, type?: string): string
   if (pathname.startsWith('/catalog')) {
     return версияКабинета() === 'новая' ? 'Справочник' : 'Товары и услуги / справочник';
   }
+  // Без этой строки на странице CRM в шапке стояло «Главная».
+  if (pathname.startsWith('/crm')) return 'Контрагенты / CRM';
   if (pathname.startsWith('/journal')) return 'Движение товара';
   if (pathname.startsWith('/money')) return 'Движение денег';
   if (pathname.startsWith('/reports/')) {

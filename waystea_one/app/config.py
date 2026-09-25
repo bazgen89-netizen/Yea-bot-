@@ -5,6 +5,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Остановлен по просьбе владельца. Строка ниже — единственное, что нужно
+# поменять, чтобы бот снова заработал после деплоя.
+PAUSED_BY_DEFAULT = True
+
+_PAUSE_ON = {"1", "true", "yes", "on"}
+_PAUSE_OFF = {"0", "false", "no", "off"}
+
+
+def pause_requested(env_value: str | None) -> bool:
+    """Стоит ли бот на паузе.
+
+    Явное значение BOT_PAUSED сильнее вшитого: так владелец снимает паузу
+    сам, из панели Render, не дожидаясь правки кода и деплоя. Пустая или
+    отсутствующая переменная — значит решает PAUSED_BY_DEFAULT, а не
+    «работаем»: иначе вшитая остановка снималась бы случайным удалением
+    переменной.
+    """
+    value = (env_value or "").strip().lower()
+    if value in _PAUSE_ON:
+        return True
+    if value in _PAUSE_OFF:
+        return False
+    return PAUSED_BY_DEFAULT
+
+
 class Settings:
     bot_token: str = os.environ["BOT_TOKEN"]
     database_url: str = os.environ["DATABASE_URL"]
@@ -29,13 +54,19 @@ class Settings:
     # a Web Service to answer on $PORT even though the bot itself is a
     # polling client, not an HTTP server.
     port: int = int(os.environ.get("PORT", "8080"))
-    # Maintenance switch: with BOT_PAUSED set, app/main.py keeps answering on
-    # $PORT (so Render doesn't mark the service unhealthy and the keep-alive
-    # workflow keeps working) but starts neither polling nor the scheduler —
-    # no tasks, reminders, nudges or reports go out. Set it in the Render
-    # dashboard and restart to pause the bot without touching the deploy;
-    # unset and restart to resume. Accepts 1/true/yes/on.
-    paused: bool = os.environ.get("BOT_PAUSED", "").strip().lower() in {"1", "true", "yes", "on"}
+    # Выключатель. В паузе app/main.py продолжает отвечать на $PORT (Render не
+    # считает сервис упавшим, keep-alive и сторож работают), но не поднимает ни
+    # polling, ни планировщик: ни задач, ни напоминаний, ни отчётов.
+    #
+    # Значение берётся из BOT_PAUSED, а если переменной нет — из PAUSED_BY_DEFAULT
+    # ниже. Владелец попросил остановить бота 25.09.2026, а доступа к панели
+    # Render у агента нет, поэтому выключатель вшит в код: деплой этой ветки
+    # останавливает бота сам.
+    #
+    # Включить обратно — любым из двух способов:
+    #   1. BOT_PAUSED=0 в переменных Render (кода не касается);
+    #   2. PAUSED_BY_DEFAULT = False здесь и деплой.
+    paused: bool = pause_requested(os.environ.get("BOT_PAUSED"))
     # Optional: a dedicated "какой чай привезти" chat/topic (see
     # app/handlers/tea_requests.py). Unset by default — the feature is off
     # until both/either are configured. TEA_REQUEST_THREAD_ID is only needed

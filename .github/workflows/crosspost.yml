@@ -1,0 +1,44 @@
+name: Crosspost Blog
+
+# Каждые 2 часа проверяет новые статьи waystea.ru и публикует анонсы
+# в Telegram-канал и группу ВКонтакте. Настройка — docs/CROSSPOST.md.
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch: # Кнопка для ручного запуска
+
+concurrency:
+  group: crosspost
+  cancel-in-progress: false
+
+jobs:
+  crosspost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Список уже опубликованных статей хранится в кэше Actions между запусками
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: crosspost_state.json
+          key: crosspost-state-${{ github.run_id }}
+          restore-keys: crosspost-state-
+
+      - name: Crosspost new articles
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          VK_ACCESS_TOKEN: ${{ secrets.VK_ACCESS_TOKEN }}
+          VK_GROUP_ID: ${{ secrets.VK_GROUP_ID }}
+        run: python crosspost.py
+
+      - name: Save state
+        if: always() && hashFiles('crosspost_state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: crosspost_state.json
+          key: crosspost-state-${{ github.run_id }}

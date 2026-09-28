@@ -97,9 +97,13 @@ Yea-bot-/
 │   │   ├── messages.py     # свободные вопросы, режим «цены», safe_edit
 │   │   └── callbacks.py    # обработка inline-кнопок
 │   ├── keyboards.py        # inline-клавиатуры
+│   ├── crosspost.py        # анонс новых статей waystea.ru в Telegram-канал и VK
 │   └── webapp.py           # сборка: PTB Application + aiohttp, webhook, lifecycle
+├── crosspost.py            # точка входа автоанонса статей блога (см. docs/CROSSPOST.md)
 ├── tests/                  # unit-тесты (без сети)
-└── .github/workflows/main.yml  # ⚠️ см. «Известные проблемы»
+└── .github/workflows/
+    ├── main.yml            # ⚠️ см. «Известные проблемы»
+    └── crosspost.yml       # раз в 2 часа: анонс новых статей waystea.ru в Telegram и VK
 ```
 
 ### Слои и правило зависимостей
@@ -131,6 +135,7 @@ flowchart TD
 | `teabot/handlers/` | Диалоговая логика: команды, сообщения, кнопки | `register_handlers()`, `on_msg`, `on_cb` |
 | `teabot/keyboards.py` | Разметка inline-клавиатур | `main_menu_kb()`, `regions_kb()` |
 | `teabot/webapp.py` | Сборка и запуск: PTB + aiohttp, webhook, startup/shutdown | `create_app()`, `main()` |
+| `teabot/crosspost.py` | Отдельный скрипт по расписанию: новые статьи блога → анонс в Telegram-канал и группу VK | `run()`, `pending_posts()`, `format_telegram()` |
 
 ### Внедрение зависимостей
 
@@ -154,6 +159,8 @@ flowchart TD
 | `SERPER_KEY` | нет | Ключ Serper; без него поиск пропускается, ответ строится только на знаниях LLM |
 | `RENDER_EXTERNAL_URL` | нет | Публичный URL для webhook (Render задаёт автоматически) |
 | `PORT` | нет | Порт HTTP-сервера, по умолчанию 8080 (Render задаёт автоматически) |
+| `TELEGRAM_CHANNEL_ID` | нет | Только для автоанонса: канал для анонсов статей (`@канал` или `-100…`) |
+| `VK_ACCESS_TOKEN`, `VK_GROUP_ID` | нет | Только для автоанонса: ключ пользователя-админа группы и ID группы VK |
 
 ## Деплой
 

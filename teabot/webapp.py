@@ -7,9 +7,10 @@ from telegram.ext import Application
 
 from .cache import TTLCache
 from .config import Settings, CACHE_TTL, CACHE_MAX_SIZE
-from .handlers import register_handlers, SEARCH_KEY, AI_KEY
+from .handlers import register_handlers, SEARCH_KEY, AI_KEY, SOCIAL_KEY, SOCIAL_CFG_KEY
 from .http import create_session, close_session
-from .services import GroqClient, SerperClient
+from .services import GroqClient, MetricoolClient, SerperClient
+from .social import SocialConfig, known
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,17 @@ async def on_startup(app: web.Application):
         TTLCache(ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE),
     )
     ptb.bot_data[AI_KEY] = GroqClient(settings.groq_api_key, settings.groq_model, session)
+    ptb.bot_data[SOCIAL_KEY] = MetricoolClient(
+        settings.metricool_user_token,
+        settings.metricool_user_id,
+        settings.metricool_blog_id,
+        settings.social_timezone,
+        session,
+    )
+    networks = known(settings.social_networks)
+    ptb.bot_data[SOCIAL_CFG_KEY] = SocialConfig(
+        networks=tuple(networks), admins=settings.social_admins,
+    )
 
     await ptb.initialize()
     await ptb.start()
@@ -44,6 +56,10 @@ async def on_startup(app: web.Application):
     logger.info(f"✅ Бот запущен! @{ptb.bot.username}")
     logger.info(f"🔗 Webhook: {full_url}")
     logger.info(f"🤖 AI: Groq {settings.groq_model}")
+    if settings.social_enabled:
+        logger.info(f"📡 Кросспостинг: {', '.join(networks)} (бренд {settings.metricool_blog_id})")
+    else:
+        logger.info("📡 Кросспостинг выключен: нет доступов Metricool")
 
 
 async def on_shutdown(app: web.Application):

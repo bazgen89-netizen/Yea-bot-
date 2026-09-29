@@ -25,18 +25,26 @@ class GroqClient:
             "Content-Type": "application/json",
         }
 
-    async def ask(self, prompt: str) -> str:
+    async def ask(
+        self,
+        prompt: str,
+        system: str = AI_SYSTEM_PROMPT,
+        temperature: float = 0.3,
+        max_tokens: int = 1500,
+    ) -> str:
+        """Запрос к LLM. Системный промпт по умолчанию — «эксперт по чаю»;
+        служебные вызовы (например, разбор задач) передают свой."""
         if not self.api_key:
             return "⚠️ AI отключён. Задайте GROQ_API_KEY в переменных окружения."
 
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            "max_tokens": 1500,
-            "temperature": 0.3,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
         }
 
         try:

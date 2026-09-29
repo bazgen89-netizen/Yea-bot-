@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from . import get_ai, get_search
+from . import social as social_flow
 from ..constants import REGIONS
 from ..keyboards import regions_kb
 
@@ -11,6 +12,10 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     d, m = q.data, q.message
+
+    if d.startswith("soc_"):
+        return await social_flow.on_cb(update, ctx)
+
     search = get_search(ctx)
     ai = get_ai(ctx)
 

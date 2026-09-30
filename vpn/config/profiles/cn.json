@@ -1,0 +1,17 @@
+{
+  "country": "CN",
+  "title": "Китай",
+  "description": "Иностранные сервисы — через VPN, китайские ресурсы — напрямую.",
+  "groups": ["ai", "social", "messengers", "media", "google", "dev", "news", "shops", "privacy"],
+  "direct": {
+    "domains": [
+      "domain:cn", "domain:xn--fiqs8s", "domain:xn--fiqz9s",
+      "domain:baidu.com", "domain:qq.com", "domain:taobao.com", "domain:tmall.com",
+      "domain:jd.com", "domain:weibo.com", "domain:bilibili.com", "domain:zhihu.com",
+      "domain:alipay.com", "domain:aliyun.com", "domain:163.com", "domain:sina.com.cn",
+      "domain:douyin.com", "domain:xiaohongshu.com", "domain:meituan.com"
+    ],
+    "geoip": ["cn", "private"],
+    "geosite": ["cn"]
+  }
+}

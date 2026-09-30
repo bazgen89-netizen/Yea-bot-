@@ -4,3 +4,9 @@ __pycache__/
 .env
 venv/
 .venv/
+
+# VPN: секреты сервера и рабочее состояние
+vpn/.env
+vpn/config/xray-server.json
+vpn/data/users.json
+vpn/out/

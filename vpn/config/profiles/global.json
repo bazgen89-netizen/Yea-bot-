@@ -1,0 +1,10 @@
+{
+  "country": "XX",
+  "title": "Универсальный профиль",
+  "description": "Через VPN идут только перечисленные сервисы, всё остальное — напрямую. Локальные правила задайте сами.",
+  "groups": ["ai", "social", "messengers", "media", "google", "dev", "news", "shops", "privacy"],
+  "direct": {
+    "domains": [],
+    "geoip": ["private"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "country": "RU",
+  "title": "Россия",
+  "description": "Иностранные сервисы — через VPN, российские сайты, банки и госуслуги — напрямую.",
+  "groups": ["ai", "social", "messengers", "media", "google", "dev", "news", "shops", "privacy"],
+  "direct": {
+    "domains": [
+      "domain:ru", "domain:su", "domain:xn--p1ai",
+      "domain:yandex.net", "domain:yandex.ru", "domain:ya.ru", "domain:yastatic.net",
+      "domain:vk.com", "domain:vk.ru", "domain:userapi.com", "domain:vkuserphoto.ru", "domain:vkuservideo.net",
+      "domain:mail.ru", "domain:imgsmail.ru", "domain:my.com",
+      "domain:ok.ru", "domain:sberbank.ru", "domain:sber.ru", "domain:sberbank.com",
+      "domain:tinkoff.ru", "domain:tbank.ru", "domain:vtb.ru", "domain:alfabank.ru",
+      "domain:gosuslugi.ru", "domain:nalog.ru", "domain:nalog.gov.ru", "domain:mos.ru",
+      "domain:ozon.ru", "domain:wildberries.ru", "domain:wbbasket.ru", "domain:avito.ru",
+      "domain:dns-shop.ru", "domain:mvideo.ru", "domain:citilink.ru",
+      "domain:2gis.ru", "domain:rutube.ru", "domain:kinopoisk.ru", "domain:ivi.ru",
+      "domain:habr.com", "domain:hh.ru", "domain:rzd.ru", "domain:aeroflot.ru",
+      "domain:mts.ru", "domain:beeline.ru", "domain:megafon.ru", "domain:tele2.ru"
+    ],
+    "geoip": ["ru", "private"]
+  }
+}

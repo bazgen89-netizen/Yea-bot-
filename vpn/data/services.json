@@ -1,0 +1,125 @@
+{
+  "_comment": "Группы иностранных сервисов, которые должны идти через VPN. domains — суффиксы доменов; geosite — теги из geosite.dat (v2fly/Loyalsoldier), используются только при --with-geosite.",
+  "groups": {
+    "ai": {
+      "title": "AI-сервисы",
+      "geosite": ["openai"],
+      "domains": [
+        "openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com",
+        "anthropic.com", "claude.ai", "claudeusercontent.com",
+        "gemini.google.com", "bard.google.com", "generativelanguage.googleapis.com",
+        "perplexity.ai", "poe.com", "midjourney.com", "huggingface.co", "hf.co",
+        "groq.com", "mistral.ai", "cohere.com", "x.ai", "grok.com",
+        "deepseek.com", "runwayml.com", "suno.com", "elevenlabs.io",
+        "stability.ai", "civitai.com", "replicate.com", "together.ai",
+        "cursor.sh", "cursor.com", "codeium.com", "sourcegraph.com"
+      ]
+    },
+    "social": {
+      "title": "Соцсети",
+      "geosite": ["facebook", "instagram", "twitter"],
+      "domains": [
+        "facebook.com", "fbcdn.net", "fb.com", "fbsbx.com",
+        "instagram.com", "cdninstagram.com", "threads.net", "threads.com",
+        "twitter.com", "x.com", "twimg.com", "t.co",
+        "linkedin.com", "licdn.com",
+        "reddit.com", "redd.it", "redditstatic.com", "redditmedia.com",
+        "tumblr.com", "pinterest.com", "pinimg.com",
+        "bsky.app", "bsky.network", "mastodon.social", "9gag.com"
+      ]
+    },
+    "messengers": {
+      "title": "Мессенджеры и связь",
+      "geosite": ["telegram", "discord", "signal"],
+      "domains": [
+        "discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media",
+        "signal.org", "signal.art", "whispersystems.org",
+        "slack.com", "slack-edge.com", "slack-msgs.com",
+        "matrix.org", "element.io", "session.foundation",
+        "zoom.us", "zoom.com", "webex.com", "skype.com",
+        "viber.com", "line-apps.com"
+      ]
+    },
+    "media": {
+      "title": "Видео, музыка, стриминг",
+      "geosite": ["youtube", "netflix", "spotify"],
+      "domains": [
+        "youtube.com", "youtu.be", "ytimg.com", "ggpht.com", "googlevideo.com", "youtube-nocookie.com",
+        "netflix.com", "nflxvideo.net", "nflximg.net", "nflxext.com", "nflxso.net",
+        "spotify.com", "scdn.co", "spotifycdn.com",
+        "twitch.tv", "ttvnw.net", "jtvnw.net",
+        "vimeo.com", "vimeocdn.com",
+        "soundcloud.com", "sndcdn.com",
+        "hbomax.com", "max.com", "disneyplus.com", "dssott.com",
+        "primevideo.com", "crunchyroll.com", "deezer.com", "tidal.com",
+        "rutracker.org", "kinopoisk.gg"
+      ]
+    },
+    "google": {
+      "title": "Google-сервисы",
+      "geosite": ["google"],
+      "domains": [
+        "google.com", "googleapis.com", "gstatic.com", "googleusercontent.com",
+        "googlesyndication.com", "googletagmanager.com", "google-analytics.com",
+        "gmail.com", "googlemail.com", "goo.gl", "withgoogle.com",
+        "android.com", "gvt1.com", "gvt2.com", "chromium.org", "firebaseio.com",
+        "recaptcha.net", "blogspot.com", "blogger.com"
+      ]
+    },
+    "dev": {
+      "title": "Разработка и облака",
+      "geosite": ["github"],
+      "domains": [
+        "github.com", "githubusercontent.com", "githubassets.com", "github.io", "ghcr.io",
+        "gitlab.com", "bitbucket.org", "sourceforge.net",
+        "docker.com", "docker.io", "dockerhub.com",
+        "npmjs.com", "npmjs.org", "yarnpkg.com", "pypi.org", "pythonhosted.org",
+        "crates.io", "rubygems.org", "packagist.org", "nuget.org", "maven.org",
+        "stackoverflow.com", "stackexchange.com", "sstatic.net",
+        "cloudflare.com", "cloudflareinsights.com", "workers.dev", "pages.dev",
+        "vercel.com", "vercel.app", "netlify.com", "netlify.app",
+        "heroku.com", "herokuapp.com", "render.com", "onrender.com",
+        "fly.io", "railway.app", "digitalocean.com", "linode.com", "hetzner.com",
+        "aws.amazon.com", "amazonaws.com", "azure.com", "microsoft.com", "windows.net",
+        "atlassian.com", "jetbrains.com", "unity3d.com", "unrealengine.com",
+        "terraform.io", "hashicorp.com", "kubernetes.io", "letsencrypt.org"
+      ]
+    },
+    "news": {
+      "title": "Новости и справочники",
+      "geosite": [],
+      "domains": [
+        "bbc.com", "bbc.co.uk", "bbci.co.uk",
+        "dw.com", "rferl.org", "svoboda.org", "currenttime.tv",
+        "meduza.io", "themoscowtimes.com", "novayagazeta.eu", "istories.media",
+        "theins.ru", "mediazona.ca", "holod.media", "republic.ru",
+        "reuters.com", "apnews.com", "nytimes.com", "washingtonpost.com",
+        "theguardian.com", "economist.com", "ft.com", "bloomberg.com",
+        "wikipedia.org", "wikimedia.org", "wikidata.org", "wiktionary.org",
+        "archive.org", "web.archive.org"
+      ]
+    },
+    "shops": {
+      "title": "Магазины и платежи",
+      "geosite": [],
+      "domains": [
+        "paypal.com", "paypalobjects.com", "stripe.com", "stripe.network",
+        "wise.com", "revolut.com", "payoneer.com",
+        "steampowered.com", "steamcommunity.com", "steamstatic.com",
+        "epicgames.com", "gog.com", "itch.io", "humblebundle.com",
+        "ebay.com", "etsy.com", "aliexpress.com", "alicdn.com",
+        "patreon.com", "boosty.to", "gumroad.com", "ko-fi.com"
+      ]
+    },
+    "privacy": {
+      "title": "Приватность и обход",
+      "geosite": [],
+      "domains": [
+        "torproject.org", "tor.eff.org", "protonmail.com", "proton.me", "protonvpn.com",
+        "mullvad.net", "duckduckgo.com", "startpage.com", "brave.com",
+        "keybase.io", "cryptomator.org", "bitwarden.com", "1password.com",
+        "tuta.com", "tutanota.com", "mailfence.com"
+      ]
+    }
+  }
+}

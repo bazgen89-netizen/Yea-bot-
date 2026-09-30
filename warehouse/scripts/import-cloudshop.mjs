@@ -180,8 +180,10 @@ async function get(path) {
           'кабинет CloudShop → Интеграции → Connect API.',
       );
     }
-    if (response.status === 429 && attempt < 5) {
-      await new Promise((done) => setTimeout(done, attempt * 3000));
+    // 429 и 5xx у CloudShop бывают разовыми (504 на /stores в ночь 30.09):
+    // ждём и спрашиваем снова, а не роняем всю ночь из-за одного шлюза.
+    if ((response.status === 429 || response.status >= 500) && attempt < 6) {
+      await new Promise((done) => setTimeout(done, attempt * 5000));
       continue;
     }
     if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);

@@ -74,7 +74,16 @@ echo "чеков было: $was"
 # CloudShop только с него. Не задался — не беда: выложим вчерашнее, это
 # лучше, чем ничего.
 step='3. перенос из CloudShop'
-if node scripts/import-cloudshop.mjs --no-photos 2>&1 | tail -8; then
+synced=no
+for try in 1 2 3; do
+  if node scripts/import-cloudshop.mjs --no-photos 2>&1 | tail -8; then
+    synced=yes
+    break
+  fi
+  echo "перенос: попытка $try не прошла"
+  sleep $((try * 30))
+done
+if [ "$synced" = yes ]; then
   echo 'перенос: прошёл'
 else
   echo 'перенос: НЕ прошёл — собираем из вчерашних данных'
@@ -146,4 +155,8 @@ WAS="$was" node -e "
 " || echo 'числа посчитать не вышло'
 
 echo
-echo 'ГОТОВО: все шаги пройдены'
+if [ "$synced" = yes ]; then
+  echo 'ГОТОВО: все шаги пройдены'
+else
+  echo 'ГОТОВО, НО БЕЗ СИНХРОНИЗАЦИИ С CLOUDSHOP: данные вчерашние — скажи об этом первой строкой'
+fi
